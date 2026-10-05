@@ -5,3 +5,4 @@
 - [x] H4. Historial
 - [x] H5 ajustes
 - [x] H6. Pulido (v0.1.0)
+- [x] Rediseño estilo ChatGPT (PC y móvil): paneles plegables/redimensionables, buscador, código con copiar/vista previa, acciones de mensaje, ajustes móviles
