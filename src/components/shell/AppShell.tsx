@@ -92,7 +92,7 @@ export function AppShell() {
 
   const visible = chat.messages.filter((m) => !m.hidden);
   const down = conn.state === "offline" || conn.state === "denied";
-  const lastAssistant = [...visible].reverse().find((m) => m.role === "assistant")?.id;
+  const lastAssistant = [...visible].reverse().find((m) => m.role === "assistant" && !m.kind)?.id;
   const lastUser = [...visible].reverse().find((m) => m.role === "user")?.content;
 
   const regenerate = useCallback(() => { if (lastUser) void chat.send(lastUser); }, [lastUser, chat]);
@@ -272,6 +272,13 @@ export function AppShell() {
               <button onClick={toBottom} aria-label="Ir al final" className="e-pop absolute bottom-32 left-1/2 z-10 inline-flex size-9 -translate-x-1/2 items-center justify-center rounded-full">
                 <ArrowDown className="size-4" />
               </button>
+            )}
+            {chat.limit && (
+              <div className="e-err-banner mx-auto mb-2 flex w-[calc(100%-2rem)] max-w-3xl flex-wrap items-center gap-2 px-3 py-2 text-[13px]" role="alert" data-limit={chat.limit.file ? "file" : "context"}>
+                <span className="flex-1">{chat.limit.message}</span>
+                {!chat.limit.file && <button type="button" onClick={() => chat.reset()} className="rounded-full bg-e-acc px-3 py-1 text-[13px] font-medium text-e-bg2">Nueva conversación</button>}
+                <button onClick={chat.dismissLimit} aria-label="Cerrar aviso"><X className="size-3.5" /></button>
+              </div>
             )}
             {chat.error && (
               <div className="e-err-banner mx-auto mb-2 flex w-[calc(100%-2rem)] max-w-3xl items-center gap-2 px-3 py-2 text-[13px]" role="alert">

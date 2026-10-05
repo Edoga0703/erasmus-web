@@ -34,7 +34,6 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
   if (REMOTE.test(path)) {
     const cfg = getModelConfig();
     if (isValidVpsKey(cfg.apiKey) && !headers.has("Authorization")) headers.set("Authorization", `Bearer ${cfg.apiKey}`);
-    if (cfg.compact && path.includes("chat")) headers.set("X-Compact-Mode", "1");
   }
   const req = { ...init, headers };
   if (MOCK) {
@@ -61,7 +60,6 @@ async function directFetch(path: string, init: RequestInit): Promise<Response> {
   if (isValidVpsKey(cfg.apiKey)) headers.set("Authorization", `Bearer ${cfg.apiKey}`);
   const sid = src.get("X-Session-ID");
   if (sid) headers.set("X-Session-ID", sid);
-  if (cfg.compact && target.includes("chat")) headers.set("X-Compact-Mode", "1");
   return fetch(`${MODEL_BASE}${target}`, { ...init, headers });
 }
 
@@ -149,6 +147,8 @@ export interface StreamOptions {
   onReasoning?: (t: string) => void;
   /** Final stream metadata: finish_reason ("length" = cut) and token usage. */
   onMeta?: (m: StreamMeta) => void;
+  /** Overrides the saved reasoning level (compaction uses "low"). */
+  reasoning?: string;
 }
 export interface StreamUsage { prompt: number; completion: number; reasoning: number; total: number }
 export interface StreamMeta { finishReason?: string; usage?: StreamUsage }
@@ -174,7 +174,7 @@ export async function streamChat(opts: StreamOptions): Promise<void> {
       method: "POST",
       signal: opts.signal ?? null,
       headers: opts.sessionId ? { "X-Session-ID": opts.sessionId } : {},
-      body: JSON.stringify({ model: getModelConfig().model || opts.model, messages: withSystem(opts.messages), stream: true, reasoning_effort: getModelConfig().reasoning }),
+      body: JSON.stringify({ model: getModelConfig().model || opts.model, messages: withSystem(opts.messages), stream: true, reasoning_effort: opts.reasoning ?? getModelConfig().reasoning }),
     });
   } catch (e) {
     if ((e as Error)?.name === "AbortError") return;

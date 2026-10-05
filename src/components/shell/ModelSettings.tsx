@@ -19,7 +19,7 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
   );
 }
 
-/** Ajustes → Modelo y API: user-level API key, model choice from GET /v1/models, compact mode and a live test. Server endpoint/token are deployment config, not user settings. */
+/** Ajustes → Modelo y API: user-level API key, model choice from GET /v1/models and a live test. Server endpoint/token are deployment config, not user settings. */
 export function ModelSettings() {
   const [cfg, setCfg] = useState<ModelConfig>(() => getModelConfig());
   const [models, setModels] = useState<string[]>([cfg.model || "erasmus-v1"]);
@@ -89,13 +89,6 @@ export function ModelSettings() {
             {models.map((m) => <SelectItem key={m} value={m}>{displayModel(m)}</SelectItem>)}
           </SelectContent>
         </Select>
-      </Field>
-
-      <Field label="Modo compacto">
-        <label className="flex items-center justify-between gap-3 text-[13.5px]">
-          <span className="text-e-dim">Respuestas más breves.</span>
-          <Switch checked={cfg.compact} onCheckedChange={(v) => setCfg({ ...cfg, compact: v })} aria-label="Modo compacto" />
-        </label>
       </Field>
 
       <div className="flex flex-wrap gap-2 pt-4">
