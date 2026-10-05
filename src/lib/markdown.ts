@@ -31,8 +31,8 @@ export function highlight(code: string, lang?: string): string {
 export function highlightWithin(el: HTMLElement): void {
   el.querySelectorAll("pre code").forEach((node) => {
     const n = node as HTMLElement;
-    if (n.dataset.hl) return;
+    if (n.dataset['hl']) return;
     hljs.highlightElement(n);
-    n.dataset.hl = "1";
+    n.dataset['hl'] = "1";
   });
 }

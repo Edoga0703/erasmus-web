@@ -60,7 +60,7 @@ function listDir(path: string) {
   for (const [p, c] of Object.entries(db().files)) {
     if (!p.startsWith(prefix)) continue;
     const rest = p.slice(prefix.length);
-    const [head, ...tail] = rest.split("/");
+    const [head = "", ...tail] = rest.split("/");
     if (tail.length) entries.set(head, { is_dir: true, size: 0 });
     else entries.set(head, { is_dir: false, size: c.length });
   }
