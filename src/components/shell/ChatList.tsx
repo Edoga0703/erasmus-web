@@ -72,7 +72,7 @@ export function ChatList({ activeId, activeTitle, version, onOpen, onRename }: {
 
   return (
     <>
-      {err && <p className={"px-2.5 py-2 text-[13px] " + (DIRECT ? "text-e-dim" : "text-e-err")}>{DIRECT ? "El historial se activará cuando el puente esté instalado." : err}</p>}
+      {err && <p className={"px-2.5 py-2 text-[13px] " + (DIRECT ? "text-e-dim" : "text-e-err")}>{DIRECT ? "El historial no está disponible en esta versión." : err}</p>}
       {chats === null && !err && <p className="px-2.5 py-2 text-[13px] text-e-dim">Cargando…</p>}
       {isNew && (
         <div className="mb-2">

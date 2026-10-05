@@ -66,7 +66,7 @@ export function ModelSettings() {
           Esta vista previa está en modo demostración: la prueba responde con datos simulados. En la versión publicada conectada al servidor, la prueba consulta el servidor real.
         </p>
       )}
-      <Field label="Clave de API" hint="Tu clave ms-…. Solo se usa para hablar con el modelo; nunca se envía a archivos ni al sandbox.">
+      <Field label="Clave de API" hint="Tu clave ms-…. Solo se usa para hablar con el modelo; nunca se envía a ningún otro sitio.">
         <div className="relative">
           <KeyRound className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-e-dim" />
           <input type={show ? "text" : "password"} autoComplete="off" spellCheck={false} placeholder="ms-…" value={cfg.apiKey} aria-label="Clave de API"

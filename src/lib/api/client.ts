@@ -45,7 +45,7 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
 
 /** Routes the model server answers itself while the bridge is not deployed. */
 const DIRECT_ROUTES = /^\/(v1\/|api\/account\/|api\/images\/|api\/status$)/;
-export const BRIDGE_MISSING_MSG = "El sandbox, los archivos y el historial se activarán cuando el puente esté instalado en el servidor.";
+export const BRIDGE_MISSING_MSG = "Esta función no está disponible en esta versión.";
 
 /** Direct mode: /api/chat → /v1/chat/completions on the model server; only CORS-allowed headers; bridge routes answer 503 locally. */
 async function directFetch(path: string, init: RequestInit): Promise<Response> {
