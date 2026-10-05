@@ -1,10 +1,9 @@
-import { displayModel } from "@/lib/api/config";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowDown, ChevronDown, FolderOpen, Info, Moon, PanelLeft, RefreshCw, Search, Settings, SquarePen, Sun, WifiOff, X } from "lucide-react";
 import { sandboxDir, useChat, type Attachment } from "@/hooks/use-chat";
 import { useConnection } from "@/hooks/use-connection";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { DIRECT, MOCK } from "@/lib/api/config";
+import { DIRECT, MOCK, displayModel } from "@/lib/api/config";
 import { api, ApiError } from "@/lib/api/client";
 import { setTheme, useTheme } from "@/lib/theme";
 import { MessageView } from "@/components/chat/MessageView";
