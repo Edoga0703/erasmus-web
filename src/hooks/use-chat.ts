@@ -3,8 +3,8 @@ import { api, ApiError, streamChat } from "@/lib/api/client";
 import { extractBlocks, lineDiff, type DiffRow, type ToolBlock } from "@/lib/blocks";
 import type { ChatData, StoredMessage } from "@/lib/api/types";
 
-export type ToolStatus = "running" | "ok" | "error" | "skipped";
-export interface ToolState { status: ToolStatus; detail?: string; output?: string; diff?: DiffRow[] }
+export type ToolStatus = "running" | "ok" | "error" | "limit";
+export interface ToolState { status: ToolStatus; detail?: string | undefined; output?: string; diff?: DiffRow[]; exitCode?: number; durationMs?: number; stdout?: string; stderr?: string }
 export interface UIMessage {
   id: string;
   role: "user" | "assistant";
@@ -16,12 +16,31 @@ export interface UIMessage {
 }
 
 const MAX_AGENT_STEPS = 30;
+const MAX_BLOCKS_PER_TURN = 30;
 const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 
-async function runBlock(b: ToolBlock): Promise<{ state: ToolState; feedback: string | null }> {
+export const EXEC_TIMEOUT_DEFAULT = 60;
+export const EXEC_TIMEOUT_MAX = 300;
+const OUTPUT_CAP = 64 * 1024;
+const cap = (t: string) => (t.length > OUTPUT_CAP ? t.slice(0, OUTPUT_CAP) + "\n…[salida truncada a 64 KB]" : t);
+export const sandboxDir = (convId: string) => `sandbox/${convId}`;
+
+async function runBlock(b: ToolBlock, convId: string): Promise<{ state: ToolState; feedback: string | null }> {
   try {
-    if (b.kind === "powershell:run") {
-      return { state: { status: "skipped", detail: "No ejecutado: la versión web no ejecuta PowerShell." }, feedback: "[POWERSHELL NO EJECUTADO]: el cliente web no ejecuta bloques powershell:run." };
+    if (b.kind === "code:python" || b.kind === "code:bash") {
+      const language = b.kind === "code:python" ? "python" : "bash";
+      const t0 = performance.now();
+      const r = await api.exec({ language, code: b.body, cwd: sandboxDir(convId), timeout: EXEC_TIMEOUT_DEFAULT });
+      const ms = r.duration_ms ?? Math.round(performance.now() - t0);
+      const stdout = cap(r.stdout ?? "");
+      const stderr = cap(r.stderr ?? "");
+      const secs = (ms / 1000).toFixed(1);
+      const timedOut = r.exit_code === 124;
+      const out = [stdout, stderr && `[stderr]\n${stderr}`].filter(Boolean).join("\n");
+      return {
+        state: { status: r.exit_code === 0 ? "ok" : "error", exitCode: r.exit_code, durationMs: ms, stdout, stderr, detail: timedOut ? `Tiempo agotado (${EXEC_TIMEOUT_DEFAULT} s)` : undefined },
+        feedback: `[RESULTADO ${b.kind} (exit ${r.exit_code}, ${secs}s)]\n${out.slice(0, 8000) || "(sin salida)"}`,
+      };
     }
     if (b.kind === "file:list") {
       const r = await api.fsList(b.target || ".");
@@ -95,6 +114,7 @@ export function useChat(opts: { model: string }) {
     }
     commit((ms) => [...ms, { id: uid(), role: "user", content: clean, ts: Date.now() }]);
 
+    let executed = 0;
     try {
       for (let step = 0; step < MAX_AGENT_STEPS; step++) {
         const aid = uid();
@@ -114,17 +134,26 @@ export function useChat(opts: { model: string }) {
         const blocks = extractBlocks(acc);
         if (!blocks.length) break;
         const feedback: string[] = [];
-        let actionable = false;
+        let limitHit = false;
         for (let i = 0; i < blocks.length; i++) {
           if (ctrl.signal.aborted) break;
+          if (executed >= MAX_BLOCKS_PER_TURN) {
+            limitHit = true;
+            patch(aid, (m) => ({ tools: { ...m.tools, [i]: { status: "limit", detail: "Límite de pasos alcanzado (30 bloques por turno)." } } }));
+            continue;
+          }
           const blk = blocks[i]!;
           patch(aid, (m) => ({ tools: { ...m.tools, [i]: { status: "running" } } }));
-          const { state, feedback: fb } = await runBlock(blk);
-          if (blk.kind !== "powershell:run") actionable = true;
+          const { state, feedback: fb } = await runBlock(blk, chatId);
+          executed++;
           patch(aid, (m) => ({ tools: { ...m.tools, [i]: state } }));
           if (fb) feedback.push(fb);
         }
-        if (!actionable || ctrl.signal.aborted) break;
+        if (ctrl.signal.aborted) break;
+        if (limitHit) {
+          setError("Límite de pasos alcanzado: el agente se detuvo tras 30 bloques.");
+          break;
+        }
         if (step === MAX_AGENT_STEPS - 1) {
           setError("Pausa de control: límite de pasos del agente alcanzado.");
           break;
