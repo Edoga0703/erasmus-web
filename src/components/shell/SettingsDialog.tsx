@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight, Download, Moon, RefreshCw, ShieldCheck, ShieldOff, Sun, WifiOff, X } from "lucide-react";
 import { api, ApiError } from "@/lib/api/client";
-import { API_BASE, MOCK, getToken } from "@/lib/api/config";
+import { API_BASE, DIRECT, MOCK, displayModel, getToken } from "@/lib/api/config";
 import type { StatusResponse } from "@/lib/api/types";
 import { setTheme, useTheme } from "@/lib/theme";
 import { downloadFile } from "@/components/files/FilesPanel";
@@ -26,6 +26,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
   const [counts, setCounts] = useState<Counts>(null);
   const [countErr, setCountErr] = useState("");
   const [zipping, setZipping] = useState(false);
+  const [zipDone, setZipDone] = useState<{ name: string; size: number } | null>(null);
   const hasToken = getToken() !== "";
 
   const verify = useCallback(async () => {
@@ -58,11 +59,12 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
   }, [onClose]);
 
   const exportZip = async () => {
-    setZipping(true);
+    setZipping(true); setZipDone(null); setCountErr("");
     try {
       const r = await api.zip();
       window.dispatchEvent(new Event("erasmus:files-changed")); // zip now lives in the workspace root → refresh tree
       await downloadFile(r.zip_name);
+      setZipDone({ name: r.zip_name, size: r.size });
     } catch (e) {
       setCountErr(e instanceof ApiError && e.status !== 0 ? e.message : "No se pudo exportar el workspace.");
     } finally {
@@ -119,7 +121,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
                   <div className="mt-3" data-probe="ok">
                     <Row k="Estado" v={<span className="text-e-ok">{probe.s.status}</span>} />
                     <Row k="Latencia" v={`${probe.ms} ms`} />
-                    <Row k="Modelo activo" v={probe.s.brand_model} />
+                    <Row k="Modelo activo" v={displayModel(probe.s.brand_model)} />
                     <Row k="Workspace" v={probe.s.workspace_name} />
                   </div>
                 )}
@@ -146,9 +148,12 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
                     <button onClick={() => void loadCounts()} className="inline-flex items-center gap-1 rounded-md border border-current px-2 py-1 text-[12px]"><RefreshCw className="size-3" /> Reintentar</button>
                   </div>
                 )}
-                <div className="mt-4"><button className={btn} onClick={() => void exportZip()} disabled={zipping}>
+                <div className="mt-4"><button className={btn} onClick={() => void exportZip()} disabled={zipping || DIRECT} data-zip-export>
                   <Download className="size-3.5" /> {zipping ? "Exportando…" : "Exportar workspace (ZIP)"}
-                </button></div>
+                </button>
+                {DIRECT && <p className="mt-2 text-[12.5px] text-e-dim">Disponible pronto: se activará cuando el puente esté instalado en el servidor.</p>}
+                {zipDone && <p className="mt-2 text-[12.5px] text-e-ok" data-zip-done>Descargado {zipDone.name} ({(zipDone.size / 1024).toFixed(1)} KB). También aparece en la raíz del workspace.</p>}
+                </div>
               </section>
             )}
             {tab === "security" && (

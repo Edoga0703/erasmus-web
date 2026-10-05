@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { CheckCircle2, Eye, EyeOff, KeyRound, Loader2, PlugZap, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { api, ApiError } from "@/lib/api/client";
-import { MOCK, getModelConfig, isValidVpsKey, saveModelConfig, type ModelConfig } from "@/lib/api/config";
+import { MOCK, getModelConfig, isValidVpsKey, saveModelConfig, type ModelConfig, displayModel } from "@/lib/api/config";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
@@ -86,7 +86,7 @@ export function ModelSettings() {
         <Select value={cfg.model} onValueChange={(v) => setCfg({ ...cfg, model: v })}>
           <SelectTrigger aria-label="Modelo" className="h-10 rounded-xl"><SelectValue /></SelectTrigger>
           <SelectContent>
-            {models.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+            {models.map((m) => <SelectItem key={m} value={m}>{displayModel(m)}</SelectItem>)}
           </SelectContent>
         </Select>
       </Field>
@@ -108,7 +108,7 @@ export function ModelSettings() {
       {test.kind === "ok" && (
         <div className="mt-4 rounded-2xl border border-e-line p-4 text-[13.5px]" data-model-test="ok">
           <div className="flex items-center gap-2 font-medium text-e-ok"><CheckCircle2 className="size-4" /> Modelo conectado · {test.ms} ms{MOCK ? " (demostración)" : ""}</div>
-          <div className="mt-2 text-e-dim">Modelos: <span className="font-mono text-e-tx">{test.models.join(", ") || "—"}</span></div>
+          <div className="mt-2 text-e-dim">Modelos: <span className="font-mono text-e-tx">{test.models.map(displayModel).join(", ") || "—"}</span></div>
           <div className="mt-1 text-e-dim">Cuenta: <span className="text-e-tx">{test.account}</span></div>
         </div>
       )}

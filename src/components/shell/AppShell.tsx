@@ -3,7 +3,7 @@ import { ArrowDown, ChevronDown, FolderOpen, Info, Moon, PanelLeft, RefreshCw, S
 import { sandboxDir, useChat, type Attachment } from "@/hooks/use-chat";
 import { useConnection } from "@/hooks/use-connection";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { DIRECT, MOCK } from "@/lib/api/config";
+import { DIRECT, MOCK, displayModel } from "@/lib/api/config";
 import { api, ApiError } from "@/lib/api/client";
 import { setTheme, useTheme } from "@/lib/theme";
 import { MessageView } from "@/components/chat/MessageView";
@@ -210,7 +210,7 @@ export function AppShell() {
           {mobile && <button className="e-icon-btn text-e-tx" aria-label="Abrir barra lateral" onClick={() => setSideOpen(true)}><PanelLeft className="size-5" /></button>}
           <button className="flex min-w-0 items-center gap-1 rounded-lg px-2.5 py-1.5 text-[17px] font-medium hover:bg-e-bg3" onClick={() => setSettingsOpen(true)} aria-label="Modelo y conexión">
             <span className="truncate">Erasmus</span>
-            <span className="hidden truncate text-e-dim sm:inline">{model}</span>
+            <span className="hidden truncate text-e-dim sm:inline">{displayModel(model)}</span>
             <ChevronDown className="size-4 shrink-0 text-e-dim" />
           </button>
           <span className="ml-1 flex shrink-0 items-center gap-1.5 text-[12px] text-e-dim" title={conn.state === "online" ? "Conectado" : "Sin conexión"}>
