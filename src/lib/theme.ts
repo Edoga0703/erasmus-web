@@ -4,11 +4,11 @@ export type Theme = "dark" | "light";
 export const THEME_KEY = "erasmus.theme";
 
 /** Inline pre-paint script (root <head>): applies the persisted theme before hydration to avoid a flash. */
-export const THEME_BOOT = `try{var t=localStorage.getItem("${THEME_KEY}");document.documentElement.setAttribute("data-theme",t==="light"?"light":"dark")}catch(e){}`;
+export const THEME_BOOT = `try{var t=localStorage.getItem("${THEME_KEY}");document.documentElement.setAttribute("data-theme",t==="dark"?"dark":"light")}catch(e){}`;
 
 export function getTheme(): Theme {
-  if (typeof document === "undefined") return "dark";
-  return document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
+  if (typeof document === "undefined") return "light";
+  return document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
 }
 
 export function setTheme(t: Theme): void {
@@ -18,7 +18,7 @@ export function setTheme(t: Theme): void {
 
 /** Current theme; updates on any <html data-theme> change (drives chart/mermaid re-render). */
 export function useTheme(): Theme {
-  const [t, setT] = useState<Theme>("dark");
+  const [t, setT] = useState<Theme>("light");
   useEffect(() => {
     setT(getTheme());
     const obs = new MutationObserver(() => setT(getTheme()));
