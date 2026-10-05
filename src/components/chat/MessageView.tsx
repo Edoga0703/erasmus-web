@@ -1,11 +1,12 @@
-import { useMemo } from "react";
+import { memo, useMemo } from "react";
 import { parseSegments } from "@/lib/blocks";
 import type { UIMessage } from "@/hooks/use-chat";
 import { Markdown } from "./Markdown";
 import { ToolCard } from "./ToolCard";
 import { ThinkingChip } from "./Thinking";
 
-export function MessageView({ m }: { m: UIMessage }) {
+/** Memoized: during streaming only the message whose object changed re-renders (use-chat patches by id). */
+export const MessageView = memo(function MessageView({ m }: { m: UIMessage }) {
   const segs = useMemo(() => (m.role === "assistant" ? parseSegments(m.content) : []), [m.content, m.role]);
   if (m.hidden) return null;
 
@@ -31,4 +32,4 @@ export function MessageView({ m }: { m: UIMessage }) {
       {m.streaming && !empty && <span className="e-caret" />}
     </div>
   );
-}
+});
