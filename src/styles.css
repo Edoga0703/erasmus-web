@@ -70,33 +70,38 @@
   --color-sidebar-ring: var(--acc2);
 }
 
+/* ChatGPT-web palette: bg = sidebar, bg2 = main canvas, bg3 = hover/bubble, bg4 = pressed. */
 :root,
 [data-theme="light"] {
-  --bg: #f9f9f9; --bg2: #ffffff; --bg3: #f3f4f6; --bg4: #e9eaec;
-  --tx: #111111; --dim: #6b7280; --line: #e5e5e5;
-  --acc: #000000; --acc2: #374151;
-  --ok: #10a37f; --err: #dc2626; --info: #2563eb;
-  --r: 8px; --r2: 12px;
-  --side: 240px; --art: 440px;
-  --shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  --bg: #f9f9f9; --bg2: #ffffff; --bg3: #f4f4f4; --bg4: #ececec;
+  --tx: #0d0d0d; --dim: #5d5d5d; --line: #e5e5e5;
+  --acc: #000000; --acc2: #424242;
+  --ok: #10a37f; --err: #e02e2a; --info: #2964aa;
+  --r: 10px; --r2: 16px;
+  --side: 260px; --art: 460px;
+  --shadow: 0 4px 24px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(0,0,0,.04);
   --err-bg: #fef2f2; --err-line: #fecaca; --err-tx: #b91c1c;
   --add-tx: #15803d; --add-bg: rgba(22, 163, 74, 0.1);
   --del-tx: #b91c1c; --del-bg: rgba(220, 38, 38, 0.08);
-  --focus-line: rgba(0, 0, 0, 0.3);
-  --overlay: rgba(0, 0, 0, 0.35);
+  --focus-line: rgba(0, 0, 0, 0.15);
+  --overlay: rgba(0, 0, 0, 0.4);
+  --code-bg: #f9f9f9; --code-head: #f3f3f3;
+  --composer: #ffffff;
 }
 
 [data-theme="dark"] {
-  --bg: #1a1a1a; --bg2: #242424; --bg3: #2e2e2e; --bg4: #383838;
-  --tx: #ececec; --dim: #9ca3af; --line: #3a3a3a;
-  --acc: #ffffff; --acc2: #d1d5db;
-  --ok: #34d399; --err: #f87171; --info: #60a5fa;
-  --shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  --bg: #181818; --bg2: #212121; --bg3: #303030; --bg4: #3a3a3a;
+  --tx: #ececec; --dim: #afafaf; --line: #383838;
+  --acc: #ffffff; --acc2: #d1d1d1;
+  --ok: #34d399; --err: #f87171; --info: #7ab7ff;
+  --shadow: 0 4px 24px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255,255,255,.06);
   --err-bg: #2a1515; --err-line: #7f1d1d; --err-tx: #fca5a5;
-  --add-tx: #86efac; --add-bg: rgba(22, 163, 74, 0.12);
-  --del-tx: #fca5a5; --del-bg: rgba(220, 38, 38, 0.12);
-  --focus-line: rgba(255, 255, 255, 0.3);
-  --overlay: rgba(0, 0, 0, 0.55);
+  --add-tx: #86efac; --add-bg: rgba(22, 163, 74, 0.14);
+  --del-tx: #fca5a5; --del-bg: rgba(220, 38, 38, 0.14);
+  --focus-line: rgba(255, 255, 255, 0.15);
+  --overlay: rgba(0, 0, 0, 0.6);
+  --code-bg: #171717; --code-head: #2a2a2a;
+  --composer: #303030;
 }
 
 @layer base {
