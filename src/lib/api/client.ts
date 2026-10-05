@@ -8,6 +8,7 @@ import type {
   ExecRequest,
   ExecResponse,
   StatusResponse,
+  FilesResponse,
 } from "./types";
 
 export class ApiError extends Error {
@@ -77,6 +78,18 @@ export const api = {
   chats: () => apiJson<ChatListResponse>("/api/workspace/chats"),
   getChat: (id: string) =>
     apiJson<{ ok: boolean; chat_data: ChatData }>(`/api/workspace/chat?id=${encodeURIComponent(id)}`),
+  files: () => apiJson<FilesResponse>("/api/workspace/files"),
+  /** GET /api/fs/download?path=&t= (token in query as in the reference; header still added by apiFetch). */
+  download: async (path: string): Promise<Blob> => {
+    let res: Response;
+    try {
+      res = await apiFetch(`/api/fs/download?path=${encodeURIComponent(path)}&t=${encodeURIComponent(getToken() ?? "")}`, { method: "GET" });
+    } catch {
+      throw new ApiError(0, "network", "No se pudo conectar con el gateway.");
+    }
+    if (!res.ok) throw await parseError(res);
+    return res.blob();
+  },
   syncChat: (chat: ChatData) => apiJson<{ ok: boolean }>("/api/workspace/sync_chat", { id: chat.id, chat_data: chat }),
 };
 

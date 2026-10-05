@@ -104,3 +104,13 @@ El exec extendido, el origen web en la allowlist y el prompt del modelo con la g
 - **Pensamiento**: chip "✦ trabajando…" con cronómetro mientras no llegan tokens; `delta.reasoning_content` (PROPOSED, passthrough) se muestra plegado bajo el chip.
 - **Reintento**: errores de red / timeout / 5xx en `/api/chat` → toast con "Reintentar", que repite la misma llamada con el mismo historial (no recarga la conversación). Mock: `vps_error_once` / `offline_once` fallan una vez y vuelven a `ok`.
 - Token: `X-Erasmus-Token` se añade solo en `apiFetch` (`src/lib/api/client.ts`); no hay otros `fetch` en el cliente.
+
+### Mermaid — pipeline y robustez
+Texto del modelo → `mermaid.parse(…, {suppressErrors:true})` (si es inválido: se muestra el código plano, sin excepción) → `mermaid.render()` (`securityLevel:"strict"`) → SVG resultante por DOMPurify con las mismas FORBID auditadas (`PURIFY_CONFIG`), ampliado solo con el perfil SVG y `foreignObject`/`style` para conservar etiquetas → `innerHTML`. El contenedor temporal de mermaid se elimina siempre.
+Reintento ante fallo permanente (`vps_error`, `offline`): vuelve a fallar hasta que el gateway responde — comportamiento correcto.
+
+## H3 — Archivos y artifacts
+- Árbol desde `GET /api/workspace/files` (máx. 200); la carpeta `sandbox/<conv_id>/` de la conversación activa se abre y marca.
+- Descarga: `GET /api/fs/download?path=…&t=<token>` vía `apiFetch` (también lleva la cabecera) → blob → descarga local.
+- Vistas: texto/código con highlight (`/api/fs/read`), imagen y PDF (blob de download), HTML en `iframe sandbox="allow-scripts allow-popups"` (sin `allow-same-origin`).
+- Artifacts = `rel_path` con prefijo `artifacts/`.

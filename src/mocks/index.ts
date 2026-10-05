@@ -65,6 +65,9 @@ function sse(text: string, signal?: AbortSignal | null, reasoning = ""): Respons
   return new Response(stream, { status: 200, headers: { "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "no-cache" } });
 }
 
+const MIME: Record<string, string> = { svg: "image/svg+xml", png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", html: "text/html", csv: "text/csv", md: "text/markdown", json: "application/json", pdf: "application/pdf" };
+function mimeOf(p: string): string { return MIME[p.split(".").pop()?.toLowerCase() ?? ""] ?? "text/plain"; }
+
 function listDir(path: string) {
   const base = norm(path);
   const prefix = base ? base + "/" : "";
@@ -120,7 +123,7 @@ export async function mockFetch(path: string, init: RequestInit & { headers: Hea
     }
     if (p === "/api/fs/download" || p === "/api/workspace/download") {
       const f = s.files[norm(url.searchParams.get("path") ?? "")];
-      return f === undefined ? json(404, { ok: false, error: "Archivo no encontrado" }) : new Response(f, { headers: { "Content-Type": "application/octet-stream" } });
+      return f === undefined ? json(404, { ok: false, error: "Archivo no encontrado" }) : new Response(f, { headers: { "Content-Type": mimeOf(norm(url.searchParams.get("path") ?? "")) } });
     }
     return json(404, { error: "not_found" });
   }
