@@ -1,5 +1,10 @@
 import { useEffect, useState } from "react";
-import { sanitize } from "@/lib/markdown";
+import DOMPurify from "dompurify";
+import { PURIFY_CONFIG } from "@/lib/markdown";
+
+// Mermaid SVG: same FORBID rules, but keep the SVG <style>/<foreignObject> that carry labels.
+const sanitizeSvg = (s: string) =>
+  DOMPurify.sanitize(s, { ...PURIFY_CONFIG, USE_PROFILES: { svg: true, svgFilters: true, html: true }, ADD_TAGS: ["foreignObject", "style"], HTML_INTEGRATION_POINTS: { foreignobject: true } }) as string;
 
 let seq = 0;
 const theme = () => (document.documentElement.getAttribute("data-theme") === "light" ? "default" : "dark");
@@ -25,7 +30,7 @@ export function Mermaid({ source }: { source: string }) {
         const { default: mermaid } = await import("mermaid");
         mermaid.initialize({ startOnLoad: false, theme: mode as "dark" | "default", securityLevel: "strict", htmlLabels: false, flowchart: { htmlLabels: false } });
         const { svg: out } = await mermaid.render(`mmd-${++seq}`, source);
-        if (alive) { setSvg(sanitize(out)); setErr(false); }
+        if (alive) { setSvg(sanitizeSvg(out)); setErr(false); }
       } catch {
         if (alive) setErr(true);
       }
