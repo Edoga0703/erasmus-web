@@ -137,18 +137,21 @@ export function useChat(opts: { model: string }) {
 
   useEffect(() => {
     if (!localReady) return;
-    try {
-      const snapshot: LocalChatSnapshot = {
-        v: 1,
-        chatId,
-        title,
-        created: created.current,
-        messages: messages.map((m) => ({ ...m, streaming: false, attachments: m.attachments?.map(({ url: _url, ...a }) => a) })),
-      };
-      localStorage.setItem(LOCAL_CHAT_KEY, JSON.stringify(snapshot));
-    } catch {
-      // Server persistence remains authoritative; local recovery is best effort.
-    }
+    const timer = window.setTimeout(() => {
+      try {
+        const snapshot: LocalChatSnapshot = {
+          v: 1,
+          chatId,
+          title,
+          created: created.current,
+          messages: messages.map((m) => ({ ...m, streaming: false, attachments: m.attachments?.map(({ url: _url, ...a }) => a) })),
+        };
+        localStorage.setItem(LOCAL_CHAT_KEY, JSON.stringify(snapshot));
+      } catch {
+        // Server persistence remains authoritative; local recovery is best effort.
+      }
+    }, 250);
+    return () => window.clearTimeout(timer);
   }, [chatId, localReady, messages, title]);
 
   const commit = useCallback((fn: (m: UIMessage[]) => UIMessage[]) => {
