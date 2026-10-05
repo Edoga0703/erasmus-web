@@ -86,6 +86,8 @@ export interface StreamOptions {
   sessionId?: string;
   signal?: AbortSignal;
   onToken: (t: string) => void;
+  /** delta.reasoning_content passthrough (PROPOSED). */
+  onReasoning?: (t: string) => void;
 }
 
 /** POST /api/chat with stream:true; parses SSE "data:" lines token by token. */

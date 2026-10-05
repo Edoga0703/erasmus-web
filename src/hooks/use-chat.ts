@@ -12,6 +12,7 @@ export interface UIMessage {
   hidden?: boolean;
   streaming?: boolean;
   tools?: Record<number, ToolState>;
+  reasoning?: string;
   ts: number;
 }
 
@@ -100,20 +101,16 @@ export function useChat(opts: { model: string }) {
     try { await api.syncChat(data); } catch { /* best effort */ }
   }, [chatId]);
 
-  const send = useCallback(async (text: string) => {
-    const clean = text.trim();
-    if (!clean || busy) return;
-    setError(null);
+  /** Last failed model call; retry() relaunches exactly that call from the current history. */
+  const [failure, setFailure] = useState<{ message: string; retryable: boolean; nonce: number } | null>(null);
+  const titleRef = useRef(title);
+  titleRef.current = title;
+
+  const runLoop = useCallback(async (t: string) => {
     setBusy(true);
+    setFailure(null);
     const ctrl = new AbortController();
     abortRef.current = ctrl;
-    let t = title;
-    if (msgsRef.current.length === 0) {
-      t = clean.slice(0, 60);
-      setTitle(t);
-    }
-    commit((ms) => [...ms, { id: uid(), role: "user", content: clean, ts: Date.now() }]);
-
     let executed = 0;
     try {
       for (let step = 0; step < MAX_AGENT_STEPS; step++) {
@@ -121,12 +118,14 @@ export function useChat(opts: { model: string }) {
         commit((ms) => [...ms, { id: aid, role: "assistant", content: "", streaming: true, tools: {}, ts: Date.now() }]);
         const history = msgsRef.current.filter((m) => m.id !== aid).map((m) => ({ role: m.role, content: m.content }));
         let acc = "";
+        let reasoning = "";
         await streamChat({
           model: opts.model,
           messages: history,
           sessionId: chatId,
           signal: ctrl.signal,
           onToken: (tok) => { acc += tok; patch(aid, { content: acc }); },
+          onReasoning: (tok) => { reasoning += tok; patch(aid, { reasoning }); },
         });
         patch(aid, { streaming: false });
         if (ctrl.signal.aborted) break;
@@ -150,25 +149,38 @@ export function useChat(opts: { model: string }) {
           if (fb) feedback.push(fb);
         }
         if (ctrl.signal.aborted) break;
-        if (limitHit) {
-          setError("Límite de pasos alcanzado: el agente se detuvo tras 30 bloques.");
-          break;
-        }
-        if (step === MAX_AGENT_STEPS - 1) {
-          setError("Pausa de control: límite de pasos del agente alcanzado.");
-          break;
-        }
+        if (limitHit) { setError("Límite de pasos alcanzado: el agente se detuvo tras 30 bloques."); break; }
+        if (step === MAX_AGENT_STEPS - 1) { setError("Pausa de control: límite de pasos del agente alcanzado."); break; }
         commit((ms) => [...ms, { id: uid(), role: "user", hidden: true, content: `[RESULTADOS DE HERRAMIENTAS]\n${feedback.join("\n\n")}`, ts: Date.now() }]);
       }
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Error inesperado en el chat.");
-      commit((ms) => ms.map((m) => (m.streaming ? { ...m, streaming: false } : m)).filter((m) => !(m.role === "assistant" && !m.content)));
+      // Drop the failed (streaming) assistant turn so a retry replays the very same request.
+      commit((ms) => ms.filter((m) => !m.streaming));
+      const err = e instanceof ApiError ? e : null;
+      const retryable = !err || err.status === 0 || err.status === 408 || err.status >= 500;
+      const message = !err ? "Error inesperado en el chat." : err.status === 0 ? "Sin conexión con el gateway." : err.status === 504 || err.status === 408 ? "Tiempo de espera agotado." : err.message;
+      setFailure({ message, retryable, nonce: Date.now() });
     } finally {
       setBusy(false);
       abortRef.current = null;
       void persist(t);
     }
-  }, [busy, chatId, commit, opts.model, patch, persist, title]);
+  }, [chatId, commit, opts.model, patch, persist]);
+
+  const send = useCallback(async (text: string) => {
+    const clean = text.trim();
+    if (!clean || busy) return;
+    setError(null);
+    let t = titleRef.current;
+    if (msgsRef.current.length === 0) { t = clean.slice(0, 60); setTitle(t); }
+    commit((ms) => [...ms, { id: uid(), role: "user", content: clean, ts: Date.now() }]);
+    await runLoop(t);
+  }, [busy, commit, runLoop]);
+
+  const retry = useCallback(() => {
+    if (busy) return;
+    void runLoop(titleRef.current);
+  }, [busy, runLoop]);
 
   const stop = useCallback(() => abortRef.current?.abort(), []);
 
@@ -179,8 +191,9 @@ export function useChat(opts: { model: string }) {
     setChatId(uid());
     setTitle("Nueva conversación");
     setError(null);
+    setFailure(null);
     created.current = Date.now();
   }, []);
 
-  return { chatId, title, messages, busy, error, send, stop, reset, dismissError: () => setError(null) };
+  return { chatId, title, messages, busy, error, send, stop, reset, retry, failure, dismissError: () => setError(null) };
 }
