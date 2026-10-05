@@ -33,14 +33,23 @@ function ReasoningPicker({ disabled }: { disabled?: boolean | undefined }) {
     </DropdownMenu>
   );
 }
+import { AttachChip } from "./AttachChip";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 /** ChatGPT-style pill composer. "+" uploads a text file into this conversation's sandbox (via onAttach → /api/fs/write). */
 export function Composer({ busy, disabled, onSend, onStop, onAttach, draft, centered }: {
-  busy: boolean; disabled?: boolean; onSend: (t: string) => void; onStop: () => void;
-  onAttach?: (f: File) => void; draft?: { text: string; n: number } | undefined; centered?: boolean;
+  busy: boolean; disabled?: boolean; onSend: (t: string, files: File[]) => void; onStop: () => void;
+  onAttach?: unknown; draft?: { text: string; n: number } | undefined; centered?: boolean;
 }) {
   const [text, setText] = useState("");
+  const [files, setFiles] = useState<{ f: File; url?: string | undefined }[]>([]);
+  const addFiles = (list: FileList | null) => {
+    if (!list) return;
+    const add = Array.from(list).slice(0, 10).map((f) => ({ f, url: f.type.startsWith("image/") ? URL.createObjectURL(f) : undefined }));
+    setFiles((cur) => [...cur, ...add].slice(0, 10));
+    ref.current?.focus();
+  };
+  const removeFile = (i: number) => setFiles((cur) => { const x = cur[i]; if (x?.url) URL.revokeObjectURL(x.url); return cur.filter((_, j) => j !== i); });
   const ref = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -52,9 +61,10 @@ export function Composer({ busy, disabled, onSend, onStop, onAttach, draft, cent
   }, [draft]);
 
   const submit = () => {
-    if (!text.trim() || busy || disabled) return;
-    onSend(text);
+    if ((!text.trim() && !files.length) || busy || disabled) return;
+    onSend(text, files.map((x) => x.f));
     setText("");
+    setFiles([]);
     if (ref.current) ref.current.style.height = "auto";
   };
   const onKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -66,15 +76,22 @@ export function Composer({ busy, disabled, onSend, onStop, onAttach, draft, cent
 
   return (
     <section className={centered ? "w-full px-4" : "bg-e-bg2 px-3 pb-2 pt-1 sm:px-4"}>
-      <div className="e-row mx-auto max-w-3xl items-end">
-        <input ref={fileRef} type="file" hidden accept=".txt,.csv,.md,.json,.py,.sh,.html,.xml,.yaml,.yml,.tsv,.log" onChange={(e) => { const f = e.target.files?.[0]; if (f) onAttach?.(f); e.target.value = ""; }} />
+      <div className={"e-row mx-auto max-w-3xl flex-wrap items-end" + (files.length ? " pt-3" : "")}
+        onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); addFiles(e.dataTransfer.files); }}
+        onPaste={(e) => { if (e.clipboardData.files.length) { e.preventDefault(); addFiles(e.clipboardData.files); } }}>
+        {files.length > 0 && (
+          <div className="flex w-full flex-wrap gap-2 px-1 pb-2">
+            {files.map((x, i) => <AttachChip key={i + x.f.name} a={{ name: x.f.name, size: x.f.size, url: x.url }} onRemove={() => removeFile(i)} />)}
+          </div>
+        )}
+        <input ref={fileRef} type="file" hidden multiple accept="image/*,.txt,.csv,.md,.json,.py,.sh,.html,.xml,.yaml,.yml,.tsv,.log,.pdf" onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }} />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button type="button" aria-label="Añadir archivos" className="e-icon-btn shrink-0 text-e-tx" disabled={disabled}><Plus className="size-5" /></button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" side="top" className="e-pop min-w-56 p-1.5">
             <DropdownMenuItem className="gap-2 rounded-lg px-3 py-2 text-[14px]" onSelect={() => fileRef.current?.click()}>
-              <Paperclip className="size-4" /> Subir archivo al sandbox
+              <Paperclip className="size-4" /> Añadir fotos y archivos
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -94,7 +111,7 @@ export function Composer({ busy, disabled, onSend, onStop, onAttach, draft, cent
             <Square className="size-3.5" fill="currentColor" />
           </button>
         ) : (
-          <button type="button" onClick={submit} disabled={!text.trim() || disabled} aria-label="Enviar" className="inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-e-acc text-e-bg2 disabled:opacity-30">
+          <button type="button" onClick={submit} disabled={(!text.trim() && !files.length) || disabled} aria-label="Enviar" className="inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-e-acc text-e-bg2 disabled:opacity-30">
             <ArrowUp className="size-5" strokeWidth={2.4} />
           </button>
         )}
