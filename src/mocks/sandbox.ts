@@ -27,7 +27,7 @@ function ls(files: Record<string, string>, dir: string): string[] | null {
     const [head = "", ...tail] = rest.split("/");
     if (head) names.add(tail.length ? head + "/" : head);
   }
-  if (!names.size && dir && !Object.keys(files).some((k) => k.startsWith(prefix))) return null;
+  if (!names.size && dir && !dir.startsWith("sandbox/") && !Object.keys(files).some((k) => k.startsWith(prefix))) return null;
   return [...names].sort();
 }
 
