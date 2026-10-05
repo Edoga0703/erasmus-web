@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowDown, ChevronDown, FolderOpen, Info, Moon, PanelLeft, RefreshCw, Search, Settings, SquarePen, Sun, WifiOff, X } from "lucide-react";
-import { sandboxDir, useChat } from "@/hooks/use-chat";
+import { sandboxDir, useChat, type Attachment } from "@/hooks/use-chat";
 import { useConnection } from "@/hooks/use-connection";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { MOCK } from "@/lib/api/config";
@@ -95,15 +95,24 @@ export function AppShell() {
   const newChat = () => { chat.reset(); setSideOpen(false); };
   const openChat = (id: string) => { setSideOpen(false); chat.open(id).catch(() => toast.error("No se pudo abrir la conversación.")); };
 
-  const attach = async (f: File) => {
-    if (f.size > 2_000_000) { toast.error("El archivo supera 2 MB."); return; }
-    try {
-      await api.fsWrite(`${sandboxDir(chat.chatId)}/${f.name}`, await f.text());
-      window.dispatchEvent(new Event("erasmus:files-changed"));
-      toast.success(`${f.name} subido al sandbox de esta conversación.`);
-    } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "No se pudo subir el archivo.");
+  /** Upload attachments to this conversation's sandbox, then send the message showing them as tiles. */
+  const sendWithFiles = async (text: string, files: File[]) => {
+    const atts: Attachment[] = [];
+    for (const f of files) {
+      const isImg = f.type.startsWith("image/");
+      const att: Attachment = { name: f.name, size: f.size, url: isImg ? URL.createObjectURL(f) : undefined };
+      const textual = !isImg && f.type !== "application/pdf";
+      if (textual && f.size <= 2_000_000) {
+        try {
+          const path = `${sandboxDir(chat.chatId)}/${f.name}`;
+          await api.fsWrite(path, await f.text());
+          att.path = path;
+        } catch (e) { toast.error(e instanceof ApiError ? e.message : `No se pudo subir ${f.name}.`); }
+      } else if (textual) toast.error(`${f.name} supera 2 MB.`);
+      atts.push(att);
     }
+    if (atts.some((a) => a.path)) window.dispatchEvent(new Event("erasmus:files-changed"));
+    void chat.send(text, atts);
   };
 
   const rail = !mobile && collapsed;
@@ -163,7 +172,7 @@ export function AppShell() {
 
   const empty = visible.length === 0;
   const composer = (
-    <Composer busy={chat.busy} disabled={down} onSend={(t) => void chat.send(t)} onStop={chat.stop} onAttach={(f) => void attach(f)} draft={draft} centered={empty} />
+    <Composer busy={chat.busy} disabled={down} onSend={(t, f) => void sendWithFiles(t, f)} onStop={chat.stop} draft={draft} centered={empty} />
   );
 
   return (

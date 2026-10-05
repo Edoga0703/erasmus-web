@@ -166,7 +166,7 @@ export async function mockFetch(path: string, init: RequestInit & { headers: Hea
       const msgs = (body.messages as { role: string; content: string }[]) ?? [];
       const last = [...msgs].reverse().find((m) => m.role === "user")?.content ?? "";
       const followups = msgs.filter((m) => m.role === "user" && m.content.startsWith("[RESULTADOS")).length;
-      const firstUser = msgs.find((m) => m.role === "user" && !m.content.startsWith("[RESULTADOS"))?.content ?? last;
+      const firstUser = [...msgs].reverse().find((m) => m.role === "user" && !m.content.startsWith("[RESULTADOS"))?.content ?? last;
       const reasoning = followups === 0 && !/^\s*(hola|buenas)/i.test(firstUser) ? "El usuario quiere un análisis. Primero miro el sandbox, luego genero un CSV de ejemplo y compruebo que se lee bien." : "";
       return sse(scriptedReply(firstUser, followups), init.signal, reasoning);
     }

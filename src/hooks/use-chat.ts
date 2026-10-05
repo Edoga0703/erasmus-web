@@ -13,8 +13,11 @@ export interface UIMessage {
   streaming?: boolean;
   tools?: Record<number, ToolState>;
   reasoning?: string;
+  attachments?: Attachment[];
   ts: number;
 }
+/** File attached to a user message; `url` is a local object URL for image thumbnails (not persisted). */
+export interface Attachment { name: string; size: number; url?: string | undefined; path?: string | undefined }
 
 const MAX_AGENT_STEPS = 30;
 const MAX_BLOCKS_PER_TURN = 30;
@@ -117,7 +120,7 @@ export function useChat(opts: { model: string }) {
       for (let step = 0; step < MAX_AGENT_STEPS; step++) {
         const aid = uid();
         commit((ms) => [...ms, { id: aid, role: "assistant", content: "", streaming: true, tools: {}, ts: Date.now() }]);
-        const history = msgsRef.current.filter((m) => m.id !== aid).map((m) => ({ role: m.role, content: m.content }));
+        const history = msgsRef.current.filter((m) => m.id !== aid).map((m) => ({ role: m.role, content: m.attachments?.length ? `${m.content}\n\n[Archivos adjuntos: ${m.attachments.map((a) => a.path ?? a.name).join(", ")}]` : m.content }));
         let acc = "";
         let reasoning = "";
         await streamChat({
@@ -168,13 +171,13 @@ export function useChat(opts: { model: string }) {
     }
   }, [chatId, commit, opts.model, patch, persist]);
 
-  const send = useCallback(async (text: string) => {
-    const clean = text.trim();
+  const send = useCallback(async (text: string, attachments?: Attachment[]) => {
+    const clean = text.trim() || (attachments?.length ? "Revisa los archivos adjuntos." : "");
     if (!clean || busy) return;
     setError(null);
     let t = titleRef.current;
     if (msgsRef.current.length === 0) { t = clean.slice(0, 60); setTitle(t); }
-    commit((ms) => [...ms, { id: uid(), role: "user", content: clean, ts: Date.now() }]);
+    commit((ms) => [...ms, { id: uid(), role: "user", content: clean, ts: Date.now(), ...(attachments?.length ? { attachments } : {}) }]);
     await runLoop(t);
   }, [busy, commit, runLoop]);
 
