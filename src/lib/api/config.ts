@@ -76,3 +76,10 @@ export function saveModelConfig(c: ModelConfig): void {
     window.dispatchEvent(new Event("erasmus:model-config"));
   } catch { /* */ }
 }
+
+/** Display-only brand name: internal upstream ids are never shown to users (the value sent to the server is unchanged). */
+export function displayModel(id: string | undefined | null): string {
+  const s = String(id ?? "");
+  if (!s || /drael/i.test(s) || /^erasmus/i.test(s)) return "Erasmus";
+  return s;
+}
