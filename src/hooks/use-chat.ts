@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api, ApiError, streamChat } from "@/lib/api/client";
+import { api, ApiError, streamChat, type StreamUsage } from "@/lib/api/client";
 import { extractBlocks, lineDiff, type DiffRow, type ToolBlock } from "@/lib/blocks";
 import type { ChatData, StoredMessage } from "@/lib/api/types";
 
@@ -13,6 +13,11 @@ export interface UIMessage {
   streaming?: boolean;
   tools?: Record<number, ToolState>;
   reasoning?: string;
+  /** Milliseconds spent reasoning (first → last reasoning token). */
+  thinkMs?: number;
+  /** finish_reason of the last stream; "length" means the answer was cut. */
+  finish?: string;
+  usage?: StreamUsage;
   attachments?: Attachment[];
   ts: number;
 }
@@ -182,7 +187,7 @@ export function useChat(opts: { model: string }) {
       title: t,
       created: created.current,
       updated: Date.now(),
-      messages: msgsRef.current.map<StoredMessage>((m) => (m.role === "user" ? { role: "user", text: m.content, ts: m.ts, hidden: m.hidden } : { role: "assistant", c: m.content, ts: m.ts, tools: m.tools })),
+      messages: msgsRef.current.map<StoredMessage>((m) => (m.role === "user" ? { role: "user", text: m.content, ts: m.ts, hidden: m.hidden } : { role: "assistant", c: m.content, ts: m.ts, tools: m.tools, ...(m.reasoning ? { reasoning: m.reasoning, thinkMs: m.thinkMs } : {}), ...(m.usage ? { usage: m.usage } : {}), ...(m.finish ? { finish: m.finish } : {}) })),
     };
     try { await api.syncChat(data); setListVersion((v) => v + 1); } catch { /* best effort */ }
   }, [chatId]);
@@ -203,6 +208,8 @@ export function useChat(opts: { model: string }) {
         let acc = "";
         let reasoning = "";
         let frame: number | undefined;
+        let r0 = 0, r1 = 0;
+        let meta: { finish?: string; usage?: StreamUsage } = {};
         const schedulePaint = () => {
           if (frame !== undefined) return;
           frame = requestAnimationFrame(() => {
@@ -217,12 +224,13 @@ export function useChat(opts: { model: string }) {
             sessionId: chatId,
             signal: ctrl.signal,
             onToken: (tok) => { acc += tok; schedulePaint(); },
-            onReasoning: (tok) => { reasoning += tok; schedulePaint(); },
+            onReasoning: (tok) => { const n = Date.now(); if (!r0) r0 = n; r1 = n; reasoning += tok; schedulePaint(); },
+            onMeta: (mm) => { meta = { ...meta, ...(mm.finishReason ? { finish: mm.finishReason } : {}), ...(mm.usage ? { usage: mm.usage } : {}) }; },
           });
         } finally {
           if (frame !== undefined) cancelAnimationFrame(frame);
         }
-        patch(aid, { content: acc, ...(reasoning ? { reasoning } : {}), streaming: false });
+        patch(aid, { content: acc, ...(reasoning ? { reasoning, thinkMs: Math.max(r1 - r0, 1) } : {}), ...meta, streaming: false });
         if (ctrl.signal.aborted) break;
 
         const blocks = extractBlocks(acc);
@@ -258,6 +266,7 @@ export function useChat(opts: { model: string }) {
     } finally {
       setBusy(false);
       abortRef.current = null;
+      window.dispatchEvent(new Event("erasmus:turn-done"));
       void persist(t);
     }
   }, [chatId, commit, opts.model, patch, persist]);
@@ -276,6 +285,13 @@ export function useChat(opts: { model: string }) {
     if (busy) return;
     void runLoop(titleRef.current);
   }, [busy, runLoop]);
+
+  /** The last answer was cut (finish_reason "length"): ask the model to continue where it stopped. */
+  const continueLast = useCallback(() => {
+    if (busy) return;
+    commit((ms) => [...ms, { id: uid(), role: "user", hidden: true, content: "Continúa exactamente donde te quedaste, sin repetir lo anterior.", ts: Date.now() }]);
+    void runLoop(titleRef.current);
+  }, [busy, commit, runLoop]);
 
   const stop = useCallback(() => abortRef.current?.abort(), []);
 
@@ -335,5 +351,5 @@ export function useChat(opts: { model: string }) {
     setListVersion((v) => v + 1);
   }, [chatId, persist]);
 
-  return { open, rename, listVersion, chatId, title, messages, busy, error, send, stop, reset, retry, failure, dismissError: () => setError(null) };
+  return { open, rename, listVersion, chatId, title, messages, busy, error, send, stop, reset, continueLast, retry, failure, dismissError: () => setError(null) };
 }
