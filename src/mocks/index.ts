@@ -66,6 +66,30 @@ function sse(text: string, signal?: AbortSignal | null, reasoning = ""): Respons
 }
 
 const MIME: Record<string, string> = { svg: "image/svg+xml", png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", html: "text/html", csv: "text/csv", md: "text/markdown", json: "application/json", pdf: "application/pdf" };
+const bin: Record<string, Uint8Array> = {};
+/** Real STORE-mode ZIP of the mock workspace (so the export download is verifiable). */
+function buildZip(files: Record<string, string>): Uint8Array {
+  const enc = new TextEncoder();
+  const crcT = Array.from({ length: 256 }, (_, n) => { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; return c >>> 0; });
+  const crc = (d: Uint8Array) => { let c = 0xffffffff; for (const b of d) c = crcT[(c ^ b) & 0xff]! ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; };
+  const parts: number[] = []; const central: number[] = [];
+  const u16 = (a: number[], v: number) => a.push(v & 255, (v >>> 8) & 255);
+  const u32 = (a: number[], v: number) => a.push(v & 255, (v >>> 8) & 255, (v >>> 16) & 255, (v >>> 24) & 255);
+  let count = 0;
+  for (const [path, content] of Object.entries(files)) {
+    const nm = enc.encode(path); const data = enc.encode(content); const c = crc(data); const off = parts.length;
+    u32(parts, 0x04034b50); u16(parts, 20); u16(parts, 0x800); u16(parts, 0); u16(parts, 0); u16(parts, 0x21);
+    u32(parts, c); u32(parts, data.length); u32(parts, data.length); u16(parts, nm.length); u16(parts, 0);
+    parts.push(...nm, ...data);
+    u32(central, 0x02014b50); u16(central, 20); u16(central, 20); u16(central, 0x800); u16(central, 0); u16(central, 0); u16(central, 0x21);
+    u32(central, c); u32(central, data.length); u32(central, data.length); u16(central, nm.length); u16(central, 0); u16(central, 0);
+    u16(central, 0); u16(central, 0); u32(central, 0); u32(central, off); central.push(...nm);
+    count++;
+  }
+  const end: number[] = []; u32(end, 0x06054b50); u16(end, 0); u16(end, 0); u16(end, count); u16(end, count);
+  u32(end, central.length); u32(end, parts.length); u16(end, 0);
+  return new Uint8Array([...parts, ...central, ...end]);
+}
 function mimeOf(p: string): string { return MIME[p.split(".").pop()?.toLowerCase() ?? ""] ?? "text/plain"; }
 
 function listDir(path: string) {
@@ -122,6 +146,8 @@ export async function mockFetch(path: string, init: RequestInit & { headers: Hea
       return c ? json(200, { ok: true, chat_data: c }) : json(404, { ok: false, error: "Chat no encontrado en disco" });
     }
     if (p === "/api/fs/download" || p === "/api/workspace/download") {
+      const bz = bin[norm(url.searchParams.get("path") ?? "")];
+      if (bz) return new Response(bz.slice().buffer, { headers: { "Content-Type": "application/zip" } });
       const f = s.files[norm(url.searchParams.get("path") ?? "")];
       return f === undefined ? json(404, { ok: false, error: "Archivo no encontrado" }) : new Response(f, { headers: { "Content-Type": mimeOf(norm(url.searchParams.get("path") ?? "")) } });
     }
@@ -195,7 +221,12 @@ export async function mockFetch(path: string, init: RequestInit & { headers: Hea
     case "/api/workspace/set":
       return json(200, { ok: true, workspace_name: String(body.name || "default"), workspace_path: "/mock" });
     case "/api/workspace/zip":
-      return json(200, { ok: true, zip_name: "workspace.zip", size: 1024 });
+    {
+      const zip = buildZip(s.files);
+      const name = "workspace.zip";
+      bin[name] = zip;
+      return json(200, { ok: true, zip_name: name, size: zip.length });
+    }
     case "/api/stop":
       return json(200, { ok: true, message: "Stopping server" });
     // PROPOSED endpoints are intentionally NOT mocked: the UI must degrade.

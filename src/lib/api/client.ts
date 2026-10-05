@@ -90,6 +90,8 @@ export const api = {
     if (!res.ok) throw await parseError(res);
     return res.blob();
   },
+  /** POST /api/workspace/zip → {ok, zip_name, size}; the ZIP is then fetched with api.download(zip_name). */
+  zip: () => apiJson<{ ok: boolean; zip_name: string; size: number }>("/api/workspace/zip", {}),
   syncChat: (chat: ChatData) => apiJson<{ ok: boolean }>("/api/workspace/sync_chat", { id: chat.id, chat_data: chat }),
 };
 
