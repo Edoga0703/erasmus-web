@@ -153,7 +153,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
                 <div className="mt-4"><button className={btn} onClick={() => void exportZip()} disabled={zipping || DIRECT} data-zip-export>
                   <Download className="size-3.5" /> {zipping ? "Exportando…" : "Exportar workspace (ZIP)"}
                 </button>
-                {DIRECT && <p className="mt-2 text-[12.5px] text-e-dim">Disponible pronto: se activará cuando el puente esté instalado en el servidor.</p>}
+                {DIRECT && <p className="mt-2 text-[12.5px] text-e-dim">Disponible pronto.</p>}
                 {zipDone && <p className="mt-2 text-[12.5px] text-e-ok" data-zip-done>Descargado {zipDone.name} ({(zipDone.size / 1024).toFixed(1)} KB). También aparece en la raíz del workspace.</p>}
                 </div>
               </section>

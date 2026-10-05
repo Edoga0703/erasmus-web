@@ -120,7 +120,7 @@ export function AppShell() {
       if (isImg) { try { att.image = await imageToDataUrl(f); } catch { toast.error(`No se pudo leer ${f.name}.`); } }
       const textual = !isImg && f.type !== "application/pdf";
       if (textual && DIRECT) {
-        if (f.size <= 200_000) att.text = await f.text(); else toast.error(`${f.name} supera 200 KB; sin sandbox no se puede enviar.`);
+        if (f.size <= 200_000) att.text = await f.text(); else toast.error(`${f.name} supera 200 KB; no se puede enviar.`);
       } else if (textual && f.size <= 2_000_000) {
         try {
           const path = `${sandboxDir(chat.chatId)}/${f.name}`;
@@ -253,7 +253,6 @@ export function AppShell() {
           <section className="flex flex-1 flex-col items-center justify-center gap-7 pb-[12vh]">
             <h2 className="px-6 text-center text-[26px] font-normal tracking-tight sm:text-[28px]">¿En qué puedo ayudarte?</h2>
             {composer}
-            {DIRECT && <p className="max-w-xl px-6 text-center text-[12.5px] text-e-dim">Conectado directamente al modelo. El sandbox, los archivos y el historial se activarán cuando el puente esté instalado en el servidor.</p>}
           </section>
         ) : (
           <>
