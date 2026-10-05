@@ -1,13 +1,13 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { CheckCircle2, Eye, EyeOff, KeyRound, Loader2, PlugZap, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { api, ApiError } from "@/lib/api/client";
-import { API_BASE, MOCK, getModelConfig, getToken, isValidVpsKey, saveModelConfig, setToken, type ModelConfig, type ReasoningEffort } from "@/lib/api/config";
+import { MOCK, getModelConfig, isValidVpsKey, saveModelConfig, type ModelConfig } from "@/lib/api/config";
 import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
 type Test = { kind: "idle" } | { kind: "run" } | { kind: "ok"; ms: number; models: string[]; account: string } | { kind: "err"; msg: string };
-const EFFORTS: [ReasoningEffort, string][] = [["none", "Ninguno"], ["low", "Bajo"], ["medium", "Medio"], ["high", "Alto"]];
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
@@ -19,45 +19,53 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
   );
 }
 
-/** Ajustes → Modelo y API: ms- key, bridge token, model/reasoning options and a live connection test (API_Erasmus.md). */
+/** Ajustes → Modelo y API: user-level API key, model choice from GET /v1/models, compact mode and a live test. Server endpoint/token are deployment config, not user settings. */
 export function ModelSettings() {
   const [cfg, setCfg] = useState<ModelConfig>(() => getModelConfig());
-  const [token, setTok] = useState("");
+  const [models, setModels] = useState<string[]>([cfg.model || "erasmus-v1"]);
   const [show, setShow] = useState(false);
   const [test, setTest] = useState<Test>({ kind: "idle" });
-  const hasToken = getToken() !== "";
   const keyBad = cfg.apiKey !== "" && !isValidVpsKey(cfg.apiKey);
   const input = "w-full rounded-xl border border-e-line bg-e-bg2 px-3 py-2 text-[14px] text-e-tx outline-none focus:border-e-acc2";
 
-  const save = () => {
-    if (keyBad) { toast.error("La clave debe empezar por ms- (las claves dk- de drael.sh no pasan por el puente)."); return; }
-    if (token.trim()) { setToken(token); setTok(""); }
+  const loadModels = async () => {
+    const m = await api.models();
+    const ids = (m.data ?? []).map((d) => d.id);
+    if (ids.length) setModels(ids);
+    return m;
+  };
+  useEffect(() => { loadModels().catch(() => { /* list stays at the saved model */ }); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const save = (quiet = false) => {
+    if (keyBad) { toast.error("La clave debe empezar por ms- y tener más de 10 caracteres."); return false; }
     saveModelConfig(cfg);
-    toast.success("Conexión del modelo guardada.");
+    if (!quiet) toast.success("Conexión del modelo guardada.");
+    return true;
   };
 
   const run = async () => {
-    save();
+    if (!save(true)) return;
     setTest({ kind: "run" });
     const t0 = performance.now();
     try {
-      const m = await api.models();
+      const m = await loadModels();
       const ms = Math.round(performance.now() - t0);
       let account = "no disponible";
-      try { const a = await api.account(); account = Object.entries(a).filter(([k]) => k !== "ok").map(([k, v]) => `${k}: ${String(v)}`).join(" · ") || "ok"; } catch { /* account proxy is optional */ }
+      try { const a = await api.account(); account = Object.entries(a).filter(([k]) => k !== "ok").map(([k, v]) => `${k}: ${String(v)}`).join(" · ") || "ok"; } catch { /* optional */ }
       setTest({ kind: "ok", ms, models: (m.data ?? []).map((d) => d.id + (d.context_length ? ` (${Math.round(d.context_length / 1000)}k)` : "")), account });
     } catch (e) {
-      setTest({ kind: "err", msg: e instanceof ApiError ? (e.status === 0 ? "No se pudo conectar con el puente." : e.message) : "Error desconocido." });
+      setTest({ kind: "err", msg: e instanceof ApiError ? (e.status === 0 ? "No se pudo conectar con el servidor." : e.message) : "Error desconocido." });
     }
   };
 
   return (
     <section>
-      <Field label="Endpoint del puente" hint="Se define al desplegar (VITE_API_BASE). Solo lectura.">
-        <code className="font-mono text-[13px]">{API_BASE}{MOCK ? " (demostración)" : ""}</code>
-      </Field>
-
-      <Field label="Clave de API del modelo" hint="Clave ms-… aceptada por la VPS de Erasmus. Solo se envía al chat, modelos y cuenta; nunca a archivos ni sandbox. Déjala vacía si el servidor ya tiene una clave configurada.">
+      {MOCK && (
+        <p className="mb-2 rounded-xl bg-e-bg3 px-3 py-2 text-[12.5px] text-e-dim">
+          Esta vista previa está en modo demostración: la prueba responde con datos simulados. En la versión publicada conectada al servidor, la prueba consulta el servidor real.
+        </p>
+      )}
+      <Field label="Clave de API" hint="Tu clave ms-…. Solo se usa para hablar con el modelo; nunca se envía a archivos ni al sandbox.">
         <div className="relative">
           <KeyRound className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-e-dim" />
           <input type={show ? "text" : "password"} autoComplete="off" spellCheck={false} placeholder="ms-…" value={cfg.apiKey} aria-label="Clave de API"
@@ -73,33 +81,24 @@ export function ModelSettings() {
         </label>
       </Field>
 
-      <Field label="Token del puente" hint={hasToken ? "Hay un token activo en esta sesión (el valor nunca se muestra). Pega otro solo si el puente se reinició." : "Normalmente llega en el enlace (?t=…). Si abriste la web sin él, pégalo aquí."}>
-        <input type="password" autoComplete="off" placeholder={hasToken ? "•••••••• (activo)" : "Pega el token X-Erasmus-Token"} value={token} aria-label="Token del puente"
-          onChange={(e) => setTok(e.target.value)} className={cn(input, "font-mono")} />
-      </Field>
-
-      <Field label="Modelo" hint="El puente presenta erasmus-v1 y lo enruta al motor de la VPS.">
-        <input value={cfg.model} onChange={(e) => setCfg({ ...cfg, model: e.target.value.trim() || "erasmus-v1" })} aria-label="Modelo" className={cn(input, "font-mono")} />
-      </Field>
-
-      <Field label="Nivel de razonamiento" hint="reasoning_effort enviado en cada mensaje. Medio es el valor por defecto del motor.">
-        <div className="inline-flex rounded-full bg-e-bg3 p-1">
-          {EFFORTS.map(([v, l]) => (
-            <button key={v} type="button" aria-pressed={cfg.reasoning === v} onClick={() => setCfg({ ...cfg, reasoning: v })}
-              className={cn("rounded-full px-3.5 py-1.5 text-[13px]", cfg.reasoning === v ? "bg-e-bg2 text-e-tx shadow-sm" : "text-e-dim")}>{l}</button>
-          ))}
-        </div>
+      <Field label="Modelo" hint="Modelos disponibles para tu clave.">
+        <Select value={cfg.model} onValueChange={(v) => setCfg({ ...cfg, model: v })}>
+          <SelectTrigger aria-label="Modelo" className="h-10 rounded-xl"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {models.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+          </SelectContent>
+        </Select>
       </Field>
 
       <Field label="Modo compacto">
         <label className="flex items-center justify-between gap-3 text-[13.5px]">
-          <span className="text-e-dim">Envía X-Compact-Mode para respuestas más breves.</span>
+          <span className="text-e-dim">Respuestas más breves.</span>
           <Switch checked={cfg.compact} onCheckedChange={(v) => setCfg({ ...cfg, compact: v })} aria-label="Modo compacto" />
         </label>
       </Field>
 
       <div className="flex flex-wrap gap-2 pt-4">
-        <button type="button" onClick={save} className="rounded-full bg-e-acc px-4 py-2 text-[14px] font-medium text-e-bg2">Guardar</button>
+        <button type="button" onClick={() => save()} className="rounded-full bg-e-acc px-4 py-2 text-[14px] font-medium text-e-bg2">Guardar</button>
         <button type="button" onClick={() => void run()} disabled={test.kind === "run"} className="inline-flex items-center gap-1.5 rounded-full border border-e-line px-4 py-2 text-[14px] hover:bg-e-bg3 disabled:opacity-50">
           {test.kind === "run" ? <Loader2 className="size-4 animate-spin" /> : <PlugZap className="size-4" />} Probar conexión
         </button>
@@ -107,7 +106,7 @@ export function ModelSettings() {
 
       {test.kind === "ok" && (
         <div className="mt-4 rounded-2xl border border-e-line p-4 text-[13.5px]" data-model-test="ok">
-          <div className="flex items-center gap-2 font-medium text-e-ok"><CheckCircle2 className="size-4" /> Modelo conectado · {test.ms} ms</div>
+          <div className="flex items-center gap-2 font-medium text-e-ok"><CheckCircle2 className="size-4" /> Modelo conectado · {test.ms} ms{MOCK ? " (demostración)" : ""}</div>
           <div className="mt-2 text-e-dim">Modelos: <span className="font-mono text-e-tx">{test.models.join(", ") || "—"}</span></div>
           <div className="mt-1 text-e-dim">Cuenta: <span className="text-e-tx">{test.account}</span></div>
         </div>

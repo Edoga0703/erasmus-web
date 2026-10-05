@@ -59,8 +59,9 @@ async function parseError(res: Response): Promise<ApiError> {
     /* non-json */
   }
   if (res.status === 403) message = "Acceso denegado: falta el token o el origen no está autorizado.";
-  if (res.status === 401 && code === "bridge_session_expired") message = "La sesión del puente caducó: abre de nuevo el enlace con el token.";
+  if (res.status === 401 && code === "bridge_session_expired") message = "La sesión caducó: vuelve a abrir la página desde su enlace.";
   else if (res.status === 401 && (code === "unauthorized" || code === "http_401")) message = "Falta o no es válida la clave de API (ms-…). Configúrala en Ajustes → Modelo y API.";
+  if (res.status === 401 && code === "not_a_key") message = "Clave de API inválida o inactiva.";
   if (res.status === 429) message = "El puente ya tiene 4 conversaciones en curso. Espera un momento.";
   return new ApiError(res.status, code, message);
 }
