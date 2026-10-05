@@ -202,3 +202,4 @@
 @keyframes e-shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
 /* Artifact canvas: HTML documents render on a paper-white page in both themes, like a browser tab. */
 .e-frame { background: #ffffff; color-scheme: light; }
+.e-md img { cursor: zoom-in; border-radius: 12px; }
