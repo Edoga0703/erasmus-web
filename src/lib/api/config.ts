@@ -1,6 +1,9 @@
 /** Single source of truth for the API base URL and mock switch. */
 export const API_BASE: string = String(import.meta.env['VITE_API_BASE'] ?? "/erasmus-api").replace(/\/+$/, "");
 export const MOCK: boolean = import.meta.env['VITE_MOCK'] === "1";
+/** Direct-to-model mode: set while the bridge is not yet deployed. Chat/models/account go straight to the model server; sandbox/files/history degrade. */
+export const MODEL_BASE: string = String(import.meta.env['VITE_MODEL_BASE'] ?? "").replace(/\/+$/, "");
+export const DIRECT: boolean = !MOCK && MODEL_BASE !== "";
 
 const TOKEN_KEY = "erasmus_bridge_token";
 

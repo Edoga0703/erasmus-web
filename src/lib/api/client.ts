@@ -1,4 +1,4 @@
-import { API_BASE, MOCK, getModelConfig, getToken, isValidVpsKey } from "./config";
+import { API_BASE, DIRECT, MOCK, MODEL_BASE, getModelConfig, getToken, isValidVpsKey } from "./config";
 
 /** Routes the bridge proxies to the VPS: only these carry the ms- key (local fs/exec routes use the token only). */
 const REMOTE = /^\/(v1\/|api\/chat|api\/models|api\/account\/|api\/images\/)/;
@@ -26,6 +26,7 @@ export class ApiError extends Error {
 
 /** All network I/O goes through here. In mock mode the request is served by /src/mocks. */
 export async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
+  if (DIRECT) return directFetch(path, init);
   const headers = new Headers(init.headers);
   if (!headers.has("Content-Type") && init.body) headers.set("Content-Type", "application/json");
   const token = getToken();
@@ -41,6 +42,27 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
     return mockFetch(path, req);
   }
   return fetch(`${API_BASE}${path}`, req);
+}
+
+/** Routes the model server answers itself while the bridge is not deployed. */
+const DIRECT_ROUTES = /^\/(v1\/|api\/account\/|api\/images\/|api\/status$)/;
+export const BRIDGE_MISSING_MSG = "El sandbox, los archivos y el historial se activarán cuando el puente esté instalado en el servidor.";
+
+/** Direct mode: /api/chat → /v1/chat/completions on the model server; only CORS-allowed headers; bridge routes answer 503 locally. */
+async function directFetch(path: string, init: RequestInit): Promise<Response> {
+  const target = path === "/api/chat" ? "/v1/chat/completions" : path;
+  if (!DIRECT_ROUTES.test(target)) {
+    return new Response(JSON.stringify({ error: { code: "bridge_unavailable", message: BRIDGE_MISSING_MSG } }), { status: 503, headers: { "Content-Type": "application/json" } });
+  }
+  const src = new Headers(init.headers);
+  const headers = new Headers();
+  if (init.body) headers.set("Content-Type", "application/json");
+  const cfg = getModelConfig();
+  if (isValidVpsKey(cfg.apiKey)) headers.set("Authorization", `Bearer ${cfg.apiKey}`);
+  const sid = src.get("X-Session-ID");
+  if (sid) headers.set("X-Drael-Session", sid);
+  if (cfg.compact && target.includes("chat")) headers.set("X-Drael-Compact", "1");
+  return fetch(`${MODEL_BASE}${target}`, { ...init, headers });
 }
 
 async function parseError(res: Response): Promise<ApiError> {
@@ -80,7 +102,12 @@ export async function apiJson<T>(path: string, body?: unknown, method?: "GET" | 
 }
 
 export const api = {
-  status: () => apiJson<StatusResponse>("/api/status"),
+  status: async (): Promise<StatusResponse> => {
+    if (!DIRECT) return apiJson<StatusResponse>("/api/status");
+    const r = await apiJson<{ state?: string }>("/api/status");
+    if (r.state !== "up") throw new ApiError(503, "model_down", "El servidor del modelo no está disponible ahora mismo.");
+    return { ok: true, app: "Erasmus", status: r.state, gateway_active: true, brand_model: getModelConfig().model || "erasmus-v1", workspace_name: "Sin sandbox", cwd: "" };
+  },
   fsList: (path: string) => apiJson<FsListResponse>("/api/fs/list", { path }),
   fsRead: (path: string) => apiJson<FsReadResponse>("/api/fs/read", { path }),
   fsWrite: (path: string, content: string, append = false) =>
@@ -120,6 +147,9 @@ export interface StreamOptions {
   onReasoning?: (t: string) => void;
 }
 
+/** Direct mode has no bridge to add tool instructions, and no sandbox: tell the model to answer in plain Markdown. */
+const DIRECT_SYSTEM = "Eres Erasmus, un asistente de IA para empresarios. Responde en el idioma del usuario, con Markdown claro. Ahora mismo no tienes sandbox ni herramientas: no emitas bloques code:python, code:bash ni file:*; si hace falta código, muéstralo como bloque normal (```python) para que el usuario lo vea.";
+
 /** POST /api/chat with stream:true; parses SSE "data:" lines token by token. */
 export async function streamChat(opts: StreamOptions): Promise<void> {
   let res: Response;
@@ -128,7 +158,7 @@ export async function streamChat(opts: StreamOptions): Promise<void> {
       method: "POST",
       signal: opts.signal ?? null,
       headers: opts.sessionId ? { "X-Session-ID": opts.sessionId } : {},
-      body: JSON.stringify({ model: getModelConfig().model || opts.model, messages: opts.messages, stream: true, reasoning_effort: getModelConfig().reasoning }),
+      body: JSON.stringify({ model: getModelConfig().model || opts.model, messages: DIRECT ? [{ role: "system", content: DIRECT_SYSTEM }, ...opts.messages] : opts.messages, stream: true, reasoning_effort: getModelConfig().reasoning }),
     });
   } catch (e) {
     if ((e as Error)?.name === "AbortError") return;

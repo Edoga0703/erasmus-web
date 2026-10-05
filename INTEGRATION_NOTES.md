@@ -157,3 +157,9 @@ Reintento ante fallo permanente (`vps_error`, `offline`): vuelve a fallar hasta 
 - "Probar conexión" = `GET /v1/models` + `GET /api/account/me` (cuenta opcional, compatibilidad no verificada).
 - Claves `dk-…` de drael.sh NO pasan por el puente (se rechazan en la UI).
 - Pendiente de verificar con la VPS real: chat con/sin stream, `X-Drael-Session`, `finish_reason`/`usage`.
+
+## Modo directo al modelo (temporal, hasta desplegar el puente)
+- Se activa con `VITE_MODEL_BASE=https://crm.cuentastupana.com` y `VITE_MOCK=0`.
+- `apiFetch` envía `/api/chat` → `{MODEL_BASE}/v1/chat/completions`, y `/v1/*`, `/api/account/*`, `/api/images/*`, `/api/status` al servidor del modelo. Solo usa cabeceras permitidas por su CORS (`Authorization`, `Content-Type`, `X-Drael-Session`, `X-Drael-Compact`); nunca envía `X-Erasmus-Token`.
+- Las rutas del puente (sandbox, archivos, historial) responden 503 `bridge_unavailable` en local y la interfaz lo indica. Los adjuntos de texto (≤200 KB) se envían dentro del mensaje.
+- Al desplegar el puente: quitar `VITE_MODEL_BASE` para volver al flujo completo.
