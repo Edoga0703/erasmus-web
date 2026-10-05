@@ -16,3 +16,4 @@
 - Only endpoints listed in ANALYSIS.md; missing ones go to INTEGRATION_NOTES.md as PROPOSED and the UI degrades — contract with the gateway team.
 - Charts are rendered by the in-house SVG renderer (`src/components/chat/Chart.tsx`) and mermaid is bundled from npm — no chart libraries or CDNs, keeps the static build self-contained.
 - Workspace panel lives in `src/components/files/`; all reads/downloads go through `api.files`/`api.fsRead`/`api.download` (blob via apiFetch) — keeps the token single-source and makes mock downloads real blobs.
+- Assistant messages persist their tool-card state (`tools`) inside chat_data so reopened chats render identical cards; blocks without saved state show as "Del historial" — no re-execution on open.

@@ -21,6 +21,7 @@ const STATUS: Record<string, { text: string; cls: string }> = {
   ok: { text: "Éxito", cls: "text-e-ok" },
   error: { text: "Error", cls: "text-e-err" },
   limit: { text: "Límite alcanzado", cls: "text-e-dim" },
+  saved: { text: "Del historial", cls: "text-e-dim" },
 };
 
 const TAIL = 20;

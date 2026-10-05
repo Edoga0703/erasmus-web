@@ -84,9 +84,16 @@ export function FilesPanel({ convId, refreshKey, onClose }: { convId: string; re
     try { setFiles((await api.files()).files); setErr(null); } catch (e) { setErr(e instanceof ApiError ? e.message : "No se pudo cargar el workspace."); }
   }, []);
   useEffect(() => { void load(); }, [load, refreshKey]);
-  useEffect(() => { setOpen((o) => new Set([...o, "sandbox", mine])); }, [mine]);
+  useEffect(() => { setOpen(new Set(["sandbox", mine])); setSel(null); }, [mine]);
 
-  const tree = useMemo(() => buildTree(files), [files]);
+  const tree = useMemo(() => {
+    const t = buildTree(files);
+    // A fresh conversation has no files yet: show its (empty) sandbox folder so the context is explicit.
+    let sb = t.children.find((c) => c.name === "sandbox");
+    if (!sb) { sb = { name: "sandbox", path: "sandbox", dir: true, size: 0, children: [] }; t.children.push(sb); t.children.sort((a, b) => Number(b.dir) - Number(a.dir) || a.name.localeCompare(b.name)); }
+    if (!sb.children.some((c) => c.path === mine)) sb.children.unshift({ name: mine.split("/").pop() ?? "", path: mine, dir: true, size: 0, children: [] });
+    return t;
+  }, [files, mine]);
   const artifacts = useMemo(() => files.filter((f) => f.rel_path.startsWith("artifacts/")), [files]);
   const toggle = (p: string) => setOpen((o) => { const n = new Set(o); if (n.has(p)) n.delete(p); else n.add(p); return n; });
 
