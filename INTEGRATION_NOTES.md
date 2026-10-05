@@ -14,7 +14,7 @@ Se usa el modo SPA de TanStack Start (`spa.enabled`): el build genera un shell `
 ```nginx
 location / { try_files $uri $uri/ /index.html; }
 location /erasmus-api/ {
-  proxy_pass http://127.0.0.1:5005/;
+  proxy_pass http://127.0.0.1:4001/;   # gateway en la VPS (5005 es solo el daemon desktop)
   proxy_http_version 1.1;
   proxy_set_header Connection "";
   proxy_buffering off;          # SSE token a token
@@ -35,6 +35,8 @@ Lo aplica el equipo de backend antes de la integración real. El origen web se t
      re.IGNORECASE
  )
 ```
+**Al desplegar:** el `config.json` del servidor debe incluir `"web_origin": "<dominio final>"` (p. ej. `https://app.erasmus.es`); sin él queda el valor fail-closed de ejemplo.
+
 (`_origin_ok` sigue exigiendo el token con `compare_digest`; `do_OPTIONS` reutiliza el mismo regex.)
 
 ## Endpoints usados
