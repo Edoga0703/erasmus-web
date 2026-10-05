@@ -9,6 +9,7 @@ export function seedFiles(): Record<string, string> {
     "notas/reunion.txt": "Reunión lunes 10:00\n- Revisar presupuesto Q4\n- Preparar propuesta cliente\n",
     "artifacts/informe.html":
       '<!doctype html><html><body style="font-family:sans-serif;padding:24px"><h1>Informe trimestral</h1><p>Ventas +12% respecto al trimestre anterior.</p></body></html>',
+    "artifacts/logo.svg": '<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 120 120"><rect width="120" height="120" rx="24" fill="#3b82f6"/><text x="60" y="76" font-size="48" text-anchor="middle" fill="#fff" font-family="sans-serif">E</text></svg>',
     "artifacts/resumen.md": "# Resumen ejecutivo\n\n- Crecimiento sostenido\n- Nuevos mercados\n",
   };
 }
@@ -58,8 +59,13 @@ export function scriptedReply(prompt: string, step: number): string {
       "```chart\ntype: bar\nx: ene, feb, mar, abr\nNorte: 120, 135, 150, 142\nSur: 90, 110, 128, 140\n```\n\n",
       "Así fluye el proceso:\n\n```mermaid\nflowchart LR\n  A[ventas.csv] --> B[Python: análisis]\n  B --> C[Gráfico]\n  B --> D[Resumen]\n```\n\n",
       "| Mes | Norte | Sur |\n|---|---|---|\n| ene | 120 | 90 |\n| feb | 135 | 110 |\n| mar | 150 | 128 |\n| abr | 142 | 140 |\n\n",
-      "El archivo `ventas.csv` está en tu sandbox y puedes descargarlo desde el panel de archivos.",
+      "El archivo `ventas.csv` está en tu sandbox. Guardo también un informe visual:\n\n",
+      "```file:write artifacts/ventas.html\n<!doctype html><html><body style=\"font-family:sans-serif;padding:24px\"><h1>Ventas ene–abr</h1><p>Norte: <b>547</b> · Sur: <b>468</b></p><script>document.body.insertAdjacentHTML('beforeend','<p>Generado ' + new Date().toLocaleDateString() + '</p>')</script></body></html>\n```\n",
     ].join("");
+  }
+  if (step === 2) {
+    // V2 fixture: invalid mermaid on purpose → must fall back to plain code.
+    return "Listo: el informe está en **artifacts/ventas.html** (ábrelo en el panel de archivos).\n\nBorrador de diagrama (incompleto):\n\n```mermaid\ngraph TD\n A -->\n```\n";
   }
   return "Listo.";
 }

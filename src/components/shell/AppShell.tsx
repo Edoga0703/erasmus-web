@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { PanelLeft, Plus, RefreshCw, WifiOff, X } from "lucide-react";
+import { FolderOpen, PanelLeft, Plus, RefreshCw, WifiOff, X } from "lucide-react";
 import { useChat } from "@/hooks/use-chat";
 import { useConnection } from "@/hooks/use-connection";
 import { MOCK } from "@/lib/api/config";
@@ -7,12 +7,14 @@ import { MessageView } from "@/components/chat/MessageView";
 import { Composer } from "@/components/chat/Composer";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { FilesPanel } from "@/components/files/FilesPanel";
 
 export function AppShell() {
   const conn = useConnection();
   const model = conn.status?.brand_model ?? "erasmus-v1";
   const chat = useChat({ model });
   const [sideOpen, setSideOpen] = useState(false);
+  const [filesOpen, setFilesOpen] = useState(false);
   const scroller = useRef<HTMLElement>(null);
 
   // Network / timeout / 5xx → toast with "Reintentar" that replays the same failed call.
@@ -75,7 +77,10 @@ export function AppShell() {
             <i className={cn("inline-block size-2 rounded-full", conn.state === "online" ? "bg-e-ok" : conn.state === "checking" ? "bg-e-dim" : "bg-e-err")} />
             {conn.state === "online" ? "Conectado" : conn.state === "checking" ? "Conectando…" : "Sin conexión"}
           </span>
-          <span className="rounded-md border border-e-line px-2 py-0.5 font-mono text-[11px] text-e-dim">{model}</span>
+          <span className="hidden rounded-md border border-e-line px-2 py-0.5 font-mono text-[11px] text-e-dim sm:inline">{model}</span>
+          <button className={cn("e-icon-btn", filesOpen && "bg-e-bg3")} aria-label="Archivos" aria-pressed={filesOpen} onClick={() => setFilesOpen((o) => !o)}>
+            <FolderOpen className="size-3.5" />
+          </button>
         </header>
 
         {down && (
@@ -109,6 +114,7 @@ export function AppShell() {
         )}
         <Composer busy={chat.busy} disabled={down} onSend={(t) => void chat.send(t)} onStop={chat.stop} />
       </main>
+      {filesOpen && <FilesPanel convId={chat.chatId} refreshKey={`${chat.busy}-${chat.messages.length}`} onClose={() => setFilesOpen(false)} />}
     </div>
   );
 }
