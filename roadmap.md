@@ -2,6 +2,6 @@
 - [x] H1. Núcleo: chat SSE + ejecución automática de code:python, code:bash y file:* (sandbox simulado)
 - [x] H2 (hecho). Renderizado: mermaid, chart SVG, diffs, indicador de pensamiento, toasts con reintento
 - [x] H3. Archivos y artifacts
-- [ ] H4. Historial
+- [x] H4. Historial
 - [ ] H5. Ajustes
 - [ ] H6. Pulido

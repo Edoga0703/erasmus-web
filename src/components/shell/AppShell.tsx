@@ -7,6 +7,7 @@ import { MessageView } from "@/components/chat/MessageView";
 import { Composer } from "@/components/chat/Composer";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { ChatList } from "./ChatList";
 import { FilesPanel } from "@/components/files/FilesPanel";
 
 export function AppShell() {
@@ -63,7 +64,16 @@ export function AppShell() {
           </button>
         </div>
         <nav className="mt-3 flex-1 overflow-y-auto px-2">
-          <div className="truncate rounded-md bg-e-bg3 px-2.5 py-1.5 text-[13px]">{chat.title}</div>
+          <ChatList
+            activeId={chat.chatId}
+            activeTitle={chat.title}
+            version={chat.listVersion}
+            onOpen={(id) => {
+              setSideOpen(false);
+              chat.open(id).catch(() => toast.error("No se pudo abrir la conversación."));
+            }}
+            onRename={chat.rename}
+          />
         </nav>
       </aside>
 

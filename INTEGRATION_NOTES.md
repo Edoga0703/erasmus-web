@@ -114,3 +114,10 @@ Reintento ante fallo permanente (`vps_error`, `offline`): vuelve a fallar hasta 
 - Descarga: `GET /api/fs/download?path=…&t=<token>` vía `apiFetch` (también lleva la cabecera) → blob → descarga local.
 - Vistas: texto/código con highlight (`/api/fs/read`), imagen y PDF (blob de download), HTML en `iframe sandbox="allow-scripts allow-popups"` (sin `allow-same-origin`).
 - Artifacts = `rel_path` con prefijo `artifacts/`.
+
+## H4 — Historial
+- Listado: `GET /api/workspace/chats`, ordenado por `updated` desc; abrir: `GET /api/workspace/chat?id=` (usa `chat_data.messages`, o `allMessages` si viene vacío).
+- Cada mensaje del asistente se guarda con `tools` (estado de cada tarjeta: exit, duración, salida, diff) dentro de `chat_data`; al reabrir, las tarjetas salen iguales. Si un chat antiguo no trae `tools`, la tarjeta se muestra como "Del historial" con su script. El backend guarda `chat_data` tal cual (campo extra, sin cambio de contrato).
+- Al abrir, la carpeta `sandbox/<conv_id>/` de ese chat es la que aparece expandida en el árbol.
+- Renombrar: `POST /api/workspace/sync_chat` con el `chat_data` y el nuevo `title`.
+- Borrar: botón deshabilitado ("disponible pronto") hasta que exista `POST /api/workspace/delete_chat` (PROPOSED).
