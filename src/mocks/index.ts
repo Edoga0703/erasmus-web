@@ -115,7 +115,7 @@ export async function mockFetch(path: string, init: RequestInit & { headers: Hea
   if ((sc === "offline_once" || sc === "vps_error_once") && (path === "/api/chat" || path === "/v1/chat/completions")) {
     try { localStorage.setItem("erasmus.mock.scenario", "ok"); } catch { /* ignore */ }
     if (sc === "offline_once") throw new TypeError("Failed to fetch (mock offline)");
-    return json(502, { error: { code: "gateway_vps_error", message: "Erasmus Gateway error: la VPS no responde" } });
+    return json(502, { error: { code: "gateway_vps_error", message: "El servidor del modelo no responde" } });
   }
   if (sc === "offline") throw new TypeError("Failed to fetch (mock offline)");
   if (sc === "no_token" || !init.headers.get("X-Erasmus-Token")) return json(403, { ok: false, error: "origin_denied" });
@@ -133,7 +133,7 @@ export async function mockFetch(path: string, init: RequestInit & { headers: Hea
     if (p === "/api/status")
       return json(200, { ok: true, app: "Erasmus Platform Local Gateway", status: "ready", gateway_active: true, brand_model: "erasmus-v1", workspace_name: "default", cwd: "default" });
     if (p === "/api/models" || p === "/v1/models") {
-      if (sc === "no_vps_key" && !/^Bearer ms-.{8,}/.test(init.headers.get("Authorization") ?? "")) return json(401, { error: { code: "unauthorized", message: "Clave de API ausente. Configúrala en config.json" } });
+      if (sc === "no_vps_key" && !/^Bearer ms-.{8,}/.test(init.headers.get("Authorization") ?? "")) return json(401, { error: { code: "unauthorized", message: "Clave de API ausente." } });
       return json(200, { object: "list", data: [{ id: "erasmus-v1", object: "model", context_length: 200000 }] });
     }
     if (p === "/api/account/me") return json(200, { ok: true, plan: "pro", balance: 42.5 });
@@ -161,8 +161,8 @@ export async function mockFetch(path: string, init: RequestInit & { headers: Hea
   switch (p) {
     case "/api/chat":
     case "/v1/chat/completions": {
-      if (sc === "no_vps_key" && !/^Bearer ms-.{8,}/.test(init.headers.get("Authorization") ?? "")) return json(401, { error: { code: "unauthorized", message: "Clave de API ausente. Configúrala en config.json" } });
-      if (sc === "vps_error") return json(502, { error: { code: "gateway_vps_error", message: "Erasmus Gateway error: la VPS no responde" } });
+      if (sc === "no_vps_key" && !/^Bearer ms-.{8,}/.test(init.headers.get("Authorization") ?? "")) return json(401, { error: { code: "unauthorized", message: "Clave de API ausente." } });
+      if (sc === "vps_error") return json(502, { error: { code: "gateway_vps_error", message: "El servidor del modelo no responde" } });
       const msgs = (body.messages as { role: string; content: string }[]) ?? [];
       const last = [...msgs].reverse().find((m) => m.role === "user")?.content ?? "";
       const followups = msgs.filter((m) => m.role === "user" && m.content.startsWith("[RESULTADOS")).length;

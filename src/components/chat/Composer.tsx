@@ -1,5 +1,38 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
-import { ArrowUp, Paperclip, Plus, Square } from "lucide-react";
+import { ArrowUp, Brain, Check, Paperclip, Plus, Square } from "lucide-react";
+import { getModelConfig, saveModelConfig, type ReasoningEffort } from "@/lib/api/config";
+
+const EFFORTS: [ReasoningEffort, string, string][] = [["none", "Sin razonamiento", "Respuesta inmediata"], ["low", "Bajo", "Rápido, piensa poco"], ["medium", "Medio", "Equilibrado (predeterminado)"], ["high", "Alto", "Piensa más a fondo"]];
+
+/** Reasoning level pill (reasoning_effort on every /api/chat call), persisted with the model config. */
+function ReasoningPicker({ disabled }: { disabled?: boolean | undefined }) {
+  const [v, setV] = useState<ReasoningEffort>("medium");
+  useEffect(() => {
+    const sync = () => setV(getModelConfig().reasoning);
+    sync();
+    window.addEventListener("erasmus:model-config", sync);
+    return () => window.removeEventListener("erasmus:model-config", sync);
+  }, []);
+  const label = EFFORTS.find((e) => e[0] === v)?.[1] ?? "Medio";
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button type="button" disabled={disabled} aria-label={`Nivel de razonamiento: ${label}`} className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-[13.5px] text-e-dim hover:bg-e-bg3 hover:text-e-tx">
+          <Brain className="size-4" /><span className="hidden sm:inline">{v === "none" ? "Sin razonar" : `Razonar: ${label}`}</span>
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" side="top" className="e-pop min-w-64 p-1.5">
+        <div className="px-3 pb-1 pt-1.5 text-[12px] font-medium text-e-dim">Nivel de razonamiento</div>
+        {EFFORTS.map(([id, l, d]) => (
+          <DropdownMenuItem key={id} className="gap-3 rounded-lg px-3 py-2" onSelect={() => saveModelConfig({ ...getModelConfig(), reasoning: id })}>
+            <span className="flex-1"><span className="block text-[14px]">{l}</span><span className="block text-[12px] text-e-dim">{d}</span></span>
+            {v === id && <Check className="size-4" />}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 /** ChatGPT-style pill composer. "+" uploads a text file into this conversation's sandbox (via onAttach → /api/fs/write). */
@@ -45,6 +78,7 @@ export function Composer({ busy, disabled, onSend, onStop, onAttach, draft, cent
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        <ReasoningPicker disabled={disabled} />
         <textarea
           ref={ref}
           rows={1}

@@ -14,7 +14,7 @@ export const APP_VERSION = "Erasmus Web v0.1.0";
 type Probe = { kind: "idle" } | { kind: "checking" } | { kind: "ok"; ms: number; s: StatusResponse } | { kind: "error"; msg: string };
 type Counts = { chats: number; files: number; workspace: string } | null;
 
-const TABS = [["general", "General"], ["model", "Modelo y API"], ["bridge", "Puente"], ["data", "Datos"], ["security", "Seguridad"], ["about", "Acerca de"]] as const;
+const TABS = [["general", "General"], ["model", "Modelo y API"], ["bridge", "Estado"], ["data", "Datos"], ["security", "Seguridad"], ["about", "Acerca de"]] as const;
 type Tab = (typeof TABS)[number][0];
 
 /** Settings modal. Rendered on top of the shell; never unmounts the chat, so chat state survives open/close. */
@@ -113,7 +113,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
               <section>
                 <Row k="Endpoint" v={API_BASE + (MOCK ? " (demostración)" : "")} />
                 <div className="mt-3"><button className={btn} onClick={() => void verify()} disabled={probe.kind === "checking"}>
-                  <RefreshCw className={cn("size-3.5", probe.kind === "checking" && "animate-spin")} /> Verificar puente
+                  <RefreshCw className={cn("size-3.5", probe.kind === "checking" && "animate-spin")} /> Verificar servidor
                 </button></div>
                 {probe.kind === "ok" && (
                   <div className="mt-3" data-probe="ok">
@@ -126,7 +126,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
                 {probe.kind === "error" && (
                   <div className="e-err-banner mt-3 flex items-center gap-3 px-3 py-2 text-[13px]" role="alert" data-probe="error">
                     <WifiOff className="size-4 shrink-0" />
-                    <span className="flex-1">Puente degradado: {probe.msg}</span>
+                    <span className="flex-1">Servidor no disponible: {probe.msg}</span>
                     <button onClick={() => void verify()} className="inline-flex items-center gap-1 rounded-md border border-current px-2 py-1 text-[12px]"><RefreshCw className="size-3" /> Reintentar</button>
                   </div>
                 )}
