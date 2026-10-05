@@ -97,3 +97,10 @@ El exec extendido, el origen web en la allowlist y el prompt del modelo con la g
     - `vps_error` → 502 `gateway_vps_error` en `/api/chat`
     - `offline` → fallo de red
 - En modo mock, si no llega `?t=`, se fija un token de demostración (`mock-token`) para que la preview sea navegable. En modo real esto no ocurre.
+
+## H2 — Renderizado rico y errores
+- **chart**: renderer SVG propio (`src/components/chat/Chart.tsx`, sin librerías). Formato: `type: bar|line|share`, `x: a, b, c`, y una línea `Nombre: 1, 2, 3` por serie. Colores = variables de tema.
+- **mermaid**: paquete npm bundleado (sin CDN), `securityLevel: "strict"`, SVG pasado por DOMPurify, re-render al cambiar `data-theme`.
+- **Pensamiento**: chip "✦ trabajando…" con cronómetro mientras no llegan tokens; `delta.reasoning_content` (PROPOSED, passthrough) se muestra plegado bajo el chip.
+- **Reintento**: errores de red / timeout / 5xx en `/api/chat` → toast con "Reintentar", que repite la misma llamada con el mismo historial (no recarga la conversación). Mock: `vps_error_once` / `offline_once` fallan una vez y vuelven a `ok`.
+- Token: `X-Erasmus-Token` se añade solo en `apiFetch` (`src/lib/api/client.ts`); no hay otros `fetch` en el cliente.
