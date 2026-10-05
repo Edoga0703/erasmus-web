@@ -84,7 +84,7 @@ export function FilesPanel({ convId, refreshKey, onClose }: { convId: string; re
     try { setFiles((await api.files()).files); setErr(null); } catch (e) { setErr(e instanceof ApiError ? e.message : "No se pudo cargar el workspace."); }
   }, []);
   useEffect(() => { void load(); }, [load, refreshKey]);
-  useEffect(() => { setOpen((o) => new Set([...o, "sandbox", mine])); }, [mine]);
+  useEffect(() => { setOpen(new Set(["sandbox", mine])); setSel(null); }, [mine]);
 
   const tree = useMemo(() => buildTree(files), [files]);
   const artifacts = useMemo(() => files.filter((f) => f.rel_path.startsWith("artifacts/")), [files]);
