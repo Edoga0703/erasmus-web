@@ -1,6 +1,7 @@
-# Roadmap MVP Erasmus Web
-- [x] 1. Chat con streaming SSE + tarjetas de bloques (auto-ejecución file:*)
-- [ ] 2. Historial (manifiesto, abrir, renombrar vía sync_chat, borrar PROPOSED)
-- [ ] 3. Archivos del workspace
-- [ ] 4. Artifacts
-- [ ] 5. Ajustes
+# Roadmap Erasmus Web
+- [x] H1. Núcleo: chat SSE + ejecución automática de code:python, code:bash y file:* (sandbox simulado)
+- [ ] H2. Renderizado: mermaid, chart SVG, diffs, indicador de pensamiento, toasts con reintento
+- [ ] H3. Archivos y artifacts
+- [ ] H4. Historial
+- [ ] H5. Ajustes
+- [ ] H6. Pulido

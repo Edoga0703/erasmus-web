@@ -127,7 +127,7 @@ export async function mockFetch(path: string, init: RequestInit & { headers: Hea
       const code = String(body.code ?? body.cmd ?? body.command ?? "");
       await delay(350);
       const r = language === "python" ? runPython(s.files, code, cwd, timeout) : runBash(s.files, code, cwd, timeout);
-      return json(200, r);
+      return json(200, { ...r, duration_ms: r.duration_ms + 350 });
     }
     case "/api/fs/list": {
       const items = listDir(String(body.path ?? "."));
