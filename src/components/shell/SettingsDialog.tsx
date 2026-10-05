@@ -6,6 +6,7 @@ import type { StatusResponse } from "@/lib/api/types";
 import { setTheme, useTheme } from "@/lib/theme";
 import { downloadFile } from "@/components/files/FilesPanel";
 import { cn } from "@/lib/utils";
+import { ModelSettings } from "./ModelSettings";
 import pkg from "../../../package.json";
 
 export const APP_VERSION = "Erasmus Web v0.1.0";
@@ -13,7 +14,7 @@ export const APP_VERSION = "Erasmus Web v0.1.0";
 type Probe = { kind: "idle" } | { kind: "checking" } | { kind: "ok"; ms: number; s: StatusResponse } | { kind: "error"; msg: string };
 type Counts = { chats: number; files: number; workspace: string } | null;
 
-const TABS = [["general", "General"], ["bridge", "Puente"], ["data", "Datos"], ["security", "Seguridad"], ["about", "Acerca de"]] as const;
+const TABS = [["general", "General"], ["model", "Modelo y API"], ["bridge", "Puente"], ["data", "Datos"], ["security", "Seguridad"], ["about", "Acerca de"]] as const;
 type Tab = (typeof TABS)[number][0];
 
 /** Settings modal. Rendered on top of the shell; never unmounts the chat, so chat state survives open/close. */
@@ -107,6 +108,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
                 <p className="mt-2 text-[12px] text-e-dim">Se guarda en este navegador. Los gráficos y diagramas se redibujan al cambiarlo.</p>
               </section>
             )}
+            {tab === "model" && <ModelSettings />}
             {tab === "bridge" && (
               <section>
                 <Row k="Endpoint" v={API_BASE + (MOCK ? " (demostración)" : "")} />
