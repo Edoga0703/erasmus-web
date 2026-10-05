@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { FolderOpen, PanelLeft, Plus, RefreshCw, WifiOff, X } from "lucide-react";
+import { FolderOpen, PanelLeft, Plus, RefreshCw, Settings, WifiOff, X } from "lucide-react";
 import { useChat } from "@/hooks/use-chat";
 import { useConnection } from "@/hooks/use-connection";
 import { MOCK } from "@/lib/api/config";
@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { ChatList } from "./ChatList";
 import { FilesPanel } from "@/components/files/FilesPanel";
+import { SettingsDialog } from "./SettingsDialog";
 
 export function AppShell() {
   const conn = useConnection();
@@ -16,6 +17,7 @@ export function AppShell() {
   const chat = useChat({ model });
   const [sideOpen, setSideOpen] = useState(false);
   const [filesOpen, setFilesOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const scroller = useRef<HTMLElement>(null);
 
   // Network / timeout / 5xx → toast with "Reintentar" that replays the same failed call.
@@ -75,6 +77,11 @@ export function AppShell() {
             onRename={chat.rename}
           />
         </nav>
+        <div className="border-t border-e-line p-2">
+          <button onClick={() => { setSettingsOpen(true); setSideOpen(false); }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-[13px] text-e-dim hover:bg-e-bg3 hover:text-e-tx">
+            <Settings className="size-3.5" /> Ajustes
+          </button>
+        </div>
       </aside>
 
       <main className="flex min-w-0 flex-1 flex-col">
@@ -124,6 +131,7 @@ export function AppShell() {
         )}
         <Composer busy={chat.busy} disabled={down} onSend={(t) => void chat.send(t)} onStop={chat.stop} />
       </main>
+      {settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)} />}
       {filesOpen && <FilesPanel convId={chat.chatId} refreshKey={`${chat.busy}-${chat.messages.length}`} onClose={() => setFilesOpen(false)} />}
     </div>
   );
