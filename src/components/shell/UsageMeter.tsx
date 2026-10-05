@@ -39,7 +39,7 @@ export function UsageMeter() {
         </button>
       </PopoverTrigger>
       <PopoverContent align="end" className="e-pop w-72 p-4 text-[13.5px]">
-        <div className="flex items-baseline justify-between"><span className="font-medium">Uso del plan</span><span className="text-e-dim">Plan {acc.plan}</span></div>
+        <div className="flex items-baseline justify-between"><span className="font-medium">Uso del plan</span><span className="text-e-dim">Plan {({ free: "gratuito", pro: "Pro", plus: "Plus" } as Record<string, string>)[acc.plan.toLowerCase()] ?? acc.plan}</span></div>
         <div className="mt-3 h-2 overflow-hidden rounded-full bg-e-bg3"><div className={cn("h-full rounded-full", low ? "bg-e-err" : "bg-e-acc")} style={{ width: `${pct}%` }} /></div>
         <div className="mt-3 space-y-1.5">
           <div className="flex justify-between"><span className="text-e-dim">Tokens disponibles</span><span className="tabular-nums">{n(acc.balance)}</span></div>
