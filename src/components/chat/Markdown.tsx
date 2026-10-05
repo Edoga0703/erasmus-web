@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { highlightWithin, renderMarkdown } from "@/lib/markdown";
 import { splitRich } from "@/lib/charts";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -50,11 +50,26 @@ function Html({ source, streaming }: { source: string; streaming?: boolean | und
   const ref = useRef<HTMLDivElement>(null);
   const [preview, setPreview] = useState<{ code: string; lang: string } | null>(null);
   const html = useMemo(() => renderMarkdown(source), [source]);
-  useEffect(() => {
+  useLayoutEffect(() => {
+    // During streaming the HTML changes rapidly. Decorating/highlighting each
+    // partial code fence mutates the same DOM React is replacing and causes
+    // visible overlap. Keep the sanitized Markdown plain until the turn ends.
+    if (streaming) return;
     if (!ref.current) return;
-    decorate(ref.current, (code, lang) => setPreview({ code, lang }));
-    if (!streaming) highlightWithin(ref.current);
-  }, [html, streaming]);
+    const root = ref.current;
+    const applyCodeChrome = () => {
+      decorate(root, (code, lang) => setPreview({ code, lang }));
+      highlightWithin(root);
+    };
+    applyCodeChrome();
+    // A parent recovery render can replace dangerouslySetInnerHTML after this
+    // effect without changing `source`; re-apply the static code chrome once.
+    const observer = new MutationObserver(() => {
+      if (root.querySelector("pre:not(.e-code pre)")) applyCodeChrome();
+    });
+    observer.observe(root, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, [source, streaming]);
   return (
     <>
       <div ref={ref} className="e-md" dangerouslySetInnerHTML={{ __html: html }} />

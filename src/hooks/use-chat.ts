@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError, streamChat } from "@/lib/api/client";
 import { extractBlocks, lineDiff, type DiffRow, type ToolBlock } from "@/lib/blocks";
 import type { ChatData, StoredMessage } from "@/lib/api/types";
@@ -26,7 +26,38 @@ const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(
 export const EXEC_TIMEOUT_DEFAULT = 60;
 export const EXEC_TIMEOUT_MAX = 300;
 const OUTPUT_CAP = 64 * 1024;
+const LOCAL_CHAT_KEY = "erasmus.active-chat.v1";
 const cap = (t: string) => (t.length > OUTPUT_CAP ? t.slice(0, OUTPUT_CAP) + "\n…[salida truncada a 64 KB]" : t);
+
+interface LocalChatSnapshot {
+  v: 1;
+  chatId: string;
+  title: string;
+  created: number;
+  messages: UIMessage[];
+}
+
+function withoutTemporaryUrls(m: UIMessage): UIMessage {
+  const clean: UIMessage = { ...m, streaming: false };
+  if (m.attachments) clean.attachments = m.attachments.map(({ url: _url, ...a }) => a);
+  return clean;
+}
+
+function recoverLocalChat(): LocalChatSnapshot | null {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(LOCAL_CHAT_KEY) ?? "null") as Partial<LocalChatSnapshot> | null;
+    if (parsed?.v !== 1 || typeof parsed.chatId !== "string" || typeof parsed.title !== "string" || !Array.isArray(parsed.messages)) return null;
+    return {
+      v: 1,
+      chatId: parsed.chatId,
+      title: parsed.title,
+      created: typeof parsed.created === "number" ? parsed.created : Date.now(),
+      messages: parsed.messages.map(withoutTemporaryUrls),
+    };
+  } catch {
+    return null;
+  }
+}
 /** Model-facing text of a user message: inline text of attachments (direct mode) or their sandbox paths. */
 function withAttachments(m: UIMessage): string {
   const a = m.attachments;
@@ -90,9 +121,44 @@ export function useChat(opts: { model: string }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [listVersion, setListVersion] = useState(0);
+  const [localReady, setLocalReady] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const msgsRef = useRef<UIMessage[]>([]);
   const created = useRef(Date.now());
+  const titleRef = useRef(title);
+  titleRef.current = title;
+
+  useEffect(() => {
+    const saved = recoverLocalChat();
+    if (saved) {
+      msgsRef.current = saved.messages;
+      setMessages(saved.messages);
+      setChatId(saved.chatId);
+      setTitle(saved.title);
+      titleRef.current = saved.title;
+      created.current = saved.created;
+    }
+    setLocalReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!localReady) return;
+    const timer = window.setTimeout(() => {
+      try {
+        const snapshot: LocalChatSnapshot = {
+          v: 1,
+          chatId,
+          title,
+          created: created.current,
+          messages: messages.map(withoutTemporaryUrls),
+        };
+        localStorage.setItem(LOCAL_CHAT_KEY, JSON.stringify(snapshot));
+      } catch {
+        // Server persistence remains authoritative; local recovery is best effort.
+      }
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [chatId, localReady, messages, title]);
 
   const commit = useCallback((fn: (m: UIMessage[]) => UIMessage[]) => {
     msgsRef.current = fn(msgsRef.current);
@@ -115,9 +181,6 @@ export function useChat(opts: { model: string }) {
 
   /** Last failed model call; retry() relaunches exactly that call from the current history. */
   const [failure, setFailure] = useState<{ message: string; retryable: boolean; nonce: number } | null>(null);
-  const titleRef = useRef(title);
-  titleRef.current = title;
-
   const runLoop = useCallback(async (t: string) => {
     setBusy(true);
     setFailure(null);
@@ -131,15 +194,27 @@ export function useChat(opts: { model: string }) {
         const history = msgsRef.current.filter((m) => m.id !== aid).map((m) => ({ role: m.role, content: withAttachments(m) }));
         let acc = "";
         let reasoning = "";
-        await streamChat({
-          model: opts.model,
-          messages: history,
-          sessionId: chatId,
-          signal: ctrl.signal,
-          onToken: (tok) => { acc += tok; patch(aid, { content: acc }); },
-          onReasoning: (tok) => { reasoning += tok; patch(aid, { reasoning }); },
-        });
-        patch(aid, { streaming: false });
+        let frame: number | undefined;
+        const schedulePaint = () => {
+          if (frame !== undefined) return;
+          frame = requestAnimationFrame(() => {
+            frame = undefined;
+            patch(aid, { content: acc, ...(reasoning ? { reasoning } : {}) });
+          });
+        };
+        try {
+          await streamChat({
+            model: opts.model,
+            messages: history,
+            sessionId: chatId,
+            signal: ctrl.signal,
+            onToken: (tok) => { acc += tok; schedulePaint(); },
+            onReasoning: (tok) => { reasoning += tok; schedulePaint(); },
+          });
+        } finally {
+          if (frame !== undefined) cancelAnimationFrame(frame);
+        }
+        patch(aid, { content: acc, ...(reasoning ? { reasoning } : {}), streaming: false });
         if (ctrl.signal.aborted) break;
 
         const blocks = extractBlocks(acc);
@@ -184,7 +259,7 @@ export function useChat(opts: { model: string }) {
     if (!clean || busy) return;
     setError(null);
     let t = titleRef.current;
-    if (msgsRef.current.length === 0) { t = clean.slice(0, 60); setTitle(t); }
+    if (msgsRef.current.length === 0) { t = clean.slice(0, 60); setTitle(t); titleRef.current = t; }
     commit((ms) => [...ms, { id: uid(), role: "user", content: clean, ts: Date.now(), ...(attachments?.length ? { attachments } : {}) }]);
     await runLoop(t);
   }, [busy, commit, runLoop]);
@@ -202,6 +277,7 @@ export function useChat(opts: { model: string }) {
     setMessages([]);
     setChatId(uid());
     setTitle("Nueva conversación");
+    titleRef.current = "Nueva conversación";
     setError(null);
     setFailure(null);
     created.current = Date.now();
@@ -230,6 +306,7 @@ export function useChat(opts: { model: string }) {
     setMessages(restored);
     setChatId(cd.id || id);
     setTitle(cd.title || "Conversación");
+    titleRef.current = cd.title || "Conversación";
     created.current = cd.created || Date.now();
     setError(null);
     setFailure(null);
@@ -241,6 +318,7 @@ export function useChat(opts: { model: string }) {
     if (!t) return;
     if (id === chatId) {
       setTitle(t);
+      titleRef.current = t;
       await persist(t);
       return;
     }
