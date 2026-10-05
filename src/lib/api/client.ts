@@ -60,8 +60,8 @@ async function directFetch(path: string, init: RequestInit): Promise<Response> {
   const cfg = getModelConfig();
   if (isValidVpsKey(cfg.apiKey)) headers.set("Authorization", `Bearer ${cfg.apiKey}`);
   const sid = src.get("X-Session-ID");
-  if (sid) headers.set("X-Drael-Session", sid);
-  if (cfg.compact && target.includes("chat")) headers.set("X-Drael-Compact", "1");
+  if (sid) headers.set("X-Session-ID", sid);
+  if (cfg.compact && target.includes("chat")) headers.set("X-Compact-Mode", "1");
   return fetch(`${MODEL_BASE}${target}`, { ...init, headers });
 }
 
@@ -84,7 +84,9 @@ async function parseError(res: Response): Promise<ApiError> {
   if (res.status === 401 && code === "bridge_session_expired") message = "La sesión caducó: vuelve a abrir la página desde su enlace.";
   else if (res.status === 401 && (code === "unauthorized" || code === "http_401")) message = "Falta o no es válida la clave de API (ms-…). Configúrala en Ajustes → Modelo y API.";
   if (res.status === 401 && code === "not_a_key") message = "Clave de API inválida o inactiva.";
-  if (res.status === 429) message = "El puente ya tiene 4 conversaciones en curso. Espera un momento.";
+  if (res.status === 402) message = code === "weekly_allowance_reached" ? "Cupo de imágenes agotado para esta clave." : "Sin crédito suficiente. Contacta con el administrador para recargar.";
+  if (res.status === 429) message = "Ya hay 4 respuestas en curso con esta clave. Espera a que termine alguna.";
+  if (res.status === 502) message = "El modelo no respondió. Inténtalo de nuevo en unos segundos.";
   return new ApiError(res.status, code, message);
 }
 
@@ -139,7 +141,7 @@ export const api = {
 
 export interface StreamOptions {
   model: string;
-  messages: { role: string; content: string }[];
+  messages: { role: string; content: string | unknown[] }[];
   sessionId?: string;
   signal?: AbortSignal;
   onToken: (t: string) => void;

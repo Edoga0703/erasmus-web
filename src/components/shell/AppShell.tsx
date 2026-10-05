@@ -95,12 +95,24 @@ export function AppShell() {
   const newChat = () => { chat.reset(); setSideOpen(false); };
   const openChat = (id: string) => { setSideOpen(false); chat.open(id).catch(() => toast.error("No se pudo abrir la conversación.")); };
 
+  /** Downscale photos (max 1600 px, JPEG) so they travel inline to the model. */
+  const imageToDataUrl = async (f: File): Promise<string> => {
+    const bmp = await createImageBitmap(f);
+    const k = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
+    const c = document.createElement("canvas");
+    c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+    c.getContext("2d")!.drawImage(bmp, 0, 0, c.width, c.height);
+    bmp.close();
+    return c.toDataURL(f.type === "image/png" ? "image/png" : "image/jpeg", 0.85);
+  };
+
   /** Upload attachments to this conversation's sandbox, then send the message showing them as tiles. */
   const sendWithFiles = async (text: string, files: File[]) => {
     const atts: Attachment[] = [];
     for (const f of files) {
       const isImg = f.type.startsWith("image/");
       const att: Attachment = { name: f.name, size: f.size, url: isImg ? URL.createObjectURL(f) : undefined };
+      if (isImg) { try { att.image = await imageToDataUrl(f); } catch { toast.error(`No se pudo leer ${f.name}.`); } }
       const textual = !isImg && f.type !== "application/pdf";
       if (textual && DIRECT) {
         if (f.size <= 200_000) att.text = await f.text(); else toast.error(`${f.name} supera 200 KB; sin sandbox no se puede enviar.`);
