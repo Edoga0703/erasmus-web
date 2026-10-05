@@ -38,3 +38,38 @@ export function getToken(): string {
     return "";
   }
 }
+
+/** Manual bridge-token entry (Ajustes → Conexión) for when the app is opened without ?t=. sessionStorage only. */
+export function setToken(t: string): void {
+  try { if (t.trim()) sessionStorage.setItem(TOKEN_KEY, t.trim()); else sessionStorage.removeItem(TOKEN_KEY); } catch { /* */ }
+}
+
+/* ---- Model connection settings (API_Erasmus.md §2) ---- */
+export type ReasoningEffort = "none" | "low" | "medium" | "high";
+export interface ModelConfig { apiKey: string; remember: boolean; model: string; reasoning: ReasoningEffort; compact: boolean }
+const CFG_KEY = "erasmus.model.cfg";
+const KEY_KEY = "erasmus.model.key";
+export const DEFAULT_MODEL_CFG: ModelConfig = { apiKey: "", remember: false, model: "erasmus-v1", reasoning: "medium", compact: false };
+
+/** The bridge only forwards Bearer keys that start with "ms-" and are longer than 10 chars. */
+export const isValidVpsKey = (k: string) => k.startsWith("ms-") && k.length > 10;
+
+export function getModelConfig(): ModelConfig {
+  if (typeof window === "undefined") return DEFAULT_MODEL_CFG;
+  try {
+    const raw = JSON.parse(localStorage.getItem(CFG_KEY) ?? "{}") as Partial<ModelConfig>;
+    const apiKey = (raw.remember ? localStorage.getItem(KEY_KEY) : sessionStorage.getItem(KEY_KEY)) ?? "";
+    return { ...DEFAULT_MODEL_CFG, ...raw, apiKey };
+  } catch { return DEFAULT_MODEL_CFG; }
+}
+
+/** Key lives in sessionStorage unless "remember" is on; it is never written into the non-secret config blob. */
+export function saveModelConfig(c: ModelConfig): void {
+  try {
+    const { apiKey, ...rest } = c;
+    localStorage.setItem(CFG_KEY, JSON.stringify(rest));
+    localStorage.removeItem(KEY_KEY); sessionStorage.removeItem(KEY_KEY);
+    if (apiKey) (c.remember ? localStorage : sessionStorage).setItem(KEY_KEY, apiKey);
+    window.dispatchEvent(new Event("erasmus:model-config"));
+  } catch { /* */ }
+}

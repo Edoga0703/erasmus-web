@@ -1,4 +1,7 @@
-import { API_BASE, MOCK, getToken } from "./config";
+import { API_BASE, MOCK, getModelConfig, getToken, isValidVpsKey } from "./config";
+
+/** Routes the bridge proxies to the VPS: only these carry the ms- key (local fs/exec routes use the token only). */
+const REMOTE = /^\/(v1\/|api\/chat|api\/models|api\/account\/|api\/images\/)/;
 import type {
   ChatData,
   ChatListResponse,
@@ -27,6 +30,11 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
   if (!headers.has("Content-Type") && init.body) headers.set("Content-Type", "application/json");
   const token = getToken();
   if (token) headers.set("X-Erasmus-Token", token);
+  if (REMOTE.test(path)) {
+    const cfg = getModelConfig();
+    if (isValidVpsKey(cfg.apiKey) && !headers.has("Authorization")) headers.set("Authorization", `Bearer ${cfg.apiKey}`);
+    if (cfg.compact && path.includes("chat")) headers.set("X-Compact-Mode", "1");
+  }
   const req = { ...init, headers };
   if (MOCK) {
     const { mockFetch } = await import("@/mocks");
@@ -51,7 +59,9 @@ async function parseError(res: Response): Promise<ApiError> {
     /* non-json */
   }
   if (res.status === 403) message = "Acceso denegado: falta el token o el origen no está autorizado.";
-  if (res.status === 401 && code === `http_401`) message = "Falta la clave de API de la VPS.";
+  if (res.status === 401 && code === "bridge_session_expired") message = "La sesión del puente caducó: abre de nuevo el enlace con el token.";
+  else if (res.status === 401) message = "Falta o no es válida la clave de API (ms-…). Configúrala en Ajustes → Modelo y API.";
+  if (res.status === 429) message = "El puente ya tiene 4 conversaciones en curso. Espera un momento.";
   return new ApiError(res.status, code, message);
 }
 
@@ -92,6 +102,10 @@ export const api = {
   },
   /** POST /api/workspace/zip → {ok, zip_name, size}; the ZIP is then fetched with api.download(zip_name). */
   zip: () => apiJson<{ ok: boolean; zip_name: string; size: number }>("/api/workspace/zip", {}),
+  /** GET /v1/models (bridge proxy; presents erasmus-v1). */
+  models: () => apiJson<{ data: { id: string; context_length?: number }[] }>("/v1/models"),
+  /** GET /api/account/me (VPS proxy; compatibility unverified per API_Erasmus.md). */
+  account: () => apiJson<Record<string, unknown>>("/api/account/me"),
   syncChat: (chat: ChatData) => apiJson<{ ok: boolean }>("/api/workspace/sync_chat", { id: chat.id, chat_data: chat }),
 };
 
@@ -113,7 +127,7 @@ export async function streamChat(opts: StreamOptions): Promise<void> {
       method: "POST",
       signal: opts.signal ?? null,
       headers: opts.sessionId ? { "X-Session-ID": opts.sessionId } : {},
-      body: JSON.stringify({ model: opts.model, messages: opts.messages, stream: true }),
+      body: JSON.stringify({ model: getModelConfig().model || opts.model, messages: opts.messages, stream: true, reasoning_effort: getModelConfig().reasoning }),
     });
   } catch (e) {
     if ((e as Error)?.name === "AbortError") return;
