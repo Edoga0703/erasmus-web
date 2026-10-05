@@ -3,7 +3,7 @@ import { ArrowDown, ChevronDown, FolderOpen, Info, Moon, PanelLeft, RefreshCw, S
 import { sandboxDir, useChat, type Attachment } from "@/hooks/use-chat";
 import { useConnection } from "@/hooks/use-connection";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { MOCK } from "@/lib/api/config";
+import { DIRECT, MOCK } from "@/lib/api/config";
 import { api, ApiError } from "@/lib/api/client";
 import { setTheme, useTheme } from "@/lib/theme";
 import { MessageView } from "@/components/chat/MessageView";
@@ -102,7 +102,9 @@ export function AppShell() {
       const isImg = f.type.startsWith("image/");
       const att: Attachment = { name: f.name, size: f.size, url: isImg ? URL.createObjectURL(f) : undefined };
       const textual = !isImg && f.type !== "application/pdf";
-      if (textual && f.size <= 2_000_000) {
+      if (textual && DIRECT) {
+        if (f.size <= 200_000) att.text = await f.text(); else toast.error(`${f.name} supera 200 KB; sin sandbox no se puede enviar.`);
+      } else if (textual && f.size <= 2_000_000) {
         try {
           const path = `${sandboxDir(chat.chatId)}/${f.name}`;
           await api.fsWrite(path, await f.text());
@@ -221,6 +223,7 @@ export function AppShell() {
           <section className="flex flex-1 flex-col items-center justify-center gap-7 pb-[12vh]">
             <h2 className="px-6 text-center text-[26px] font-normal tracking-tight sm:text-[28px]">¿En qué puedo ayudarte?</h2>
             {composer}
+            {DIRECT && <p className="max-w-xl px-6 text-center text-[12.5px] text-e-dim">Conectado directamente al modelo. El sandbox, los archivos y el historial se activarán cuando el puente esté instalado en el servidor.</p>}
           </section>
         ) : (
           <>

@@ -17,7 +17,7 @@ export interface UIMessage {
   ts: number;
 }
 /** File attached to a user message; `url` is a local object URL for image thumbnails (not persisted). */
-export interface Attachment { name: string; size: number; url?: string | undefined; path?: string | undefined }
+export interface Attachment { name: string; size: number; url?: string | undefined; path?: string | undefined; text?: string | undefined }
 
 const MAX_AGENT_STEPS = 30;
 const MAX_BLOCKS_PER_TURN = 30;
@@ -27,6 +27,14 @@ export const EXEC_TIMEOUT_DEFAULT = 60;
 export const EXEC_TIMEOUT_MAX = 300;
 const OUTPUT_CAP = 64 * 1024;
 const cap = (t: string) => (t.length > OUTPUT_CAP ? t.slice(0, OUTPUT_CAP) + "\n…[salida truncada a 64 KB]" : t);
+/** Model-facing text of a user message: inline text of attachments (direct mode) or their sandbox paths. */
+function withAttachments(m: UIMessage): string {
+  const a = m.attachments;
+  if (!a?.length) return m.content;
+  const inline = a.filter((x) => x.text !== undefined).map((x) => `\n\n--- Archivo adjunto: ${x.name} ---\n${x.text}`).join("");
+  const refs = a.filter((x) => x.text === undefined).map((x) => x.path ?? x.name);
+  return m.content + inline + (refs.length ? `\n\n[Archivos adjuntos: ${refs.join(", ")}]` : "");
+}
 export const sandboxDir = (convId: string) => `sandbox/${convId}`;
 
 async function runBlock(b: ToolBlock, convId: string): Promise<{ state: ToolState; feedback: string | null }> {
@@ -120,7 +128,7 @@ export function useChat(opts: { model: string }) {
       for (let step = 0; step < MAX_AGENT_STEPS; step++) {
         const aid = uid();
         commit((ms) => [...ms, { id: aid, role: "assistant", content: "", streaming: true, tools: {}, ts: Date.now() }]);
-        const history = msgsRef.current.filter((m) => m.id !== aid).map((m) => ({ role: m.role, content: m.attachments?.length ? `${m.content}\n\n[Archivos adjuntos: ${m.attachments.map((a) => a.path ?? a.name).join(", ")}]` : m.content }));
+        const history = msgsRef.current.filter((m) => m.id !== aid).map((m) => ({ role: m.role, content: withAttachments(m) }));
         let acc = "";
         let reasoning = "";
         await streamChat({
