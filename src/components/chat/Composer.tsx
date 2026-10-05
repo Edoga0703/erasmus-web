@@ -25,7 +25,7 @@ export function Composer({ busy, disabled, onSend, onStop }: { busy: boolean; di
           ref={ref}
           rows={1}
           value={text}
-          placeholder={disabled ? "Sin conexión con el gateway" : "Escribe un mensaje…"}
+          placeholder={disabled ? "Sin conexión con el puente" : "Escribe un mensaje…"}
           aria-label="Mensaje"
           onChange={(e) => {
             setText(e.target.value);

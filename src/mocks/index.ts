@@ -138,7 +138,11 @@ export async function mockFetch(path: string, init: RequestInit & { headers: Hea
     }
     if (p === "/api/account/me") return json(200, { ok: true, plan: "pro", balance: 42.5 });
     if (p === "/api/workspace/files")
-      return json(200, { ok: true, workspace_name: "default", files: Object.entries(s.files).map(([rel, c]) => ({ name: rel.split("/").pop(), rel_path: rel, size: c.length, modified: Math.floor(Date.now() / 1000) })) });
+      return json(200, { ok: true, workspace_name: "default", files: [
+        ...Object.entries(s.files).map(([rel, c]) => ({ name: rel.split("/").pop(), rel_path: rel, size: c.length, modified: Math.floor(Date.now() / 1000) })),
+        // ZIPs live at the workspace ROOT and only exist after POST /api/workspace/zip (real backend contract).
+        ...Object.entries(bin).map(([rel, z]) => ({ name: rel, rel_path: rel, size: z.length, modified: Math.floor(Date.now() / 1000) })),
+      ] });
     if (p === "/api/workspace/chats")
       return json(200, { ok: true, workspace_name: "default", chats: Object.values(s.chats).sort((a, b) => b.updated - a.updated).map((c) => ({ id: c.id, title: c.title, updated: c.updated, created: c.created, messages_count: c.messages.length })) });
     if (p === "/api/workspace/chat") {
@@ -222,8 +226,11 @@ export async function mockFetch(path: string, init: RequestInit & { headers: Hea
       return json(200, { ok: true, workspace_name: String(body.name || "default"), workspace_path: "/mock" });
     case "/api/workspace/zip":
     {
+      // Anti self-inclusion: previous zips (bin) are never packed into a new one.
       const zip = buildZip(s.files);
-      const name = "workspace.zip";
+      const d = new Date();
+      const ts = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}_${String(d.getHours()).padStart(2, "0")}${String(d.getMinutes()).padStart(2, "0")}${String(d.getSeconds()).padStart(2, "0")}`;
+      const name = `default_${ts}.zip`;
       bin[name] = zip;
       return json(200, { ok: true, zip_name: name, size: zip.length });
     }

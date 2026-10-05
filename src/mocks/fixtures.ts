@@ -45,6 +45,18 @@ export function seedChats(): Record<string, ChatData> {
         },
       ],
     },
+    // H6 perf fixture: ~200 messages to check scroll stability.
+    "demo-long": {
+      id: "demo-long",
+      title: "Prueba de rendimiento (200 mensajes)",
+      created: now - 86400000 * 7,
+      updated: now - 86400000 * 7,
+      messages: Array.from({ length: 200 }, (_, i) =>
+        i % 2 === 0
+          ? { role: "user" as const, text: `Pregunta ${i / 2 + 1}: ¿cómo va el indicador ${i / 2 + 1}?`, ts: now - 86400000 * 7 + i * 1000 }
+          : { role: "assistant" as const, c: `Respuesta ${(i + 1) / 2}: el indicador sube un **${i % 7}%**.\n\n- Punto A\n- Punto B\n\n\`\`\`python\nprint(${i})\n\`\`\`\n`, ts: now - 86400000 * 7 + i * 1000 },
+      ),
+    },
     "demo-2": {
       id: "demo-2",
       title: "Propuesta para cliente",

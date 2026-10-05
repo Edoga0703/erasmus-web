@@ -4,4 +4,4 @@
 - [x] H3. Archivos y artifacts
 - [x] H4. Historial
 - [x] H5 ajustes
-- [ ] H6. Pulido
+- [x] H6. Pulido (v0.1.0)

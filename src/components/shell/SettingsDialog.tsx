@@ -8,7 +8,7 @@ import { downloadFile } from "@/components/files/FilesPanel";
 import { cn } from "@/lib/utils";
 import pkg from "../../../package.json";
 
-export const APP_VERSION = "Erasmus Web v0.1";
+export const APP_VERSION = "Erasmus Web v0.1.0";
 
 type Probe = { kind: "idle" } | { kind: "checking" } | { kind: "ok"; ms: number; s: StatusResponse } | { kind: "error"; msg: string };
 type Counts = { chats: number; files: number; workspace: string } | null;
@@ -33,7 +33,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
       const s = await api.status();
       setProbe({ kind: "ok", ms: Math.round(performance.now() - t0), s });
     } catch (e) {
-      setProbe({ kind: "error", msg: e instanceof ApiError && e.status !== 0 ? e.message : "No se pudo conectar con el gateway." });
+      setProbe({ kind: "error", msg: e instanceof ApiError && e.status !== 0 ? e.message : "No se pudo conectar con el puente." });
     }
   }, []);
 
@@ -44,7 +44,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
       setCounts({ chats: c.chats.length, files: f.files.length, workspace: f.workspace_name || c.workspace_name });
     } catch (e) {
       setCounts(null);
-      setCountErr(e instanceof ApiError && e.status !== 0 ? e.message : "No se pudo conectar con el gateway.");
+      setCountErr(e instanceof ApiError && e.status !== 0 ? e.message : "No se pudo conectar con el puente.");
     }
   }, []);
 
@@ -59,6 +59,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
     setZipping(true);
     try {
       const r = await api.zip();
+      window.dispatchEvent(new Event("erasmus:files-changed")); // zip now lives in the workspace root → refresh tree
       await downloadFile(r.zip_name);
     } catch (e) {
       setCountErr(e instanceof ApiError && e.status !== 0 ? e.message : "No se pudo exportar el workspace.");
