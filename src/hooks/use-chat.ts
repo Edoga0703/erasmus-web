@@ -316,6 +316,9 @@ export function useChat(opts: { model: string }) {
       const content = (sm.role === "user" ? sm.text : sm.c) ?? sm.content ?? "";
       const base: UIMessage = { id: uid(), role: sm.role, content, ts: sm.ts ?? cd.created };
       if (sm.hidden) base.hidden = true;
+      if (sm.reasoning) { base.reasoning = sm.reasoning; if (sm.thinkMs) base.thinkMs = sm.thinkMs; }
+      if (sm.usage) base.usage = sm.usage;
+      if (sm.finish) base.finish = sm.finish;
       if (sm.role === "assistant") {
         const tools: Record<number, ToolState> = {};
         extractBlocks(content).forEach((_, i) => {
