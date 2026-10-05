@@ -1,4 +1,4 @@
-import { API_BASE, DIRECT, MOCK, MODEL_BASE, getModelConfig, getToken, isValidVpsKey } from "./config";
+import { API_BASE, DIRECT, MOCK, MODEL_BASE, customSystemText, getModelConfig, getToken, isValidVpsKey } from "./config";
 
 /** Routes the bridge proxies to the VPS: only these carry the ms- key (local fs/exec routes use the token only). */
 const REMOTE = /^\/(v1\/|api\/chat|api\/models|api\/account\/|api\/images\/)/;
@@ -147,10 +147,24 @@ export interface StreamOptions {
   onToken: (t: string) => void;
   /** delta.reasoning_content passthrough (PROPOSED). */
   onReasoning?: (t: string) => void;
+  /** Final stream metadata: finish_reason ("length" = cut) and token usage. */
+  onMeta?: (m: StreamMeta) => void;
+}
+export interface StreamUsage { prompt: number; completion: number; reasoning: number; total: number }
+export interface StreamMeta { finishReason?: string; usage?: StreamUsage }
+function toUsage(u: Record<string, unknown> | null | undefined): StreamUsage | undefined {
+  if (!u || typeof u["total_tokens"] !== "number") return undefined;
+  const det = (u["completion_tokens_details"] ?? {}) as Record<string, unknown>;
+  return { prompt: Number(u["prompt_tokens"] ?? 0), completion: Number(u["completion_tokens"] ?? 0), reasoning: Number(det["reasoning_tokens"] ?? 0), total: Number(u["total_tokens"]) };
 }
 
 /** Direct mode has no bridge to add tool instructions, and no sandbox: tell the model to answer in plain Markdown. */
 const DIRECT_SYSTEM = "Eres Erasmus, un asistente de IA para empresarios. Tu nombre es Erasmus; si te preguntan qué modelo eres, responde simplemente que eres Erasmus, sin hablar de proveedores ni nombres técnicos. Responde en el idioma del usuario, con Markdown claro. Ahora mismo no tienes sandbox ni herramientas: no emitas bloques code:python, code:bash ni file:*; si hace falta código, muéstralo como bloque normal (```python) para que el usuario lo vea.";
+
+function withSystem(msgs: StreamOptions["messages"]): StreamOptions["messages"] {
+  const sys = [DIRECT ? DIRECT_SYSTEM : "", customSystemText()].filter(Boolean).join("\n\n");
+  return sys ? [{ role: "system", content: sys }, ...msgs] : msgs;
+}
 
 /** POST /api/chat with stream:true; parses SSE "data:" lines token by token. */
 export async function streamChat(opts: StreamOptions): Promise<void> {
@@ -160,7 +174,7 @@ export async function streamChat(opts: StreamOptions): Promise<void> {
       method: "POST",
       signal: opts.signal ?? null,
       headers: opts.sessionId ? { "X-Session-ID": opts.sessionId } : {},
-      body: JSON.stringify({ model: getModelConfig().model || opts.model, messages: DIRECT ? [{ role: "system", content: DIRECT_SYSTEM }, ...opts.messages] : opts.messages, stream: true, reasoning_effort: getModelConfig().reasoning }),
+      body: JSON.stringify({ model: getModelConfig().model || opts.model, messages: withSystem(opts.messages), stream: true, reasoning_effort: getModelConfig().reasoning }),
     });
   } catch (e) {
     if ((e as Error)?.name === "AbortError") return;
@@ -172,6 +186,10 @@ export async function streamChat(opts: StreamOptions): Promise<void> {
     const j = await res.json().catch(() => null);
     const c = j?.choices?.[0]?.message?.content;
     if (c) opts.onToken(c);
+    const rc0 = j?.choices?.[0]?.message?.reasoning_content;
+    if (rc0) opts.onReasoning?.(rc0);
+    const u0 = toUsage(j?.usage);
+    opts.onMeta?.({ ...(j?.choices?.[0]?.finish_reason ? { finishReason: j.choices[0].finish_reason } : {}), ...(u0 ? { usage: u0 } : {}) });
     return;
   }
   const reader = res.body.getReader();
@@ -195,6 +213,9 @@ export async function streamChat(opts: StreamOptions): Promise<void> {
           if (t) opts.onToken(t);
           const rc = j?.choices?.[0]?.delta?.reasoning_content;
           if (rc) opts.onReasoning?.(rc);
+          const fr = j?.choices?.[0]?.finish_reason;
+          const us = toUsage(j?.usage);
+          if (fr || us) opts.onMeta?.({ ...(fr ? { finishReason: fr } : {}), ...(us ? { usage: us } : {}) });
           if (j?.error) throw new ApiError(502, j.error.code ?? "stream", j.error.message ?? "Error en el stream");
         } catch (e) {
           if (e instanceof ApiError) throw e;
