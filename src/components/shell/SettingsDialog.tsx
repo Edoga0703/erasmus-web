@@ -1,8 +1,7 @@
-import { displayModel, DIRECT } from "@/lib/api/config";
 import { useCallback, useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight, Download, Moon, RefreshCw, ShieldCheck, ShieldOff, Sun, WifiOff, X } from "lucide-react";
 import { api, ApiError } from "@/lib/api/client";
-import { API_BASE, MOCK, getToken } from "@/lib/api/config";
+import { API_BASE, DIRECT, MOCK, displayModel, getToken } from "@/lib/api/config";
 import type { StatusResponse } from "@/lib/api/types";
 import { setTheme, useTheme } from "@/lib/theme";
 import { downloadFile } from "@/components/files/FilesPanel";
@@ -60,7 +59,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
   }, [onClose]);
 
   const exportZip = async () => {
-    setZipping(true); setZipDone(null); setCountErr(null);
+    setZipping(true); setZipDone(null); setCountErr("");
     try {
       const r = await api.zip();
       window.dispatchEvent(new Event("erasmus:files-changed")); // zip now lives in the workspace root → refresh tree
