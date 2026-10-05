@@ -1,7 +1,8 @@
 /**
  * Mock gateway: simulates every endpoint in ANALYSIS.md §3 (incl. SSE).
  * Only loaded when VITE_MOCK=1. Scenario can be forced with
- * localStorage["erasmus.mock.scenario"] = ok | no_token | no_vps_key | vps_error | offline.
+ * localStorage["erasmus.mock.scenario"] = ok | no_token | no_vps_key | vps_error | offline
+ * | vps_error_once | offline_once  (the *_once variants fail one /api/chat call, then revert to ok → test "Reintentar").
  */
 import type { ChatData } from "@/lib/api/types";
 import { scriptedReply, seedChats, seedFiles } from "./fixtures";
@@ -25,10 +26,14 @@ const json = (status: number, body: unknown) =>
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const norm = (p: string) => p.replace(/\\/g, "/").replace(/^\.\/?/, "").replace(/^\/+|\/+$/g, "");
 
-function sse(text: string, signal?: AbortSignal | null): Response {
+function sse(text: string, signal?: AbortSignal | null, reasoning = ""): Response {
   const enc = new TextEncoder();
   const tokens = text.match(/\s*\S+|\s+/g) ?? [];
+  // reasoning_content passthrough (PROPOSED) precedes content, after a "thinking" pause.
+  const rTokens = reasoning.match(/\s*\S+|\s+/g) ?? [];
   let i = 0;
+  let r = 0;
+  let wait = 40; // ~1.1 s without tokens → chip "trabajando…" visible
   let timer: ReturnType<typeof setInterval> | undefined;
   const stream = new ReadableStream<Uint8Array>({
     start(ctrl) {
@@ -38,6 +43,12 @@ function sse(text: string, signal?: AbortSignal | null): Response {
       };
       signal?.addEventListener("abort", stop);
       timer = setInterval(() => {
+        if (wait-- > 0) return;
+        if (r < rTokens.length) {
+          const rc = { id: "mock", object: "chat.completion.chunk", choices: [{ index: 0, delta: { reasoning_content: rTokens[r++] } }] };
+          ctrl.enqueue(enc.encode(`data: ${JSON.stringify(rc)}\n\n`));
+          return;
+        }
         if (i >= tokens.length) {
           ctrl.enqueue(enc.encode("data: [DONE]\n\n"));
           stop();
@@ -74,6 +85,11 @@ function listDir(path: string) {
 export async function mockFetch(path: string, init: RequestInit & { headers: Headers }): Promise<Response> {
   const sc = scenario();
   await delay(120);
+  if ((sc === "offline_once" || sc === "vps_error_once") && (path === "/api/chat" || path === "/v1/chat/completions")) {
+    try { localStorage.setItem("erasmus.mock.scenario", "ok"); } catch { /* ignore */ }
+    if (sc === "offline_once") throw new TypeError("Failed to fetch (mock offline)");
+    return json(502, { error: { code: "gateway_vps_error", message: "Erasmus Gateway error: la VPS no responde" } });
+  }
   if (sc === "offline") throw new TypeError("Failed to fetch (mock offline)");
   if (sc === "no_token" || !init.headers.get("X-Erasmus-Token")) return json(403, { ok: false, error: "origin_denied" });
 
@@ -118,7 +134,8 @@ export async function mockFetch(path: string, init: RequestInit & { headers: Hea
       const last = [...msgs].reverse().find((m) => m.role === "user")?.content ?? "";
       const followups = msgs.filter((m) => m.role === "user" && m.content.startsWith("[RESULTADOS")).length;
       const firstUser = msgs.find((m) => m.role === "user" && !m.content.startsWith("[RESULTADOS"))?.content ?? last;
-      return sse(scriptedReply(firstUser, followups), init.signal);
+      const reasoning = followups === 0 && !/^\s*(hola|buenas)/i.test(firstUser) ? "El usuario quiere un análisis. Primero miro el sandbox, luego genero un CSV de ejemplo y compruebo que se lee bien." : "";
+      return sse(scriptedReply(firstUser, followups), init.signal, reasoning);
     }
     case "/api/exec": {
       const language = String(body.language ?? "bash");

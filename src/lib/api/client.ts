@@ -129,6 +129,8 @@ export async function streamChat(opts: StreamOptions): Promise<void> {
           const j = JSON.parse(data);
           const t = j?.choices?.[0]?.delta?.content ?? j?.choices?.[0]?.message?.content;
           if (t) opts.onToken(t);
+          const rc = j?.choices?.[0]?.delta?.reasoning_content;
+          if (rc) opts.onReasoning?.(rc);
           if (j?.error) throw new ApiError(502, j.error.code ?? "stream", j.error.message ?? "Error en el stream");
         } catch (e) {
           if (e instanceof ApiError) throw e;

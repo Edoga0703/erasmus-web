@@ -56,6 +56,7 @@ export function scriptedReply(prompt: string, step: number): string {
     return [
       "Datos listos. Las ventas del **norte** suman **547** y crecen hasta marzo; el **sur** sube de forma constante.\n\n",
       "```chart\ntype: bar\nx: ene, feb, mar, abr\nNorte: 120, 135, 150, 142\nSur: 90, 110, 128, 140\n```\n\n",
+      "Así fluye el proceso:\n\n```mermaid\nflowchart LR\n  A[ventas.csv] --> B[Python: análisis]\n  B --> C[Gráfico]\n  B --> D[Resumen]\n```\n\n",
       "| Mes | Norte | Sur |\n|---|---|---|\n| ene | 120 | 90 |\n| feb | 135 | 110 |\n| mar | 150 | 128 |\n| abr | 142 | 140 |\n\n",
       "El archivo `ventas.csv` está en tu sandbox y puedes descargarlo desde el panel de archivos.",
     ].join("");
