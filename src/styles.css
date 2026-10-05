@@ -153,7 +153,7 @@
 @utility e-overlay { background: var(--overlay); }
 
 /* Markdown rendering (sanitized HTML from marked + DOMPurify) */
-.e-md { line-height: 1.75; word-wrap: break-word; font-size: 16px; }
+.e-md { line-height: 1.75; overflow-wrap: anywhere; font-size: 16px; contain: layout style; }
 .e-md > * + * { margin-top: .8em; }
 .e-md h1, .e-md h2, .e-md h3 { font-weight: 600; line-height: 1.3; margin-top: 1.4em; }
 .e-md h1 { font-size: 1.5em; } .e-md h2 { font-size: 1.25em; } .e-md h3 { font-size: 1.1em; }
@@ -175,7 +175,7 @@
 .e-code-head .e-code-lang { flex: 1; }
 .e-code-head button { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 8px; color: var(--dim); }
 .e-code-head button:hover { background: var(--bg4); color: var(--tx); }
-.e-code pre { margin: 0; padding: 14px 16px; overflow-x: auto; background: transparent; border: 0; border-radius: 0; }
+.e-code pre { margin: 0; padding: 14px 16px; overflow-x: auto; background: transparent; border: 0; border-radius: 0; white-space: pre; }
 .e-code pre code, .e-md pre code { font-family: var(--font-mono); font-size: 13.5px; line-height: 1.6; background: none; padding: 0; }
 
 /* highlight.js — github / github-dark palettes */

@@ -52,8 +52,12 @@ function Html({ source, streaming }: { source: string; streaming?: boolean | und
   const html = useMemo(() => renderMarkdown(source), [source]);
   useEffect(() => {
     if (!ref.current) return;
+    // During streaming the HTML changes rapidly. Decorating/highlighting each
+    // partial code fence mutates the same DOM React is replacing and causes
+    // visible overlap. Keep the sanitized Markdown plain until the turn ends.
+    if (streaming) return;
     decorate(ref.current, (code, lang) => setPreview({ code, lang }));
-    if (!streaming) highlightWithin(ref.current);
+    highlightWithin(ref.current);
   }, [html, streaming]);
   return (
     <>
