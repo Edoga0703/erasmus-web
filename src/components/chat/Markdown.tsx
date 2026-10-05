@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { highlightWithin, renderMarkdown } from "@/lib/markdown";
 import { splitRich } from "@/lib/charts";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -50,17 +50,14 @@ function Html({ source, streaming }: { source: string; streaming?: boolean | und
   const ref = useRef<HTMLDivElement>(null);
   const [preview, setPreview] = useState<{ code: string; lang: string } | null>(null);
   const html = useMemo(() => renderMarkdown(source), [source]);
-  useEffect(() => {
+  useLayoutEffect(() => {
     // During streaming the HTML changes rapidly. Decorating/highlighting each
     // partial code fence mutates the same DOM React is replacing and causes
     // visible overlap. Keep the sanitized Markdown plain until the turn ends.
     if (streaming) return;
-    const frame = requestAnimationFrame(() => {
-      if (!ref.current) return;
-      decorate(ref.current, (code, lang) => setPreview({ code, lang }));
-      highlightWithin(ref.current);
-    });
-    return () => cancelAnimationFrame(frame);
+    if (!ref.current) return;
+    decorate(ref.current, (code, lang) => setPreview({ code, lang }));
+    highlightWithin(ref.current);
   }, [source, streaming]);
   return (
     <>
