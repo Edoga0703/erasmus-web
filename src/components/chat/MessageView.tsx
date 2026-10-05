@@ -1,6 +1,6 @@
 import { AttachChip } from "./AttachChip";
 import { memo, useMemo, useState } from "react";
-import { Check, Copy, Pencil, RefreshCw, ThumbsDown, ThumbsUp } from "lucide-react";
+import { Check, Copy, Pencil, RefreshCw, ThumbsDown, ThumbsUp, ChevronsDown } from "lucide-react";
 import { parseSegments } from "@/lib/blocks";
 import type { UIMessage } from "@/hooks/use-chat";
 import { cn } from "@/lib/utils";
@@ -27,8 +27,8 @@ function CopyBtn({ text }: { text: string }) {
 }
 
 /** Memoized: during streaming only the message whose object changed re-renders (use-chat patches by id). */
-export const MessageView = memo(function MessageView({ m, isLast, busy, onRegenerate, onEdit }: {
-  m: UIMessage; isLast?: boolean | undefined; busy?: boolean | undefined; onRegenerate?: (() => void) | undefined; onEdit?: ((text: string) => void) | undefined;
+export const MessageView = memo(function MessageView({ m, isLast, busy, onRegenerate, onEdit, onContinue }: {
+  m: UIMessage; isLast?: boolean | undefined; busy?: boolean | undefined; onRegenerate?: (() => void) | undefined; onEdit?: ((text: string) => void) | undefined; onContinue?: (() => void) | undefined;
 }) {
   const segs = useMemo(() => (m.role === "assistant" ? parseSegments(m.content) : []), [m.content, m.role]);
   const [vote, setVote] = useState<0 | 1 | -1>(0);
@@ -51,7 +51,7 @@ export const MessageView = memo(function MessageView({ m, isLast, busy, onRegene
   const plain = m.content.replace(/```[\s\S]*?```/g, (b) => b).trim();
   return (
     <div className="group text-e-tx">
-      {((empty && m.streaming) || m.reasoning) && <ThinkingChip since={m.ts} active={!!m.streaming && empty} reasoning={m.reasoning} />}
+      {((empty && m.streaming) || m.reasoning) && <ThinkingChip since={m.ts} active={!!m.streaming && empty && !m.reasoning} reasoning={m.reasoning} thinkMs={m.thinkMs} streaming={m.streaming && empty} />}
       {segs.map((s, i) =>
         s.type === "text" ? (
           s.text.trim() ? <Markdown key={i} source={s.text} streaming={m.streaming} /> : null
@@ -60,12 +60,28 @@ export const MessageView = memo(function MessageView({ m, isLast, busy, onRegene
         ),
       )}
       {m.streaming && !empty && <span className="e-caret" />}
+      {!m.streaming && m.finish === "length" && (
+        <div className="mt-3 flex flex-wrap items-center gap-3 rounded-2xl border border-e-line px-4 py-2.5 text-[13.5px]" data-cut>
+          <span className="flex-1 text-e-dim">La respuesta se cortó porque alcanzó el límite de longitud.</span>
+          {isLast && onContinue && !busy && (
+            <button type="button" onClick={onContinue} className="inline-flex items-center gap-1.5 rounded-full bg-e-acc px-3.5 py-1.5 text-[13px] font-medium text-e-bg2">
+              <ChevronsDown className="size-4" /> Continuar
+            </button>
+          )}
+        </div>
+      )}
       {!m.streaming && !empty && (
-        <div className={cn("-ml-1.5 mt-1 flex gap-0.5", !isLast && "md:opacity-0 md:group-hover:opacity-100")}>
+        <div className={cn("-ml-1.5 mt-1 flex items-center gap-0.5", !isLast && "md:opacity-0 md:group-hover:opacity-100")}>
           <CopyBtn text={plain} />
           <ActBtn label="Buena respuesta" active={vote === 1} onClick={() => setVote(vote === 1 ? 0 : 1)}><ThumbsUp className="size-4" fill={vote === 1 ? "currentColor" : "none"} /></ActBtn>
           <ActBtn label="Mala respuesta" active={vote === -1} onClick={() => setVote(vote === -1 ? 0 : -1)}><ThumbsDown className="size-4" fill={vote === -1 ? "currentColor" : "none"} /></ActBtn>
           {isLast && onRegenerate && !busy && <ActBtn label="Regenerar" onClick={onRegenerate}><RefreshCw className="size-4" /></ActBtn>}
+          {m.usage && (
+            <span className="ml-2 text-[12px] tabular-nums text-e-dim" data-usage
+              title={`Entrada: ${m.usage.prompt.toLocaleString("es-ES")} · Salida: ${m.usage.completion.toLocaleString("es-ES")}${m.usage.reasoning ? ` (razonamiento ${m.usage.reasoning.toLocaleString("es-ES")})` : ""}`}>
+              {m.usage.total.toLocaleString("es-ES")} tokens
+            </span>
+          )}
         </div>
       )}
     </div>
