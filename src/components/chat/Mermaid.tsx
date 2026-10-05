@@ -23,7 +23,7 @@ export function Mermaid({ source }: { source: string }) {
     void (async () => {
       try {
         const { default: mermaid } = await import("mermaid");
-        mermaid.initialize({ startOnLoad: false, theme: mode as "dark" | "default", securityLevel: "strict" });
+        mermaid.initialize({ startOnLoad: false, theme: mode as "dark" | "default", securityLevel: "strict", htmlLabels: false, flowchart: { htmlLabels: false } });
         const { svg: out } = await mermaid.render(`mmd-${++seq}`, source);
         if (alive) { setSvg(sanitize(out)); setErr(false); }
       } catch {
