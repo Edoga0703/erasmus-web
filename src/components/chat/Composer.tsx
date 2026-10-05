@@ -36,10 +36,10 @@ function ReasoningPicker({ disabled }: { disabled?: boolean | undefined }) {
 import { AttachChip } from "./AttachChip";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
-/** ChatGPT-style pill composer. "+" uploads a text file into this conversation's sandbox (via onAttach → /api/fs/write). */
-export function Composer({ busy, disabled, onSend, onStop, onAttach, draft, centered }: {
+/** ChatGPT-style pill composer. "+" queues photos/files shown as tiles; the shell uploads them on send. */
+export function Composer({ busy, disabled, onSend, onStop, draft, centered }: {
   busy: boolean; disabled?: boolean; onSend: (t: string, files: File[]) => void; onStop: () => void;
-  onAttach?: unknown; draft?: { text: string; n: number } | undefined; centered?: boolean;
+  draft?: { text: string; n: number } | undefined; centered?: boolean;
 }) {
   const [text, setText] = useState("");
   const [files, setFiles] = useState<{ f: File; url?: string | undefined }[]>([]);
