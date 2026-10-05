@@ -3,7 +3,7 @@ import { api, ApiError, streamChat } from "@/lib/api/client";
 import { extractBlocks, lineDiff, type DiffRow, type ToolBlock } from "@/lib/blocks";
 import type { ChatData, StoredMessage } from "@/lib/api/types";
 
-export type ToolStatus = "running" | "ok" | "error" | "limit";
+export type ToolStatus = "running" | "ok" | "error" | "limit" | "saved";
 export interface ToolState { status: ToolStatus; detail?: string | undefined; output?: string; diff?: DiffRow[]; exitCode?: number; durationMs?: number; stdout?: string; stderr?: string }
 export interface UIMessage {
   id: string;
@@ -78,6 +78,7 @@ export function useChat(opts: { model: string }) {
   const [messages, setMessages] = useState<UIMessage[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [listVersion, setListVersion] = useState(0);
   const abortRef = useRef<AbortController | null>(null);
   const msgsRef = useRef<UIMessage[]>([]);
   const created = useRef(Date.now());
@@ -96,9 +97,9 @@ export function useChat(opts: { model: string }) {
       title: t,
       created: created.current,
       updated: Date.now(),
-      messages: msgsRef.current.map<StoredMessage>((m) => (m.role === "user" ? { role: "user", text: m.content, ts: m.ts, hidden: m.hidden } : { role: "assistant", c: m.content, ts: m.ts })),
+      messages: msgsRef.current.map<StoredMessage>((m) => (m.role === "user" ? { role: "user", text: m.content, ts: m.ts, hidden: m.hidden } : { role: "assistant", c: m.content, ts: m.ts, tools: m.tools })),
     };
-    try { await api.syncChat(data); } catch { /* best effort */ }
+    try { await api.syncChat(data); setListVersion((v) => v + 1); } catch { /* best effort */ }
   }, [chatId]);
 
   /** Last failed model call; retry() relaunches exactly that call from the current history. */
@@ -195,5 +196,47 @@ export function useChat(opts: { model: string }) {
     created.current = Date.now();
   }, []);
 
-  return { chatId, title, messages, busy, error, send, stop, reset, retry, failure, dismissError: () => setError(null) };
+  /** Restore a saved chat; tool blocks re-render as cards from the persisted tools state. */
+  const open = useCallback(async (id: string) => {
+    abortRef.current?.abort();
+    const { chat_data: cd } = await api.getChat(id);
+    const src = cd.messages?.length ? cd.messages : cd.allMessages ?? [];
+    const restored: UIMessage[] = src.map((sm) => {
+      const content = (sm.role === "user" ? sm.text : sm.c) ?? sm.content ?? "";
+      const base: UIMessage = { id: uid(), role: sm.role, content, ts: sm.ts ?? cd.created };
+      if (sm.hidden) base.hidden = true;
+      if (sm.role === "assistant") {
+        const tools: Record<number, ToolState> = {};
+        extractBlocks(content).forEach((_, i) => {
+          const t = sm.tools?.[i];
+          tools[i] = t ? ({ ...t, status: (["ok", "error", "limit"].includes(t.status) ? t.status : "saved") as ToolStatus } as ToolState) : { status: "saved" };
+        });
+        base.tools = tools;
+      }
+      return base;
+    });
+    msgsRef.current = restored;
+    setMessages(restored);
+    setChatId(cd.id || id);
+    setTitle(cd.title || "Conversación");
+    created.current = cd.created || Date.now();
+    setError(null);
+    setFailure(null);
+  }, []);
+
+  /** Rename = re-send chat_data with the new title through sync_chat (agreed contract). */
+  const rename = useCallback(async (id: string, newTitle: string) => {
+    const t = newTitle.trim().slice(0, 120);
+    if (!t) return;
+    if (id === chatId) {
+      setTitle(t);
+      await persist(t);
+      return;
+    }
+    const { chat_data: cd } = await api.getChat(id);
+    await api.syncChat({ ...cd, id, title: t, updated: Date.now() });
+    setListVersion((v) => v + 1);
+  }, [chatId, persist]);
+
+  return { open, rename, listVersion, chatId, title, messages, busy, error, send, stop, reset, retry, failure, dismissError: () => setError(null) };
 }
