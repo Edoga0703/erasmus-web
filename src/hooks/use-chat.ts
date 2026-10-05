@@ -17,7 +17,7 @@ export interface UIMessage {
   ts: number;
 }
 /** File attached to a user message; `url` is a local object URL for image thumbnails (not persisted). */
-export interface Attachment { name: string; size: number; url?: string | undefined; path?: string | undefined; text?: string | undefined }
+export interface Attachment { name: string; size: number; url?: string | undefined; path?: string | undefined; text?: string | undefined; /** data: URL sent to the model as image input (not persisted). */ image?: string | undefined }
 
 const MAX_AGENT_STEPS = 30;
 const MAX_BLOCKS_PER_TURN = 30;
@@ -39,7 +39,7 @@ interface LocalChatSnapshot {
 
 function withoutTemporaryUrls(m: UIMessage): UIMessage {
   const clean: UIMessage = { ...m, streaming: false };
-  if (m.attachments) clean.attachments = m.attachments.map(({ url: _url, ...a }) => a);
+  if (m.attachments) clean.attachments = m.attachments.map(({ url: _url, image: _image, ...a }) => a);
   return clean;
 }
 
@@ -59,11 +59,19 @@ function recoverLocalChat(): LocalChatSnapshot | null {
   }
 }
 /** Model-facing text of a user message: inline text of attachments (direct mode) or their sandbox paths. */
+type ContentPart = { type: "text"; text: string } | { type: "image_url"; image_url: { url: string } };
+/** Images go as OpenAI-style image_url parts (the model accepts text + image input). */
+function toModelContent(m: UIMessage): string | ContentPart[] {
+  const text = withAttachments(m);
+  const imgs = m.attachments?.filter((a) => a.image) ?? [];
+  if (!imgs.length) return text;
+  return [{ type: "text", text }, ...imgs.map((a) => ({ type: "image_url" as const, image_url: { url: a.image! } }))];
+}
 function withAttachments(m: UIMessage): string {
   const a = m.attachments;
   if (!a?.length) return m.content;
   const inline = a.filter((x) => x.text !== undefined).map((x) => `\n\n--- Archivo adjunto: ${x.name} ---\n${x.text}`).join("");
-  const refs = a.filter((x) => x.text === undefined).map((x) => x.path ?? x.name);
+  const refs = a.filter((x) => x.text === undefined && !x.image).map((x) => x.path ?? x.name);
   return m.content + inline + (refs.length ? `\n\n[Archivos adjuntos: ${refs.join(", ")}]` : "");
 }
 export const sandboxDir = (convId: string) => `sandbox/${convId}`;
@@ -191,7 +199,7 @@ export function useChat(opts: { model: string }) {
       for (let step = 0; step < MAX_AGENT_STEPS; step++) {
         const aid = uid();
         commit((ms) => [...ms, { id: aid, role: "assistant", content: "", streaming: true, tools: {}, ts: Date.now() }]);
-        const history = msgsRef.current.filter((m) => m.id !== aid).map((m) => ({ role: m.role, content: withAttachments(m) }));
+        const history = msgsRef.current.filter((m) => m.id !== aid).map((m) => ({ role: m.role, content: toModelContent(m) }));
         let acc = "";
         let reasoning = "";
         let frame: number | undefined;

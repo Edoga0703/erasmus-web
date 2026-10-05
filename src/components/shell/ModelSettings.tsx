@@ -51,7 +51,8 @@ export function ModelSettings() {
       const m = await loadModels();
       const ms = Math.round(performance.now() - t0);
       let account = "no disponible";
-      try { const a = await api.account(); account = Object.entries(a).filter(([k]) => k !== "ok").map(([k, v]) => `${k}: ${String(v)}`).join(" · ") || "ok"; } catch { /* optional */ }
+      try { const a = await api.account(); const n = (v: unknown) => (typeof v === "number" ? v.toLocaleString("es-ES") : "—");
+        account = [`plan ${String(a["plan"] ?? "—")}`, `tokens disponibles ${n(a["tokens_balance"])}`, `usados ${n(a["tokens_used"])}`, `imágenes ${n(a["images_used"])}${typeof a["images_quota"] === "number" && a["images_quota"] > 0 ? ` de ${n(a["images_quota"])}` : ""}`, `en curso ${n(a["inflight"])}`].join(" · "); } catch { /* optional */ }
       setTest({ kind: "ok", ms, models: (m.data ?? []).map((d) => d.id + (d.context_length ? ` (${Math.round(d.context_length / 1000)}k)` : "")), account });
     } catch (e) {
       setTest({ kind: "err", msg: e instanceof ApiError ? (e.status === 0 ? "No se pudo conectar con el servidor." : e.message) : "Error desconocido." });
