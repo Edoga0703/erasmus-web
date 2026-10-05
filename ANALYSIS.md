@@ -111,7 +111,7 @@ Son bloques de código Markdown cercados con etiqueta `tipo:acción`:
 | `file:write <ruta>` | ` ```file:write ruta\n<contenido>``` ` | `/api/fs/write`; muestra diff. Si el bloque no se cierra, guarda lo recibido y pide `file:append`. |
 | `file:append <ruta>` | ` ```file:append ruta\n<contenido>``` ` | `/api/fs/write` con `append:true`. |
 
-Presentación: el bloque se elimina del texto del asistente (`cleanToolFromAsst`). Mientras se ejecuta aparece "⚡ Ejecutando herramientas en segundo plano..." en cursiva y color `--dim`. Al terminar: "*(Herramientas ejecutadas con éxito · Ver registro de trabajo)*". El detalle va al registro de trabajo o terminal y al diff (filas add/del). En la web, cada bloque se mostrará como una **tarjeta** (icono, tipo, ruta o comando, cuerpo colapsable, estado). La web **no ejecutará** `powershell:run` (la terminal está fuera de alcance): la tarjeta lo mostrará como "no ejecutado".
+Presentación: el bloque se elimina del texto del asistente (`cleanToolFromAsst`). Mientras se ejecuta aparece "⚡ Ejecutando herramientas en segundo plano..." en cursiva y color `--dim`. Al terminar: "*(Herramientas ejecutadas con éxito · Ver registro de trabajo)*". El detalle va al registro de trabajo o terminal y al diff (filas add/del). En la web, cada bloque se mostrará como una **tarjeta** (icono, tipo, ruta o comando, cuerpo colapsable, estado). **Web (gramática v-web):** `powershell:run` no existe; lo sustituyen `code:python` y `code:bash`, que se ejecutan en el sandbox Linux del servidor (ver INTEGRATION_NOTES.md).
 
 ## 5. Reglas de seguridad
 
