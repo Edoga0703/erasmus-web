@@ -37,6 +37,12 @@ interface LocalChatSnapshot {
   messages: UIMessage[];
 }
 
+function withoutTemporaryUrls(m: UIMessage): UIMessage {
+  const clean: UIMessage = { ...m, streaming: false };
+  if (m.attachments) clean.attachments = m.attachments.map(({ url: _url, ...a }) => a);
+  return clean;
+}
+
 function recoverLocalChat(): LocalChatSnapshot | null {
   try {
     const parsed = JSON.parse(localStorage.getItem(LOCAL_CHAT_KEY) ?? "null") as Partial<LocalChatSnapshot> | null;
@@ -46,7 +52,7 @@ function recoverLocalChat(): LocalChatSnapshot | null {
       chatId: parsed.chatId,
       title: parsed.title,
       created: typeof parsed.created === "number" ? parsed.created : Date.now(),
-      messages: parsed.messages.map((m) => ({ ...m, streaming: false, attachments: m.attachments?.map(({ url: _url, ...a }) => a) })),
+      messages: parsed.messages.map(withoutTemporaryUrls),
     };
   } catch {
     return null;
@@ -144,7 +150,7 @@ export function useChat(opts: { model: string }) {
           chatId,
           title,
           created: created.current,
-          messages: messages.map((m) => ({ ...m, streaming: false, attachments: m.attachments?.map(({ url: _url, ...a }) => a) })),
+          messages: messages.map(withoutTemporaryUrls),
         };
         localStorage.setItem(LOCAL_CHAT_KEY, JSON.stringify(snapshot));
       } catch {
@@ -193,7 +199,7 @@ export function useChat(opts: { model: string }) {
           if (frame !== undefined) return;
           frame = requestAnimationFrame(() => {
             frame = undefined;
-            patch(aid, { content: acc, reasoning: reasoning || undefined });
+            patch(aid, { content: acc, ...(reasoning ? { reasoning } : {}) });
           });
         };
         try {
@@ -208,7 +214,7 @@ export function useChat(opts: { model: string }) {
         } finally {
           if (frame !== undefined) cancelAnimationFrame(frame);
         }
-        patch(aid, { content: acc, reasoning: reasoning || undefined, streaming: false });
+        patch(aid, { content: acc, ...(reasoning ? { reasoning } : {}), streaming: false });
         if (ctrl.signal.aborted) break;
 
         const blocks = extractBlocks(acc);
