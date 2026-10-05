@@ -1,12 +1,13 @@
 /**
  * Mock gateway: simulates every endpoint in ANALYSIS.md §3 (incl. SSE).
  * Only loaded when VITE_MOCK=1. Scenario can be forced with
- * localStorage["erasmus.mock.scenario"] = ok | no_token | no_vps_key | offline.
+ * localStorage["erasmus.mock.scenario"] = ok | no_token | no_vps_key | vps_error | offline.
  */
 import type { ChatData } from "@/lib/api/types";
 import { scriptedReply, seedChats, seedFiles } from "./fixtures";
+import { runBash, runPython } from "./sandbox";
 
-interface MockBody { [k: string]: unknown; path?: unknown; content?: unknown; append?: unknown; messages?: unknown; filename?: unknown; subfolder?: unknown; content_base64?: unknown; data?: unknown; id?: unknown; conv_id?: unknown; chat_data?: unknown; name?: unknown }
+interface MockBody { [k: string]: unknown; path?: unknown; content?: unknown; append?: unknown; messages?: unknown; filename?: unknown; subfolder?: unknown; content_base64?: unknown; data?: unknown; id?: unknown; conv_id?: unknown; chat_data?: unknown; name?: unknown; language?: unknown; timeout?: unknown; cwd?: unknown; code?: unknown; cmd?: unknown; command?: unknown }
 type Store = { files: Record<string, string>; chats: Record<string, ChatData> };
 let store: Store | null = null;
 const db = (): Store => (store ??= { files: seedFiles(), chats: seedChats() });
@@ -112,9 +113,21 @@ export async function mockFetch(path: string, init: RequestInit & { headers: Hea
     case "/api/chat":
     case "/v1/chat/completions": {
       if (sc === "no_vps_key") return json(401, { error: { code: "unauthorized", message: "Clave de API ausente. Configúrala en config.json" } });
+      if (sc === "vps_error") return json(502, { error: { code: "gateway_vps_error", message: "Erasmus Gateway error: la VPS no responde" } });
       const msgs = (body.messages as { role: string; content: string }[]) ?? [];
       const last = [...msgs].reverse().find((m) => m.role === "user")?.content ?? "";
-      return sse(scriptedReply(last, last.startsWith("[CONTENIDO") || last.startsWith("[RESULTADOS")), init.signal);
+      const followups = msgs.filter((m) => m.role === "user" && m.content.startsWith("[RESULTADOS")).length;
+      const firstUser = msgs.find((m) => m.role === "user" && !m.content.startsWith("[RESULTADOS"))?.content ?? last;
+      return sse(scriptedReply(firstUser, followups), init.signal);
+    }
+    case "/api/exec": {
+      const language = String(body.language ?? "bash");
+      const timeout = Math.min(Number(body.timeout ?? 60) || 60, 300);
+      const cwd = norm(String(body.cwd ?? "."));
+      const code = String(body.code ?? body.cmd ?? body.command ?? "");
+      await delay(350);
+      const r = language === "python" ? runPython(s.files, code, cwd, timeout) : runBash(s.files, code, cwd, timeout);
+      return json(200, { ...r, duration_ms: r.duration_ms + 350 });
     }
     case "/api/fs/list": {
       const items = listDir(String(body.path ?? "."));

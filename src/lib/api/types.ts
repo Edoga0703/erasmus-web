@@ -10,6 +10,8 @@ export interface StatusResponse {
 export interface FsItem { name: string; is_dir: boolean; size: number; modified: number }
 export interface FsListResponse { ok: boolean; path: string; items: FsItem[]; total: number; showing: number; truncated?: boolean; warning?: string }
 export interface FsReadResponse { ok: boolean; name: string; total_lines: number; content: string; truncated?: boolean; warning?: string }
+export interface ExecRequest { language: "python" | "bash"; code: string; cwd: string; timeout: number }
+export interface ExecResponse { ok: boolean; exit_code: number; stdout: string; stderr: string; duration_ms?: number }
 export interface FsWriteResponse { ok: boolean; name: string; mode: "write" | "append"; bytes_written: number }
 export interface ChatMeta { id: string; title: string; updated?: number; created?: number; messages_count?: number; size?: number }
 export interface ChatListResponse { ok: boolean; workspace_name: string; chats: ChatMeta[] }

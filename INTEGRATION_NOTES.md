@@ -41,17 +41,50 @@ Lo aplica el equipo de backend antes de la integración real. El origen web se t
 `GET /api/status`, `GET /api/models`, `POST /api/chat` (SSE), `POST /api/fs/list`, `POST /api/fs/read`, `POST /api/fs/write`, `GET /api/workspace/chats`, `GET /api/workspace/chat?id=`, `POST /api/workspace/sync_chat` (también para renombrar), `GET /api/workspace/files` (artifacts = `rel_path` que empieza por `artifacts/`), `POST /api/workspace/upload`, `GET /api/fs/download`.
 
 ## PROPOSED (no existen todavía; la UI muestra el botón deshabilitado con la nota "disponible pronto")
+- Extensión de `POST /api/exec` con `language`/`code` (ver Herramientas).
 - `POST /api/workspace/delete_chat` `{"id"}` → `{"ok":true,"deleted":true}`
 - `POST /api/fs/delete` `{"path"}` → `{"ok":true,"name":...}`
 
 Los mocks **no** los implementan, a propósito.
 
-## Bloques de herramienta
-`file:list`, `file:read`, `file:write` y `file:append` se ejecutan automáticamente contra `/api/fs/*` y su resultado se devuelve al modelo (límite: 30 pasos). `powershell:run` aparece como una tarjeta "No ejecutado".
-**Trabajo futuro (no bloqueante):** ejecutar `powershell:run` requerirá PowerShell 7 en el servidor, o un selector de shell por plataforma en el backend.
+## Herramientas (gramática v-web)
+Erasmus Web es un agente en la nube que trabaja sobre un sandbox Linux (Python 3 + bash) en el servidor. No usa PowerShell ni el PC del usuario.
+
+| Bloque | Endpoint |
+|---|---|
+| `code:python` | `POST /api/exec` `{language:"python", code, cwd, timeout}` |
+| `code:bash` | `POST /api/exec` `{language:"bash", code, cwd, timeout}` |
+| `file:list RUTA` | `POST /api/fs/list {path}` |
+| `file:read RUTA` | `POST /api/fs/read {path}` |
+| `file:write RUTA` | `POST /api/fs/write {path, content}` |
+| `file:append RUTA` | `POST /api/fs/write {path, content, append:true}` |
+
+**Reglas:** se ejecutan en orden, uno a uno, con un máximo de 30 bloques por turno. A partir del 31 la tarjeta muestra "Límite alcanzado" y el agente se detiene. El timeout es de 60 s por defecto (techo 300 s); stdout y stderr se truncan a 64 KB en el cliente y se registra la duración. Se inyecta al modelo con este formato: `[RESULTADO code:python (exit 0, 1.4s)]` + salida (recortada a 8 000 caracteres).
+
+### Extensión de `POST /api/exec` (contrato exacto; lo prepara el backend)
+```json
+// petición
+{"language":"python"|"bash","code":"<script>","cwd":".","timeout":60}
+// respuesta
+{"ok":true,"exit_code":0,"stdout":"...","stderr":"...","duration_ms":1400}
+```
+`exit_code` 124 = tiempo agotado. Si falta `duration_ms`, el cliente mide el tiempo de ida y vuelta.
+
+### Sandbox por conversación
+Carpeta propuesta: **`sandbox/<conv_id>/`** dentro del workspace. El cliente la envía como `cwd` en cada `exec`. Todo lo que se crea ahí aparece en el panel de archivos y se descarga con `/api/fs/download?path=...&t=<token>`. Borrar la conversación (`delete_chat`, PROPOSED) debe borrar también su sandbox y limpiar el índice.
+
+### Razonamiento (PROPOSED, passthrough)
+Si el SSE incluye `choices[].delta.reasoning_content`, el cliente lo mostrará plegado bajo el indicador "✦ trabajando…" (H2).
+
+### No es del cliente
+El exec extendido, el origen web en la allowlist y el prompt del modelo con la gramática v-web los aporta el gateway.
 
 ## Mocks (`src/mocks/`)
-- `fixtures.ts`: workspace en memoria (README, `src/`, `notas/`, `artifacts/`), dos chats de ejemplo y respuestas guionizadas. El primer turno emite `file:list`, `file:read`, `file:write` y `powershell:run`; el seguimiento devuelve un resumen.
+- `fixtures.ts`: workspace en memoria (README, `src/`, `notas/`, `artifacts/`), dos chats de ejemplo y un guion de análisis de datos. El paso 0 emite `code:bash` y `code:python` (crea `ventas.csv`) y lee el CSV con `code:bash`; el paso 1 devuelve un `chart` de barras, una tabla y un resumen.
+- `sandbox.ts`: sandbox simulado con estado persistente.
+  - bash: `ls`, `cat`, `echo` (con `>`/`>>`), `pwd`, `mkdir`, `sleep`, `wc -l`, `head`; cualquier otra orden devuelve 127.
+  - Python básico: `print` de literales, aritmética y lecturas de archivo; `open().write` / `Path.write_text` con triple comilla; `time.sleep`; `raise` produce un Traceback con exit 1.
+  - `sleep`/`time.sleep` por encima del timeout devuelve exit 124.
 - `index.ts`: simula todos los endpoints del catálogo, con SSE emitido por intervalo de 28 ms.
 - Errores simulados:
   - Sin `X-Erasmus-Token` → `403 {"ok":false,"error":"origin_denied"}`.
@@ -59,5 +92,6 @@ Los mocks **no** los implementan, a propósito.
     - `ok`
     - `no_token` → 403
     - `no_vps_key` → 401 en `/api/chat` y `/api/models`
+    - `vps_error` → 502 `gateway_vps_error` en `/api/chat`
     - `offline` → fallo de red
 - En modo mock, si no llega `?t=`, se fija un token de demostración (`mock-token`) para que la preview sea navegable. En modo real esto no ocurre.

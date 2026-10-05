@@ -39,26 +39,26 @@ export function seedChats(): Record<string, ChatData> {
   };
 }
 
-/** Scripted assistant replies. First turn uses tool blocks; follow-ups summarise. */
-export function scriptedReply(lastUser: string, isFollowup: boolean): string {
-  if (isFollowup) {
+/** Scripted assistant replies keyed by the user's first prompt and the number of tool round-trips. */
+export function scriptedReply(prompt: string, step: number): string {
+  if (/^\s*(hola|buenas)/i.test(prompt)) {
+    return "¡Hola! Soy **Erasmus**. Trabajo en un sandbox Linux: puedo ejecutar Python y bash, leer y escribir archivos y entregarte resultados. Prueba con *\"analiza estos datos, hazme un gráfico de barras y guárdame el CSV\"*.";
+  }
+  if (step === 0) {
     return [
-      "He revisado el workspace y he guardado las notas.\n\n",
-      "**Resumen:**\n\n- `src/` contiene el código principal.\n- He creado `notas/resumen.md` con los puntos clave.\n\n",
-      "El comando de PowerShell no se puede ejecutar en la versión web.",
+      "Voy a preparar los datos en el sandbox.\n\n",
+      "```code:bash\npwd\nls\n```\n\n",
+      "```code:python\nimport csv\nwith open(\"ventas.csv\", \"w\") as f:\n    f.write(\"\"\"mes,norte,sur\nene,120,90\nfeb,135,110\nmar,150,128\nabr,142,140\n\"\"\")\nprint(\"CSV guardado: 4 filas\")\nprint(120+135+150+142)\n```\n\n",
+      "```code:bash\ncat ventas.csv\nwc -l ventas.csv\n```\n",
     ].join("");
   }
-  if (/hola|buenas/i.test(lastUser)) {
-    return "¡Hola! Soy **Erasmus**. Puedo leer y escribir archivos de tu workspace. Pídeme, por ejemplo, *\"revisa el proyecto y crea un resumen\"*.";
+  if (step === 1) {
+    return [
+      "Datos listos. Las ventas del **norte** suman **547** y crecen hasta marzo; el **sur** sube de forma constante.\n\n",
+      "```chart\ntype: bar\nx: ene, feb, mar, abr\nNorte: 120, 135, 150, 142\nSur: 90, 110, 128, 140\n```\n\n",
+      "| Mes | Norte | Sur |\n|---|---|---|\n| ene | 120 | 90 |\n| feb | 135 | 110 |\n| mar | 150 | 128 |\n| abr | 142 | 140 |\n\n",
+      "El archivo `ventas.csv` está en tu sandbox y puedes descargarlo desde el panel de archivos.",
+    ].join("");
   }
-  return [
-    "Voy a revisar el workspace primero.\n\n",
-    "```file:list\n.\n```\n\n",
-    "Leo el archivo principal:\n\n",
-    "```file:read\nsrc/main.py\n```\n\n",
-    "Guardo un resumen:\n\n",
-    "```file:write notas/resumen.md\n# Resumen\n\n- Proyecto Python con utilidades TS\n- Pendiente: presupuesto Q4\n```\n\n",
-    "Y compruebo la versión de Python:\n\n",
-    "```powershell:run\npython --version\n```\n",
-  ].join("");
+  return "Listo.";
 }
