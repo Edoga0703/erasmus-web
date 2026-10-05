@@ -33,7 +33,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
       const s = await api.status();
       setProbe({ kind: "ok", ms: Math.round(performance.now() - t0), s });
     } catch (e) {
-      setProbe({ kind: "error", msg: e instanceof ApiError && e.status !== 0 ? e.message : "No se pudo conectar con el gateway." });
+      setProbe({ kind: "error", msg: e instanceof ApiError && e.status !== 0 ? e.message : "No se pudo conectar con el puente." });
     }
   }, []);
 
@@ -44,7 +44,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
       setCounts({ chats: c.chats.length, files: f.files.length, workspace: f.workspace_name || c.workspace_name });
     } catch (e) {
       setCounts(null);
-      setCountErr(e instanceof ApiError && e.status !== 0 ? e.message : "No se pudo conectar con el gateway.");
+      setCountErr(e instanceof ApiError && e.status !== 0 ? e.message : "No se pudo conectar con el puente.");
     }
   }, []);
 

@@ -114,7 +114,7 @@ export function AppShell() {
           {visible.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center px-6 text-center">
               <h2 className="text-[22px] font-semibold tracking-tight">¿En qué trabajamos hoy?</h2>
-              <p className="mt-2 max-w-sm text-[13px] text-e-dim">Erasmus puede leer, listar y escribir archivos de tu workspace mientras conversa contigo.</p>
+              <p className="mt-2 max-w-sm text-[13px] text-e-dim">Erasmus ejecuta Python y bash en su sandbox, lee y escribe archivos y te entrega resultados mientras conversáis.</p>
             </div>
           ) : (
             <div className="mx-auto flex max-w-3xl flex-col gap-6 px-4 py-6">

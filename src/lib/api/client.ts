@@ -62,7 +62,7 @@ export async function apiJson<T>(path: string, body?: unknown, method?: "GET" | 
     if (body !== undefined) init.body = JSON.stringify(body);
     res = await apiFetch(path, init);
   } catch {
-    throw new ApiError(0, "network", "No se pudo conectar con el gateway.");
+    throw new ApiError(0, "network", "No se pudo conectar con el puente.");
   }
   if (!res.ok) throw await parseError(res);
   return (await res.json()) as T;
@@ -85,7 +85,7 @@ export const api = {
     try {
       res = await apiFetch(`/api/fs/download?path=${encodeURIComponent(path)}&t=${encodeURIComponent(getToken() ?? "")}`, { method: "GET" });
     } catch {
-      throw new ApiError(0, "network", "No se pudo conectar con el gateway.");
+      throw new ApiError(0, "network", "No se pudo conectar con el puente.");
     }
     if (!res.ok) throw await parseError(res);
     return res.blob();
@@ -117,7 +117,7 @@ export async function streamChat(opts: StreamOptions): Promise<void> {
     });
   } catch (e) {
     if ((e as Error)?.name === "AbortError") return;
-    throw new ApiError(0, "network", "No se pudo conectar con el gateway.");
+    throw new ApiError(0, "network", "No se pudo conectar con el puente.");
   }
   if (!res.ok) throw await parseError(res);
   const ctype = res.headers.get("Content-Type") ?? "";

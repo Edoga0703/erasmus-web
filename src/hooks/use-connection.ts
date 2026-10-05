@@ -19,7 +19,7 @@ export function useConnection() {
     } catch (e) {
       const err = e instanceof ApiError ? e : new ApiError(0, "network", "Sin conexión");
       setState(err.status === 403 || err.status === 401 ? "denied" : "offline");
-      setMessage(err.status === 0 ? "No se pudo conectar con el gateway." : err.message);
+      setMessage(err.status === 0 ? "No se pudo conectar con el puente." : err.message);
     }
   }, []);
 
