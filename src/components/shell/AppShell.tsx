@@ -6,6 +6,7 @@ import { MOCK } from "@/lib/api/config";
 import { MessageView } from "@/components/chat/MessageView";
 import { Composer } from "@/components/chat/Composer";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 export function AppShell() {
   const conn = useConnection();
@@ -13,6 +14,17 @@ export function AppShell() {
   const chat = useChat({ model });
   const [sideOpen, setSideOpen] = useState(false);
   const scroller = useRef<HTMLElement>(null);
+
+  // Network / timeout / 5xx → toast with "Reintentar" that replays the same failed call.
+  useEffect(() => {
+    const f = chat.failure;
+    if (!f) return;
+    toast.error(f.message, {
+      id: "chat-failure",
+      duration: f.retryable ? Infinity : 6000,
+      action: f.retryable ? { label: "Reintentar", onClick: () => chat.retry() } : undefined,
+    });
+  }, [chat.failure]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const el = scroller.current;

@@ -3,6 +3,7 @@ import { parseSegments } from "@/lib/blocks";
 import type { UIMessage } from "@/hooks/use-chat";
 import { Markdown } from "./Markdown";
 import { ToolCard } from "./ToolCard";
+import { ThinkingChip } from "./Thinking";
 
 export function MessageView({ m }: { m: UIMessage }) {
   const segs = useMemo(() => (m.role === "assistant" ? parseSegments(m.content) : []), [m.content, m.role]);
@@ -19,7 +20,7 @@ export function MessageView({ m }: { m: UIMessage }) {
   const empty = !m.content.trim();
   return (
     <div className="text-e-tx">
-      {empty && m.streaming && <span className="e-caret text-e-dim" />}
+      {((empty && m.streaming) || m.reasoning) && <ThinkingChip since={m.ts} active={!!m.streaming && empty} reasoning={m.reasoning} />}
       {segs.map((s, i) =>
         s.type === "text" ? (
           s.text.trim() ? <Markdown key={i} source={s.text} streaming={m.streaming} /> : null

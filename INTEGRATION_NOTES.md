@@ -14,7 +14,7 @@ Se usa el modo SPA de TanStack Start (`spa.enabled`): el build genera un shell `
 ```nginx
 location / { try_files $uri $uri/ /index.html; }
 location /erasmus-api/ {
-  proxy_pass http://127.0.0.1:5005/;
+  proxy_pass http://127.0.0.1:4001/;   # gateway en la VPS (5005 es solo el daemon desktop)
   proxy_http_version 1.1;
   proxy_set_header Connection "";
   proxy_buffering off;          # SSE token a token
@@ -35,6 +35,8 @@ Lo aplica el equipo de backend antes de la integración real. El origen web se t
      re.IGNORECASE
  )
 ```
+**Al desplegar:** el `config.json` del servidor debe incluir `"web_origin": "<dominio final>"` (p. ej. `https://app.erasmus.es`); sin él queda el valor fail-closed de ejemplo.
+
 (`_origin_ok` sigue exigiendo el token con `compare_digest`; `do_OPTIONS` reutiliza el mismo regex.)
 
 ## Endpoints usados
@@ -95,3 +97,10 @@ El exec extendido, el origen web en la allowlist y el prompt del modelo con la g
     - `vps_error` → 502 `gateway_vps_error` en `/api/chat`
     - `offline` → fallo de red
 - En modo mock, si no llega `?t=`, se fija un token de demostración (`mock-token`) para que la preview sea navegable. En modo real esto no ocurre.
+
+## H2 — Renderizado rico y errores
+- **chart**: renderer SVG propio (`src/components/chat/Chart.tsx`, sin librerías). Formato: `type: bar|line|share`, `x: a, b, c`, y una línea `Nombre: 1, 2, 3` por serie. Colores = variables de tema.
+- **mermaid**: paquete npm bundleado (sin CDN), `securityLevel: "strict"`, SVG pasado por DOMPurify, re-render al cambiar `data-theme`.
+- **Pensamiento**: chip "✦ trabajando…" con cronómetro mientras no llegan tokens; `delta.reasoning_content` (PROPOSED, passthrough) se muestra plegado bajo el chip.
+- **Reintento**: errores de red / timeout / 5xx en `/api/chat` → toast con "Reintentar", que repite la misma llamada con el mismo historial (no recarga la conversación). Mock: `vps_error_once` / `offline_once` fallan una vez y vuelven a `ok`.
+- Token: `X-Erasmus-Token` se añade solo en `apiFetch` (`src/lib/api/client.ts`); no hay otros `fetch` en el cliente.

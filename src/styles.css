@@ -169,3 +169,7 @@
 
 @keyframes e-blink { 50% { opacity: 0; } }
 .e-caret::after { content: "▍"; animation: e-blink 1s steps(1) infinite; color: var(--dim); margin-left: 1px; }
+
+/* ✦ thinking chip */
+@keyframes e-think { 0%,100% { opacity: .35; transform: scale(.9) rotate(0deg); } 50% { opacity: 1; transform: scale(1.15) rotate(45deg); } }
+.e-think-star { display: inline-block; color: var(--acc2); animation: e-think 1.4s ease-in-out infinite; }
