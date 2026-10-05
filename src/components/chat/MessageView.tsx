@@ -27,7 +27,7 @@ function CopyBtn({ text }: { text: string }) {
 
 /** Memoized: during streaming only the message whose object changed re-renders (use-chat patches by id). */
 export const MessageView = memo(function MessageView({ m, isLast, busy, onRegenerate, onEdit }: {
-  m: UIMessage; isLast?: boolean; busy?: boolean; onRegenerate?: () => void; onEdit?: (text: string) => void;
+  m: UIMessage; isLast?: boolean | undefined; busy?: boolean | undefined; onRegenerate?: (() => void) | undefined; onEdit?: ((text: string) => void) | undefined;
 }) {
   const segs = useMemo(() => (m.role === "assistant" ? parseSegments(m.content) : []), [m.content, m.role]);
   const [vote, setVote] = useState<0 | 1 | -1>(0);
