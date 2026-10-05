@@ -1,3 +1,4 @@
+import { useTheme } from "@/lib/theme";
 import { useMemo } from "react";
 import { fmt, niceMax, parseChart, SERIES_COLORS, type ChartSpec } from "@/lib/charts";
 
@@ -121,9 +122,11 @@ function Share({ spec }: { spec: ChartSpec }) {
 
 export function Chart({ source }: { source: string }) {
   const spec = useMemo(() => parseChart(source), [source]);
+  const theme = useTheme();
   if (!spec) return <pre className="rounded-md border border-e-line bg-e-bg p-3 text-[12px] text-e-dim">{source}</pre>;
+  // key={theme}: full SVG re-mount on theme change (not just CSS var repaint).
   return (
-    <figure className="my-3 rounded-lg border border-e-line bg-e-bg2 p-3">
+    <figure key={theme} data-chart-theme={theme} className="my-3 rounded-lg border border-e-line bg-e-bg2 p-3">
       {spec.type === "bar" ? <Bars spec={spec} /> : spec.type === "line" ? <Lines spec={spec} /> : <Share spec={spec} />}
       <Legend spec={spec} />
     </figure>

@@ -7,6 +7,7 @@
     "eslint.config.js"
   ],
   "compilerOptions": {
+    "resolveJsonModule": true,
     "target": "ES2022",
     "jsx": "react-jsx",
     "module": "ESNext",

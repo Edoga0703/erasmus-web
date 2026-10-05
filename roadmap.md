@@ -3,5 +3,5 @@
 - [x] H2 (hecho). Renderizado: mermaid, chart SVG, diffs, indicador de pensamiento, toasts con reintento
 - [x] H3. Archivos y artifacts
 - [x] H4. Historial
-- [ ] H5. Ajustes
+- [x] H5 ajustes
 - [ ] H6. Pulido

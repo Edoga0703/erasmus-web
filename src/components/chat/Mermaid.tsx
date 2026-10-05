@@ -49,5 +49,5 @@ export function Mermaid({ source }: { source: string }) {
   }, [source, mode]);
 
   if (err) return <pre data-mermaid-fallback="" className="rounded-md border border-e-line bg-e-bg p-3 text-[12px] text-e-dim">{source}</pre>;
-  return <div className="my-3 flex justify-center overflow-x-auto rounded-lg border border-e-line bg-e-bg2 p-3 [&_svg]:max-w-full" dangerouslySetInnerHTML={{ __html: svg }} />;
+  return <div data-mermaid-theme={mode ?? ""} className="my-3 flex justify-center overflow-x-auto rounded-lg border border-e-line bg-e-bg2 p-3 [&_svg]:max-w-full" dangerouslySetInnerHTML={{ __html: svg }} />;
 }

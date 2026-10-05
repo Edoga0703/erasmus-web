@@ -54,18 +54,17 @@ export function FilePreview({ path, artifact, onBack }: { path: string; artifact
         {view.kind === "text" && <pre className="hljs m-0 min-h-full whitespace-pre-wrap break-words p-3 font-mono text-[12px]" dangerouslySetInnerHTML={{ __html: view.html }} />}
         {view.kind === "html" && <iframe title={path} sandbox="allow-scripts allow-popups" srcDoc={view.src} className="e-frame h-full min-h-[60vh] w-full border-0" />}
         {view.kind === "blob" && view.type === "img" && <div className="flex justify-center p-4"><img src={view.url} alt={path} className="max-h-[70vh] max-w-full object-contain" /></div>}
-        {view.kind === "blob" && view.type === "pdf" && (typeof navigator !== "undefined" && navigator.pdfViewerEnabled ? (
-          <iframe title={path} src={view.url} className="h-full min-h-[70vh] w-full border-0" />
-        ) : (
-          // Mobile browsers (and headless) have no inline PDF viewer: offer open/download instead of a blank frame.
-          <div className="flex flex-col items-center gap-3 p-8 text-center text-[13px] text-e-dim" data-pdf-fallback="">
-            <p>Este navegador no muestra PDF dentro de la página.</p>
-            <div className="flex gap-2">
-              <a href={view.url} target="_blank" rel="noopener noreferrer" className="rounded-md border border-e-line px-3 py-1.5 text-e-tx hover:bg-e-bg3">Abrir PDF</a>
-              <button className="rounded-md border border-e-line px-3 py-1.5 text-e-tx hover:bg-e-bg3" onClick={() => void downloadFile(path)}>Descargar</button>
+        {view.kind === "blob" && view.type === "pdf" && (
+          // Dual pattern (no reliable "can show PDF" API): inline attempt ALWAYS + action bar ALWAYS visible.
+          <div className="flex h-full min-h-[70vh] flex-col">
+            <div className="flex shrink-0 items-center gap-2 border-b border-e-line px-3 py-2 text-[12.5px]" data-pdf-actions="">
+              <span className="flex-1 truncate text-e-dim">¿No se ve? Ábrelo o descárgalo.</span>
+              <a href={view.url} target="_blank" rel="noopener noreferrer" className="rounded-md border border-e-line px-2.5 py-1 text-e-tx hover:bg-e-bg3">Abrir PDF</a>
+              <button className="rounded-md border border-e-line px-2.5 py-1 text-e-tx hover:bg-e-bg3" onClick={() => void downloadFile(path)}>Descargar</button>
             </div>
+            <iframe title={path} src={view.url} className="min-h-0 w-full flex-1 border-0" />
           </div>
-        ))}
+        )}
       </div>
     </div>
   );

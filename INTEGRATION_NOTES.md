@@ -121,3 +121,12 @@ Reintento ante fallo permanente (`vps_error`, `offline`): vuelve a fallar hasta 
 - Al abrir, la carpeta `sandbox/<conv_id>/` de ese chat es la que aparece expandida en el árbol.
 - Renombrar: `POST /api/workspace/sync_chat` con el `chat_data` y el nuevo `title`.
 - Borrar: botón deshabilitado ("disponible pronto") hasta que exista `POST /api/workspace/delete_chat` (PROPOSED).
+
+## H5 — Ajustes
+- Tema: `localStorage["erasmus.theme"]` (dark|light), aplicado antes del primer pintado con un script inline en `<head>`; charts (re-montaje con `key=theme`) y mermaid (re-render con su tema) se redibujan al cambiar.
+- "Verificar puente": `GET /api/status`, latencia medida en cliente con `performance.now()`; error → banner degradado + "Reintentar".
+- Datos: contadores de `/api/workspace/chats` y `/api/workspace/files`.
+- Exportar ZIP: `POST /api/workspace/zip {}` → `{ok, zip_name, size}`, después `GET /api/fs/download?path=<zip_name>&t=`. **Supuesto a confirmar con backend:** que `zip_name` se pueda descargar por esa ruta. En demo se genera un ZIP real (sin compresión).
+- Seguridad: solo se indica si el token está presente o ausente; el valor nunca se muestra.
+- PDF (C1): patrón doble fijo, sin heurística: siempre se intenta mostrar el PDF en la página y la barra "Abrir PDF / Descargar" está siempre visible.
+- Pendiente de auditoría: la exportación .md no incluye el estado de las herramientas (aceptado en v0.1).
