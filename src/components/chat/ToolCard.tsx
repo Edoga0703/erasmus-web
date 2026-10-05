@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ChevronRight, FileCode2, FilePen, FilePlus, FileSearch, FolderTree, Loader2, SquareTerminal } from "lucide-react";
+import { Check, Copy, ChevronRight, FileCode2, FilePen, FilePlus, FileSearch, FolderTree, Loader2, SquareTerminal } from "lucide-react";
 import type { ToolBlock } from "@/lib/blocks";
 import type { ToolState } from "@/hooks/use-chat";
 import { highlight } from "@/lib/markdown";
@@ -46,6 +46,9 @@ function Output({ text, tone }: { text: string; tone?: "err" }) {
 export function ToolCard({ block, state, streaming }: { block: ToolBlock; state?: ToolState | undefined; streaming?: boolean | undefined }) {
   const isCode = block.kind.startsWith("code:");
   const [open, setOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const adds = state?.diff?.filter((r) => r.kind === "add").length ?? 0;
+  const dels = state?.diff?.filter((r) => r.kind === "del").length ?? 0;
   const { label, Icon } = META[block.kind];
   const key = state?.status ?? (streaming && !block.closed ? "pending" : "queued");
   const st = STATUS[key] ?? { text: "", cls: "" };
@@ -53,11 +56,11 @@ export function ToolCard({ block, state, streaming }: { block: ToolBlock; state?
   const hasBody = isCode || !!(state?.diff?.length || state?.output || block.body);
 
   return (
-    <div className="my-2 overflow-hidden rounded-lg border border-e-line bg-e-bg">
+    <div className="my-3 overflow-hidden rounded-2xl border border-e-line bg-e-bg2">
       <button
         type="button"
         onClick={() => hasBody && setOpen((o) => !o)}
-        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12.5px] hover:bg-e-bg3"
+        className="flex w-full items-center gap-2 px-3.5 py-2.5 text-left text-[13.5px] hover:bg-e-bg3"
         aria-expanded={open}
       >
         <ChevronRight className={cn("size-3.5 shrink-0 text-e-dim transition-transform", open && "rotate-90", !hasBody && "opacity-0")} />
@@ -67,6 +70,7 @@ export function ToolCard({ block, state, streaming }: { block: ToolBlock; state?
         {state?.exitCode !== undefined && (
           <span className={cn("shrink-0 rounded px-1.5 font-mono text-[10.5px]", state.exitCode === 0 ? "e-diff-add" : "e-diff-del")}>exit {state.exitCode}</span>
         )}
+        {state?.diff && (adds + dels > 0) && <span className="shrink-0 font-mono text-[11.5px]"><span className="text-e-ok">+{adds}</span> <span className="text-e-err">−{dels}</span></span>}
         {state?.durationMs !== undefined && <span className="shrink-0 font-mono text-[11px] text-e-dim">{(state.durationMs / 1000).toFixed(1)} s</span>}
         <span className={cn("flex shrink-0 items-center gap-1 text-[11.5px]", st.cls)}>
           {key === "running" && <Loader2 className="size-3 animate-spin" />}
@@ -75,9 +79,15 @@ export function ToolCard({ block, state, streaming }: { block: ToolBlock; state?
       </button>
 
       {open && isCode && (
-        <pre className="max-h-72 overflow-auto border-t border-e-line px-3 py-2 font-mono text-[12px] leading-5">
-          <code dangerouslySetInnerHTML={{ __html: codeHtml }} />
-        </pre>
+        <div className="e-code m-2 mt-0">
+          <div className="e-code-head">
+            <span className="e-code-lang">{block.kind === "code:python" ? "python" : "bash"}</span>
+            <button type="button" aria-label="Copiar código" onClick={() => { void navigator.clipboard?.writeText(block.body); setCopied(true); setTimeout(() => setCopied(false), 1500); }}>
+              {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}<span>{copied ? "Copiado" : "Copiar"}</span>
+            </button>
+          </div>
+          <pre className="max-h-72 overflow-auto"><code dangerouslySetInnerHTML={{ __html: codeHtml }} /></pre>
+        </div>
       )}
       {open && !isCode && hasBody && (
         <div className="max-h-80 overflow-auto border-t border-e-line font-mono text-[12px] leading-5">

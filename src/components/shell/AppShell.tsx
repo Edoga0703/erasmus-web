@@ -1,24 +1,71 @@
-import { useEffect, useRef, useState } from "react";
-import { FolderOpen, PanelLeft, Plus, RefreshCw, Settings, WifiOff, X } from "lucide-react";
-import { useChat } from "@/hooks/use-chat";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ArrowDown, ChevronDown, FolderOpen, Info, Moon, PanelLeft, RefreshCw, Search, Settings, SquarePen, Sun, WifiOff, X } from "lucide-react";
+import { sandboxDir, useChat } from "@/hooks/use-chat";
 import { useConnection } from "@/hooks/use-connection";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { MOCK } from "@/lib/api/config";
+import { api, ApiError } from "@/lib/api/client";
+import { setTheme, useTheme } from "@/lib/theme";
 import { MessageView } from "@/components/chat/MessageView";
 import { Composer } from "@/components/chat/Composer";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { ChatList } from "./ChatList";
+import { SearchDialog } from "./SearchDialog";
 import { FilesPanel } from "@/components/files/FilesPanel";
 import { SettingsDialog } from "./SettingsDialog";
+
+const LS = { side: "erasmus.side.w", collapsed: "erasmus.side.collapsed", panel: "erasmus.panel.w" };
+const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
+function readNum(k: string, d: number) { try { const v = Number(localStorage.getItem(k)); return v > 0 ? v : d; } catch { return d; } }
+
+/** Drag handle for resizable panels; `dir` = +1 grows to the right, -1 grows to the left. */
+function Resizer({ onDrag, dir, label }: { onDrag: (dx: number) => void; dir: 1 | -1; label: string }) {
+  const start = (e: React.PointerEvent) => {
+    e.preventDefault();
+    let x = e.clientX;
+    const move = (ev: PointerEvent) => { onDrag((ev.clientX - x) * dir); x = ev.clientX; };
+    const up = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); document.body.style.cursor = ""; document.body.style.userSelect = ""; };
+    document.body.style.cursor = "col-resize"; document.body.style.userSelect = "none";
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
+  return <div role="separator" aria-orientation="vertical" aria-label={label} onPointerDown={start}
+    className={cn("absolute inset-y-0 z-10 w-1.5 cursor-col-resize hover:bg-e-line", dir === 1 ? "-right-0.5" : "-left-0.5")} />;
+}
 
 export function AppShell() {
   const conn = useConnection();
   const model = conn.status?.brand_model ?? "erasmus-v1";
   const chat = useChat({ model });
+  const mobile = useIsMobile();
+  const theme = useTheme();
   const [sideOpen, setSideOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
+  const [sideW, setSideW] = useState(260);
+  const [panelW, setPanelW] = useState(460);
   const [filesOpen, setFilesOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [atBottom, setAtBottom] = useState(true);
+  const [draft, setDraft] = useState<{ text: string; n: number }>();
   const scroller = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    setSideW(readNum(LS.side, 260)); setPanelW(readNum(LS.panel, 460));
+    try { setCollapsed(localStorage.getItem(LS.collapsed) === "1"); } catch { /* */ }
+  }, []);
+  const persist = (k: string, v: string) => { try { localStorage.setItem(k, v); } catch { /* */ } };
+  useEffect(() => persist(LS.side, String(sideW)), [sideW]);
+  useEffect(() => persist(LS.panel, String(panelW)), [panelW]);
+  useEffect(() => persist(LS.collapsed, collapsed ? "1" : "0"), [collapsed]);
+
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); setSearchOpen(true); } };
+    window.addEventListener("keydown", k);
+    return () => window.removeEventListener("keydown", k);
+  }, []);
 
   // Network / timeout / 5xx → toast with "Reintentar" that replays the same failed call.
   useEffect(() => {
@@ -35,104 +82,174 @@ export function AppShell() {
     const el = scroller.current;
     if (el && el.scrollHeight - el.scrollTop - el.clientHeight < 160) el.scrollTop = el.scrollHeight;
   }, [chat.messages]);
+  const onScroll = () => { const el = scroller.current; if (el) setAtBottom(el.scrollHeight - el.scrollTop - el.clientHeight < 80); };
+  const toBottom = () => scroller.current?.scrollTo({ top: scroller.current.scrollHeight, behavior: "smooth" });
 
   const visible = chat.messages.filter((m) => !m.hidden);
   const down = conn.state === "offline" || conn.state === "denied";
+  const lastAssistant = [...visible].reverse().find((m) => m.role === "assistant")?.id;
+  const lastUser = [...visible].reverse().find((m) => m.role === "user")?.content;
+
+  const regenerate = useCallback(() => { if (lastUser) void chat.send(lastUser); }, [lastUser, chat]);
+  const edit = useCallback((text: string) => setDraft({ text, n: Date.now() }), []);
+  const newChat = () => { chat.reset(); setSideOpen(false); };
+  const openChat = (id: string) => { setSideOpen(false); chat.open(id).catch(() => toast.error("No se pudo abrir la conversación.")); };
+
+  const attach = async (f: File) => {
+    if (f.size > 2_000_000) { toast.error("El archivo supera 2 MB."); return; }
+    try {
+      await api.fsWrite(`${sandboxDir(chat.chatId)}/${f.name}`, await f.text());
+      window.dispatchEvent(new Event("erasmus:files-changed"));
+      toast.success(`${f.name} subido al sandbox de esta conversación.`);
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "No se pudo subir el archivo.");
+    }
+  };
+
+  const rail = !mobile && collapsed;
+  const sidebar = (
+    <>
+      <div className="flex h-14 shrink-0 items-center gap-1 px-2">
+        {!rail && (
+          <button onClick={newChat} className="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-e-bg4" aria-label="Erasmus, nueva conversación">
+            <span className="grid size-7 shrink-0 place-items-center rounded-full bg-e-acc text-[13px] font-bold text-e-bg2">E</span>
+            <span className="truncate text-[15px] font-semibold">Erasmus</span>
+          </button>
+        )}
+        <button className="e-icon-btn shrink-0" aria-label={mobile ? "Cerrar barra lateral" : rail ? "Abrir barra lateral" : "Cerrar barra lateral"}
+          onClick={() => (mobile ? setSideOpen(false) : setCollapsed((c) => !c))}>
+          {mobile ? <X className="size-5" /> : <PanelLeft className="size-5" />}
+        </button>
+      </div>
+      <div className={cn("flex flex-col gap-0.5 px-2", rail && "items-center")}>
+        {[
+          { label: "Nueva conversación", Icon: SquarePen, on: newChat, kbd: "" },
+          { label: "Buscar conversaciones", Icon: Search, on: () => { setSearchOpen(true); setSideOpen(false); }, kbd: "Ctrl K" },
+          { label: "Archivos", Icon: FolderOpen, on: () => { setFilesOpen(true); setSideOpen(false); }, kbd: "" },
+        ].map(({ label, Icon, on, kbd }) =>
+          rail ? (
+            <button key={label} className="e-icon-btn text-e-tx" aria-label={label} title={label} onClick={on}><Icon className="size-5" /></button>
+          ) : (
+            <button key={label} className="e-side-item group" onClick={on}>
+              <Icon className="size-[18px] shrink-0" /> <span className="flex-1">{label}</span>
+              {kbd && <span className="hidden text-[12px] text-e-dim group-hover:inline">{kbd}</span>}
+            </button>
+          ),
+        )}
+      </div>
+      <nav className={cn("mt-4 flex-1 overflow-y-auto px-2", rail && "invisible")}>
+        {!rail && <ChatList activeId={chat.chatId} activeTitle={chat.title} version={chat.listVersion} onOpen={openChat} onRename={chat.rename} />}
+      </nav>
+      <div className={cn("shrink-0 p-2", rail && "flex justify-center")}>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button className={rail ? "e-icon-btn" : "e-side-item"} aria-label="Menú de cuenta">
+              <span className="grid size-8 shrink-0 place-items-center rounded-full bg-e-ok text-[13px] font-semibold text-e-bg2">TU</span>
+              {!rail && <span className="min-w-0 flex-1 leading-tight"><span className="block truncate text-[14px]">Workspace</span><span className="block text-[12px] text-e-dim">Erasmus Web{MOCK ? " · demo" : ""}</span></span>}
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent side="top" align="start" className="e-pop w-60 p-1.5">
+            <DropdownMenuItem className="gap-2.5 rounded-lg px-3 py-2 text-[14px]" onSelect={() => { setSettingsOpen(true); setSideOpen(false); }}><Settings className="size-4" /> Ajustes</DropdownMenuItem>
+            <DropdownMenuItem className="gap-2.5 rounded-lg px-3 py-2 text-[14px]" onSelect={() => setTheme(theme === "dark" ? "light" : "dark")}>
+              {theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />} Tema {theme === "dark" ? "claro" : "oscuro"}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem className="gap-2.5 rounded-lg px-3 py-2 text-[14px]" onSelect={() => { setSettingsOpen(true); setSideOpen(false); }}><Info className="size-4" /> Acerca de</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+    </>
+  );
+
+  const empty = visible.length === 0;
+  const composer = (
+    <Composer busy={chat.busy} disabled={down} onSend={(t) => void chat.send(t)} onStop={chat.stop} onAttach={(f) => void attach(f)} draft={draft} centered={empty} />
+  );
 
   return (
     <div className="flex h-dvh overflow-hidden bg-e-bg2 text-e-tx">
-      {sideOpen && <div className="e-overlay fixed inset-0 z-30 md:hidden" onClick={() => setSideOpen(false)} />}
-      <aside
-        className={cn(
-          "fixed inset-y-0 left-0 z-40 flex w-side flex-col border-r border-e-line bg-e-bg transition-transform md:static md:translate-x-0",
-          sideOpen ? "translate-x-0" : "-translate-x-full",
-        )}
-      >
-        <div className="flex h-top items-center gap-2 px-3">
-          <div className="flex-1 leading-tight">
-            <div className="text-[14px] font-semibold tracking-tight">Erasmus</div>
-            <div className="text-[10px] text-e-dim">Web{MOCK ? " · modo demostración" : ""}</div>
-          </div>
-          <button className="e-icon-btn md:hidden" aria-label="Cerrar barra lateral" onClick={() => setSideOpen(false)}>
-            <X className="size-3.5" />
-          </button>
-        </div>
-        <div className="px-3">
-          <button
-            onClick={() => { chat.reset(); setSideOpen(false); }}
-            className="flex w-full items-center gap-2 rounded-lg border border-e-line px-3 py-2 text-[13px] hover:bg-e-bg3"
-          >
-            <Plus className="size-3.5" /> Nueva conversación
-          </button>
-        </div>
-        <nav className="mt-3 flex-1 overflow-y-auto px-2">
-          <ChatList
-            activeId={chat.chatId}
-            activeTitle={chat.title}
-            version={chat.listVersion}
-            onOpen={(id) => {
-              setSideOpen(false);
-              chat.open(id).catch(() => toast.error("No se pudo abrir la conversación."));
-            }}
-            onRename={chat.rename}
-          />
-        </nav>
-        <div className="border-t border-e-line p-2">
-          <button onClick={() => { setSettingsOpen(true); setSideOpen(false); }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-[13px] text-e-dim hover:bg-e-bg3 hover:text-e-tx">
-            <Settings className="size-3.5" /> Ajustes
-          </button>
-        </div>
-      </aside>
+      {mobile ? (
+        <>
+          {sideOpen && <div className="e-overlay fixed inset-0 z-30" onClick={() => setSideOpen(false)} />}
+          <aside className={cn("fixed inset-y-0 left-0 z-40 flex w-[86vw] max-w-[320px] flex-col bg-e-bg transition-transform duration-200", sideOpen ? "translate-x-0" : "-translate-x-full")} aria-label="Barra lateral">
+            {sidebar}
+          </aside>
+        </>
+      ) : (
+        <aside className="relative flex shrink-0 flex-col border-r border-e-line bg-e-bg transition-[width] duration-150" style={{ width: rail ? 56 : sideW }} aria-label="Barra lateral">
+          {sidebar}
+          {!rail && <Resizer dir={1} label="Redimensionar barra lateral" onDrag={(dx) => setSideW((w) => clamp(w + dx, 220, 420))} />}
+        </aside>
+      )}
 
-      <main className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-top shrink-0 items-center gap-2.5 border-b border-e-line bg-e-bg2 px-4 md:px-[18px]">
-          <button className="e-icon-btn md:hidden" aria-label="Abrir barra lateral" onClick={() => setSideOpen(true)}>
-            <PanelLeft className="size-3.5" />
+      <main className="relative flex min-w-0 flex-1 flex-col">
+        <header className="flex h-14 shrink-0 items-center gap-1 px-2 sm:px-3">
+          {mobile && <button className="e-icon-btn text-e-tx" aria-label="Abrir barra lateral" onClick={() => setSideOpen(true)}><PanelLeft className="size-5" /></button>}
+          <button className="flex min-w-0 items-center gap-1 rounded-lg px-2.5 py-1.5 text-[17px] font-medium hover:bg-e-bg3" onClick={() => setSettingsOpen(true)} aria-label="Modelo y conexión">
+            <span className="truncate">Erasmus</span>
+            <span className="hidden truncate text-e-dim sm:inline">{model}</span>
+            <ChevronDown className="size-4 shrink-0 text-e-dim" />
           </button>
-          <h1 className="min-w-0 flex-1 truncate text-[14px] font-medium">{chat.title}</h1>
-          <span className="flex items-center gap-1.5 text-[11.5px] text-e-dim">
+          <span className="ml-1 flex shrink-0 items-center gap-1.5 text-[12px] text-e-dim" title={conn.state === "online" ? "Conectado" : "Sin conexión"}>
             <i className={cn("inline-block size-2 rounded-full", conn.state === "online" ? "bg-e-ok" : conn.state === "checking" ? "bg-e-dim" : "bg-e-err")} />
-            {conn.state === "online" ? "Conectado" : conn.state === "checking" ? "Conectando…" : "Sin conexión"}
+            <span className="hidden sm:inline">{conn.state === "online" ? "Conectado" : conn.state === "checking" ? "Conectando…" : "Sin conexión"}</span>
           </span>
-          <span className="hidden rounded-md border border-e-line px-2 py-0.5 font-mono text-[11px] text-e-dim sm:inline">{model}</span>
-          <button className={cn("e-icon-btn", filesOpen && "bg-e-bg3")} aria-label="Archivos" aria-pressed={filesOpen} onClick={() => setFilesOpen((o) => !o)}>
-            <FolderOpen className="size-3.5" />
-          </button>
+          <span className="flex-1" />
+          <h1 className="sr-only">{chat.title}</h1>
+          <button className={cn("e-icon-btn text-e-tx", filesOpen && "bg-e-bg3")} aria-label="Archivos" aria-pressed={filesOpen} onClick={() => setFilesOpen((o) => !o)}><FolderOpen className="size-5" /></button>
+          {mobile && <button className="e-icon-btn text-e-tx" aria-label="Nueva conversación" onClick={newChat}><SquarePen className="size-5" /></button>}
         </header>
 
         {down && (
-          <div className="e-err-banner mx-4 mt-3 flex items-center gap-3 px-3 py-2 text-[13px]" role="alert">
+          <div className="e-err-banner mx-4 mt-1 flex items-center gap-3 px-3 py-2 text-[13px]" role="alert">
             <WifiOff className="size-4 shrink-0" />
             <span className="flex-1">{conn.state === "denied" ? conn.message : "Conexión caída: " + conn.message}</span>
-            <button onClick={() => void conn.retry()} className="inline-flex items-center gap-1 rounded-md border border-current px-2 py-1 text-[12px]">
-              <RefreshCw className="size-3" /> Reintentar
-            </button>
+            <button onClick={() => void conn.retry()} className="inline-flex items-center gap-1 rounded-full border border-current px-2.5 py-1 text-[12px]"><RefreshCw className="size-3" /> Reintentar</button>
           </div>
         )}
 
-        <section ref={scroller} className="flex-1 overflow-y-auto">
-          {visible.length === 0 ? (
-            <div className="flex h-full flex-col items-center justify-center px-6 text-center">
-              <h2 className="text-[22px] font-semibold tracking-tight">¿En qué trabajamos hoy?</h2>
-              <p className="mt-2 max-w-sm text-[13px] text-e-dim">Erasmus ejecuta Python y bash en su sandbox, lee y escribe archivos y te entrega resultados mientras conversáis.</p>
-            </div>
-          ) : (
-            <div className="mx-auto flex max-w-3xl flex-col gap-6 px-4 py-6">
-              {visible.map((m) => <MessageView key={m.id} m={m} />)}
-            </div>
-          )}
-        </section>
-
-        {chat.error && (
-          <div className="e-err-banner mx-auto mb-2 flex w-[calc(100%-2rem)] max-w-3xl items-center gap-2 px-3 py-2 text-[13px]" role="alert">
-            <span className="flex-1">{chat.error}</span>
-            <button onClick={chat.dismissError} aria-label="Cerrar aviso"><X className="size-3.5" /></button>
-          </div>
+        {empty ? (
+          <section className="flex flex-1 flex-col items-center justify-center gap-7 pb-[12vh]">
+            <h2 className="px-6 text-center text-[26px] font-normal tracking-tight sm:text-[28px]">¿En qué puedo ayudarte?</h2>
+            {composer}
+          </section>
+        ) : (
+          <>
+            <section ref={scroller} onScroll={onScroll} className="flex-1 overflow-y-auto">
+              <div className="mx-auto flex max-w-3xl flex-col gap-8 px-4 pb-10 pt-4 sm:px-6">
+                {visible.map((m) => (
+                  <MessageView key={m.id} m={m} isLast={m.id === lastAssistant} busy={chat.busy}
+                    onRegenerate={m.id === lastAssistant ? regenerate : undefined} onEdit={m.role === "user" ? edit : undefined} />
+                ))}
+              </div>
+            </section>
+            {!atBottom && (
+              <button onClick={toBottom} aria-label="Ir al final" className="e-pop absolute bottom-32 left-1/2 z-10 inline-flex size-9 -translate-x-1/2 items-center justify-center rounded-full">
+                <ArrowDown className="size-4" />
+              </button>
+            )}
+            {chat.error && (
+              <div className="e-err-banner mx-auto mb-2 flex w-[calc(100%-2rem)] max-w-3xl items-center gap-2 px-3 py-2 text-[13px]" role="alert">
+                <span className="flex-1">{chat.error}</span>
+                <button onClick={chat.dismissError} aria-label="Cerrar aviso"><X className="size-3.5" /></button>
+              </div>
+            )}
+            {composer}
+          </>
         )}
-        <Composer busy={chat.busy} disabled={down} onSend={(t) => void chat.send(t)} onStop={chat.stop} />
       </main>
+      {filesOpen && (
+        mobile ? (
+          <FilesPanel convId={chat.chatId} refreshKey={`${chat.busy}-${chat.messages.length}`} onClose={() => setFilesOpen(false)} />
+        ) : (
+          <div className="relative flex shrink-0" style={{ width: panelW }}>
+            <Resizer dir={-1} label="Redimensionar panel de archivos" onDrag={(dx) => setPanelW((w) => clamp(w + dx, 320, 860))} />
+            <FilesPanel convId={chat.chatId} refreshKey={`${chat.busy}-${chat.messages.length}`} onClose={() => setFilesOpen(false)} />
+          </div>
+        )
+      )}
       {settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)} />}
-      {filesOpen && <FilesPanel convId={chat.chatId} refreshKey={`${chat.busy}-${chat.messages.length}`} onClose={() => setFilesOpen(false)} />}
+      <SearchDialog open={searchOpen} onClose={() => setSearchOpen(false)} onOpen={openChat} onNew={newChat} version={chat.listVersion} />
     </div>
   );
 }
