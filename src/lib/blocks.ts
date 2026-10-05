@@ -1,9 +1,9 @@
 /** Tool-block grammar (ANALYSIS.md §4). */
-export type BlockKind = "powershell:run" | "file:list" | "file:read" | "file:write" | "file:append";
+export type BlockKind = "code:python" | "code:bash" | "file:list" | "file:read" | "file:write" | "file:append";
 
 export interface ToolBlock {
   kind: BlockKind;
-  /** Path for file:* (arg line or body), command for powershell. */
+  /** Path for file:* (arg line or body), first script line for code:*. */
   target: string;
   body: string;
   closed: boolean;
@@ -11,12 +11,10 @@ export interface ToolBlock {
 
 export type Segment = { type: "text"; text: string } | { type: "block"; index: number; block: ToolBlock };
 
-const OPEN = /```(powershell:run|pwsh:run|ps:run|file:list|file:read|file:write|file:append)([^\n]*)\n/gi;
+const OPEN = /```(code:python|code:bash|file:list|file:read|file:write|file:append)([^\n]*)\n/gi;
 
 function normalizeKind(k: string): BlockKind {
-  const l = k.toLowerCase();
-  if (l === "pwsh:run" || l === "ps:run") return "powershell:run";
-  return l as BlockKind;
+  return k.toLowerCase() as BlockKind;
 }
 
 /** Splits assistant content into text and tool-block segments (handles unclosed trailing block). */
@@ -35,7 +33,7 @@ export function parseSegments(content: string): Segment[] {
     const closed = end >= 0;
     const body = (closed ? content.slice(start, end) : content.slice(start)).replace(/\n$/, "");
     const target = kind === "file:write" || kind === "file:append" ? arg : body.trim().split("\n")[0] ?? "";
-    segs.push({ type: "block", index: idx++, block: { kind, target: kind === "powershell:run" ? body.trim() : target, body, closed } });
+    segs.push({ type: "block", index: idx++, block: { kind, target: kind.startsWith("code:") ? (body.trim().split("\n")[0] ?? "") : target, body, closed } });
     pos = closed ? end + 3 : content.length;
     OPEN.lastIndex = pos;
   }

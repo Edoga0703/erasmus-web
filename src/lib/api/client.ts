@@ -5,6 +5,8 @@ import type {
   FsListResponse,
   FsReadResponse,
   FsWriteResponse,
+  ExecRequest,
+  ExecResponse,
   StatusResponse,
 } from "./types";
 
@@ -71,6 +73,7 @@ export const api = {
   fsRead: (path: string) => apiJson<FsReadResponse>("/api/fs/read", { path }),
   fsWrite: (path: string, content: string, append = false) =>
     apiJson<FsWriteResponse>("/api/fs/write", { path, content, append }),
+  exec: (req: ExecRequest) => apiJson<ExecResponse>("/api/exec", req),
   chats: () => apiJson<ChatListResponse>("/api/workspace/chats"),
   getChat: (id: string) =>
     apiJson<{ ok: boolean; chat_data: ChatData }>(`/api/workspace/chat?id=${encodeURIComponent(id)}`),
