@@ -7,7 +7,7 @@ import type { ChatData } from "@/lib/api/types";
 import { scriptedReply, seedChats, seedFiles } from "./fixtures";
 import { runBash, runPython } from "./sandbox";
 
-interface MockBody { [k: string]: unknown; path?: unknown; content?: unknown; append?: unknown; messages?: unknown; filename?: unknown; subfolder?: unknown; content_base64?: unknown; data?: unknown; id?: unknown; conv_id?: unknown; chat_data?: unknown; name?: unknown }
+interface MockBody { [k: string]: unknown; path?: unknown; content?: unknown; append?: unknown; messages?: unknown; filename?: unknown; subfolder?: unknown; content_base64?: unknown; data?: unknown; id?: unknown; conv_id?: unknown; chat_data?: unknown; name?: unknown; language?: unknown; timeout?: unknown; cwd?: unknown; code?: unknown; cmd?: unknown; command?: unknown }
 type Store = { files: Record<string, string>; chats: Record<string, ChatData> };
 let store: Store | null = null;
 const db = (): Store => (store ??= { files: seedFiles(), chats: seedChats() });
