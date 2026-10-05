@@ -151,3 +151,9 @@ Reintento ante fallo permanente (`vps_error`, `offline`): vuelve a fallar hasta 
 | `delete_chat`, `fs/delete` | No implementados (a propósito) | PROPOSED |
 | `reasoning_content` | Simulado | PROPOSED |
 | Origen web | No aplica | `web_origin` en `config.json` (D1) |
+
+## Conexión del modelo (API_Erasmus.md v5.0)
+- Ajustes → "Modelo y API": clave `ms-…` (Authorization: Bearer, solo en rutas proxy), token del puente manual, modelo, `reasoning_effort` (none/low/medium/high) y `X-Compact-Mode`.
+- "Probar conexión" = `GET /v1/models` + `GET /api/account/me` (cuenta opcional, compatibilidad no verificada).
+- Claves `dk-…` de drael.sh NO pasan por el puente (se rechazan en la UI).
+- Pendiente de verificar con la VPS real: chat con/sin stream, `X-Drael-Session`, `finish_reason`/`usage`.
