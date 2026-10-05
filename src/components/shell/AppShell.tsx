@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowDown, ChevronDown, FolderOpen, Info, Moon, PanelLeft, RefreshCw, Search, Settings, SquarePen, Sun, WifiOff, X } from "lucide-react";
+import { ArrowDown, ChevronDown, Download, FileText, FolderOpen, ImageIcon, Printer, Info, Moon, PanelLeft, RefreshCw, Search, Settings, SquarePen, Sun, WifiOff, X } from "lucide-react";
 import { sandboxDir, useChat, type Attachment } from "@/hooks/use-chat";
 import { useConnection } from "@/hooks/use-connection";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -15,6 +15,9 @@ import { ChatList } from "./ChatList";
 import { SearchDialog } from "./SearchDialog";
 import { FilesPanel } from "@/components/files/FilesPanel";
 import { SettingsDialog } from "./SettingsDialog";
+import { UsageMeter } from "./UsageMeter";
+import { ImagesDialog, ImageViewer, collectImages, type ChatImage } from "@/components/chat/Images";
+import { downloadMarkdown, printAsPdf } from "@/lib/export-chat";
 
 const LS = { side: "erasmus.side.w", collapsed: "erasmus.side.collapsed", panel: "erasmus.panel.w" };
 const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
@@ -48,6 +51,8 @@ export function AppShell() {
   const [filesOpen, setFilesOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [imagesOpen, setImagesOpen] = useState(false);
+  const [viewImg, setViewImg] = useState<ChatImage | null>(null);
   const [atBottom, setAtBottom] = useState(true);
   const [draft, setDraft] = useState<{ text: string; n: number }>();
   const scroller = useRef<HTMLElement>(null);
@@ -148,6 +153,7 @@ export function AppShell() {
         {[
           { label: "Nueva conversación", Icon: SquarePen, on: newChat, kbd: "" },
           { label: "Buscar conversaciones", Icon: Search, on: () => { setSearchOpen(true); setSideOpen(false); }, kbd: "Ctrl K" },
+          { label: "Imágenes", Icon: ImageIcon, on: () => { setImagesOpen(true); setSideOpen(false); }, kbd: "" },
           { label: "Archivos", Icon: FolderOpen, on: () => { setFilesOpen(true); setSideOpen(false); }, kbd: "" },
         ].map(({ label, Icon, on, kbd }) =>
           rail ? (
@@ -210,7 +216,7 @@ export function AppShell() {
           {mobile && <button className="e-icon-btn text-e-tx" aria-label="Abrir barra lateral" onClick={() => setSideOpen(true)}><PanelLeft className="size-5" /></button>}
           <button className="flex min-w-0 items-center gap-1 rounded-lg px-2.5 py-1.5 text-[17px] font-medium hover:bg-e-bg3" onClick={() => setSettingsOpen(true)} aria-label="Modelo y conexión">
             <span className="truncate">Erasmus</span>
-            <span className="hidden truncate text-e-dim sm:inline">{displayModel(model)}</span>
+            {displayModel(model) !== "Erasmus" && <span className="hidden truncate text-e-dim sm:inline">{displayModel(model)}</span>}
             <ChevronDown className="size-4 shrink-0 text-e-dim" />
           </button>
           <span className="ml-1 flex shrink-0 items-center gap-1.5 text-[12px] text-e-dim" title={conn.state === "online" ? "Conectado" : "Sin conexión"}>
@@ -219,6 +225,18 @@ export function AppShell() {
           </span>
           <span className="flex-1" />
           <h1 className="sr-only">{chat.title}</h1>
+          <UsageMeter />
+          {!empty && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button className="e-icon-btn text-e-tx" aria-label="Exportar conversación" title="Exportar conversación"><Download className="size-5" /></button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="e-pop w-56 p-1.5">
+                <DropdownMenuItem className="gap-2.5 rounded-lg px-3 py-2 text-[14px]" onSelect={() => downloadMarkdown(chat.title, chat.messages)}><FileText className="size-4" /> Descargar Markdown</DropdownMenuItem>
+                <DropdownMenuItem className="gap-2.5 rounded-lg px-3 py-2 text-[14px]" onSelect={() => { if (!printAsPdf(chat.title, chat.messages)) toast.error("El navegador bloqueó la ventana. Permite ventanas emergentes para exportar en PDF."); }}><Printer className="size-4" /> Guardar como PDF</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
           <button className={cn("e-icon-btn text-e-tx", filesOpen && "bg-e-bg3")} aria-label="Archivos" aria-pressed={filesOpen} onClick={() => setFilesOpen((o) => !o)}><FolderOpen className="size-5" /></button>
           {mobile && <button className="e-icon-btn text-e-tx" aria-label="Nueva conversación" onClick={newChat}><SquarePen className="size-5" /></button>}
         </header>
@@ -239,11 +257,14 @@ export function AppShell() {
           </section>
         ) : (
           <>
-            <section ref={scroller} onScroll={onScroll} className="flex-1 overflow-y-auto">
+            <section ref={scroller} onScroll={onScroll} className="flex-1 overflow-y-auto" onClick={(e) => {
+              const t = e.target as HTMLElement;
+              if (t.tagName === "IMG" && t.closest(".e-md")) { const im = t as HTMLImageElement; setViewImg({ src: im.currentSrc || im.src, alt: im.alt || "Imagen", fromUser: false }); }
+            }}>
               <div className="mx-auto flex max-w-3xl flex-col gap-8 px-4 pb-10 pt-4 sm:px-6">
                 {visible.map((m) => (
                   <MessageView key={m.id} m={m} isLast={m.id === lastAssistant} busy={chat.busy}
-                    onRegenerate={m.id === lastAssistant ? regenerate : undefined} onEdit={m.role === "user" ? edit : undefined} />
+                    onRegenerate={m.id === lastAssistant ? regenerate : undefined} onEdit={m.role === "user" ? edit : undefined} onContinue={m.id === lastAssistant ? chat.continueLast : undefined} />
                 ))}
               </div>
             </section>
@@ -272,6 +293,8 @@ export function AppShell() {
           </div>
         )
       )}
+      {imagesOpen && <ImagesDialog images={collectImages(chat.messages)} onClose={() => setImagesOpen(false)} />}
+      {viewImg && <ImageViewer img={viewImg} onClose={() => setViewImg(null)} />}
       {settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)} />}
       <SearchDialog open={searchOpen} onClose={() => setSearchOpen(false)} onOpen={openChat} onNew={newChat} version={chat.listVersion} />
     </div>

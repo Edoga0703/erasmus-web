@@ -8,3 +8,5 @@
 - [x] Rediseño estilo ChatGPT (PC y móvil): paneles plegables/redimensionables, buscador, código con copiar/vista previa, acciones de mensaje, ajustes móviles
 - [x] Conexión del modelo en Ajustes (clave ms-, razonamiento, compacto, prueba)
 - [x] Fluidez del streaming y recuperación local de la conversación activa tras recargar
+
+- [x] Razonamiento plegable, aviso de corte + Continuar, tokens por respuesta, galería de imágenes, Personalización, indicador de uso del plan, exportar Markdown/PDF
