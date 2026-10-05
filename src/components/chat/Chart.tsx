@@ -1,3 +1,4 @@
+import { useTheme } from "@/lib/theme";
 import { useMemo } from "react";
 import { fmt, niceMax, parseChart, SERIES_COLORS, type ChartSpec } from "@/lib/charts";
 
