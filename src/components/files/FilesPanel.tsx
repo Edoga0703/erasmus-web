@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ChevronDown, ChevronRight, Download, FileText, Folder, RefreshCw, X } from "lucide-react";
+import { ChevronDown, ChevronRight, Download, FileCode2, FileImage, FileSpreadsheet, FileText, Folder, RefreshCw, X } from "lucide-react";
+
+/** Colored type icon (ChatGPT sources style). */
+export function TypeIcon({ name }: { name: string }) {
+  const ext = name.split(".").pop()?.toLowerCase() ?? "";
+  const [Icon, color] = ext === "pdf" ? [FileText, "text-e-err"] : ["csv", "xlsx", "tsv"].includes(ext) ? [FileSpreadsheet, "text-e-ok"] : ["png", "jpg", "jpeg", "gif", "svg", "webp"].includes(ext) ? [FileImage, "text-e-info"] : ["py", "sh", "js", "ts", "html", "json", "css"].includes(ext) ? [FileCode2, "text-e-info"] : [FileText, "text-e-dim"];
+  return <Icon className={"size-4 shrink-0 " + color} />;
+}
 import { toast } from "sonner";
 import { api, ApiError } from "@/lib/api/client";
 import type { WorkspaceFile } from "@/lib/api/types";
@@ -56,7 +63,7 @@ function TreeRow({ n, depth, open, toggle, sel, onSelect, highlight }: { n: Node
       >
         <button className="flex min-w-0 flex-1 items-center gap-1.5 text-left" onClick={() => (n.dir ? toggle(n.path) : onSelect(n.path))}>
           {n.dir ? (isOpen ? <ChevronDown className="size-3.5 shrink-0 text-e-dim" /> : <ChevronRight className="size-3.5 shrink-0 text-e-dim" />) : <span className="w-3.5 shrink-0" />}
-          {n.dir ? <Folder className="size-3.5 shrink-0 text-e-dim" /> : <FileText className="size-3.5 shrink-0 text-e-dim" />}
+          {n.dir ? <Folder className="size-3.5 shrink-0 text-e-dim" /> : <TypeIcon name={n.name} />}
           <span className="truncate">{n.name}</span>
           {mine && <span className="shrink-0 rounded bg-e-bg4 px-1.5 text-[10px] text-e-dim">esta conversación</span>}
           {!n.dir && <span className="ml-auto shrink-0 pl-2 text-[11px] text-e-dim">{fmtSize(n.size)}</span>}
@@ -103,10 +110,10 @@ export function FilesPanel({ convId, refreshKey, onClose }: { convId: string; re
   const toggle = (p: string) => setOpen((o) => { const n = new Set(o); if (n.has(p)) n.delete(p); else n.add(p); return n; });
 
   return (
-    <aside className="fixed inset-0 z-40 flex flex-col border-l border-e-line bg-e-bg md:static md:inset-auto md:z-auto md:w-art md:shrink-0" aria-label="Archivos">
-      <div className="flex h-top shrink-0 items-center gap-1 border-b border-e-line px-3">
+    <aside className="fixed inset-0 z-40 flex flex-col border-l border-e-line bg-e-bg md:static md:inset-auto md:z-auto md:w-full md:min-w-0 md:flex-1" aria-label="Archivos">
+      <div className="flex h-14 shrink-0 items-center gap-1 border-b border-e-line px-3">
         {(["files", "artifacts"] as const).map((t) => (
-          <button key={t} onClick={() => { setTab(t); setSel(null); }} className={cn("rounded-md px-2.5 py-1 text-[13px]", tab === t ? "bg-e-bg3 text-e-tx" : "text-e-dim hover:text-e-tx")}>
+          <button key={t} onClick={() => { setTab(t); setSel(null); }} className={cn("rounded-full px-3 py-1.5 text-[14px]", tab === t ? "bg-e-bg3 text-e-tx" : "text-e-dim hover:text-e-tx")}>
             {t === "files" ? "Archivos" : `Artifacts (${artifacts.length})`}
           </button>
         ))}
@@ -125,7 +132,7 @@ export function FilesPanel({ convId, refreshKey, onClose }: { convId: string; re
             artifacts.map((f) => (
               <div key={f.rel_path} className="flex items-center gap-1.5 rounded-md px-2 py-1.5 text-[13px] hover:bg-e-bg3">
                 <button className="flex min-w-0 flex-1 items-center gap-2 text-left" onClick={() => setSel(f.rel_path)}>
-                  <FileText className="size-3.5 shrink-0 text-e-dim" />
+                  <TypeIcon name={f.name} />
                   <span className="truncate">{f.rel_path.slice("artifacts/".length)}</span>
                   <span className="ml-auto shrink-0 text-[11px] text-e-dim">{fmtSize(f.size)}</span>
                 </button>
