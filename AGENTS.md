@@ -17,3 +17,4 @@
 - Charts are rendered by the in-house SVG renderer (`src/components/chat/Chart.tsx`) and mermaid is bundled from npm — no chart libraries or CDNs, keeps the static build self-contained.
 - Workspace panel lives in `src/components/files/`; all reads/downloads go through `api.files`/`api.fsRead`/`api.download` (blob via apiFetch) — keeps the token single-source and makes mock downloads real blobs.
 - Assistant messages persist their tool-card state (`tools`) inside chat_data so reopened chats render identical cards; blocks without saved state show as "Del historial" — no re-execution on open.
+- The ms- VPS key is attached only in `apiFetch` and only for proxied routes (/v1/*, /api/chat, /api/models, /api/account/*, /api/images/*); stored in sessionStorage unless the user opts into localStorage — local fs/exec routes must never see it.
