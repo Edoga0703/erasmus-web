@@ -1,3 +1,4 @@
+import { AttachChip } from "./AttachChip";
 import { memo, useMemo, useState } from "react";
 import { Check, Copy, Pencil, RefreshCw, ThumbsDown, ThumbsUp } from "lucide-react";
 import { parseSegments } from "@/lib/blocks";
@@ -36,6 +37,7 @@ export const MessageView = memo(function MessageView({ m, isLast, busy, onRegene
   if (m.role === "user") {
     return (
       <div className="group flex flex-col items-end">
+        {!!m.attachments?.length && <div className="mb-2 flex max-w-[85%] flex-wrap justify-end gap-2">{m.attachments.map((a) => <AttachChip key={a.name} a={a} />)}</div>}
         <div className="max-w-[85%] whitespace-pre-wrap break-words rounded-3xl bg-e-bg3 px-5 py-2.5 text-[16px] leading-7 text-e-tx sm:max-w-[70%]">{m.content}</div>
         <div className="mt-1 flex gap-0.5 opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100">
           <CopyBtn text={m.content} />

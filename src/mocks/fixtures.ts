@@ -75,6 +75,10 @@ export function scriptedReply(prompt: string, step: number): string {
   if (/^\s*(hola|buenas)/i.test(prompt)) {
     return "¡Hola! Soy **Erasmus**. Trabajo en un sandbox Linux: puedo ejecutar Python y bash, leer y escribir archivos y entregarte resultados. Prueba con *\"analiza estos datos, hazme un gráfico de barras y guárdame el CSV\"*.";
   }
+  if (step === 0 && !/(analiza|datos|gr[aá]fic|csv|ventas)/i.test(prompt)) {
+    const files = /\[Archivos adjuntos: ([^\]]+)\]/.exec(prompt)?.[1];
+    return `*(Modo demostración: estas respuestas son de prueba; conecta el servidor real para hablar con el modelo.)*\n\n${files ? `He recibido estos archivos en el sandbox: **${files}**.` : `Has escrito: "${prompt.slice(0, 200)}".`} Puedo ejecutar Python y bash, leer y escribir archivos, y generar gráficos y diagramas. Prueba con *"analiza estos datos, hazme un gráfico de barras y guárdame el CSV"*.`;
+  }
   if (step === 0) {
     return [
       "Voy a preparar los datos en el sandbox.\n\n",
