@@ -56,8 +56,19 @@ function Html({ source, streaming }: { source: string; streaming?: boolean | und
     // visible overlap. Keep the sanitized Markdown plain until the turn ends.
     if (streaming) return;
     if (!ref.current) return;
-    decorate(ref.current, (code, lang) => setPreview({ code, lang }));
-    highlightWithin(ref.current);
+    const root = ref.current;
+    const applyCodeChrome = () => {
+      decorate(root, (code, lang) => setPreview({ code, lang }));
+      highlightWithin(root);
+    };
+    applyCodeChrome();
+    // A parent recovery render can replace dangerouslySetInnerHTML after this
+    // effect without changing `source`; re-apply the static code chrome once.
+    const observer = new MutationObserver(() => {
+      if (root.querySelector("pre:not(.e-code pre)")) applyCodeChrome();
+    });
+    observer.observe(root, { childList: true, subtree: true });
+    return () => observer.disconnect();
   }, [source, streaming]);
   return (
     <>
