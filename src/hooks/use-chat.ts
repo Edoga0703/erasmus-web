@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError, streamChat, type StreamUsage } from "@/lib/api/client";
 import { extractBlocks, lineDiff, type DiffRow, type ToolBlock } from "@/lib/blocks";
 import type { ChatData, StoredMessage } from "@/lib/api/types";
+import type { CompactionState } from "@/components/chat/Compaction";
+import { ANSWER_RESERVE, COMPACT_AT, COMPACT_PROMPT, FILE_MAX_FRACTION, FILE_TOO_BIG_MSG, KEEP_RECENT, LIMIT_MSG, estimateTokens, getContextLength, historyTokens, isContextOverflow } from "@/lib/context";
 
 export type ToolStatus = "running" | "ok" | "error" | "limit" | "saved";
 export interface ToolState { status: ToolStatus; detail?: string | undefined; output?: string; diff?: DiffRow[]; exitCode?: number; durationMs?: number; stdout?: string; stderr?: string }
@@ -19,6 +21,11 @@ export interface UIMessage {
   finish?: string;
   usage?: StreamUsage;
   attachments?: Attachment[];
+  /** "compaction" = visible separator line; when done it carries the summary that replaces messages before cutId. */
+  kind?: "compaction";
+  compaction?: CompactionState;
+  summary?: string;
+  cutId?: string;
   ts: number;
 }
 /** File attached to a user message; `url` is a local object URL for image thumbnails (not persisted). */
@@ -44,6 +51,7 @@ interface LocalChatSnapshot {
 
 function withoutTemporaryUrls(m: UIMessage): UIMessage {
   const clean: UIMessage = { ...m, streaming: false };
+  if (m.compaction?.status === "running") clean.compaction = { ...m.compaction, status: "error" };
   if (m.attachments) clean.attachments = m.attachments.map(({ url: _url, image: _image, ...a }) => a);
   return clean;
 }
@@ -79,6 +87,24 @@ function withAttachments(m: UIMessage): string {
   const refs = a.filter((x) => x.text === undefined && !x.image).map((x) => x.path ?? x.name);
   return m.content + inline + (refs.length ? `\n\n[Archivos adjuntos: ${refs.join(", ")}]` : "");
 }
+/** What the model sees: latest finished summary (as system) + messages from its cut point; compaction lines never go to the model. */
+function summaryBase(all: UIMessage[]): { summary?: string; start: number } {
+  for (let i = all.length - 1; i >= 0; i--) {
+    const m = all[i]!;
+    if (m.kind === "compaction" && m.compaction?.status === "done" && m.summary) {
+      const ci = all.findIndex((x) => x.id === m.cutId);
+      return { summary: m.summary, start: ci >= 0 ? ci : i + 1 };
+    }
+  }
+  return { start: 0 };
+}
+function modelHistory(all: UIMessage[], excludeId?: string) {
+  const { summary, start } = summaryBase(all);
+  const rest = all.slice(start).filter((m) => !m.kind && m.id !== excludeId).map((m) => ({ role: m.role as string, content: toModelContent(m) }));
+  return summary ? [{ role: "system", content: `[RESUMEN DE LA CONVERSACIÓN ANTERIOR]\n${summary}` }, ...rest] : rest;
+}
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 export const sandboxDir = (convId: string) => `sandbox/${convId}`;
 
 async function runBlock(b: ToolBlock, convId: string): Promise<{ state: ToolState; feedback: string | null }> {
@@ -187,50 +213,104 @@ export function useChat(opts: { model: string }) {
       title: t,
       created: created.current,
       updated: Date.now(),
-      messages: msgsRef.current.map<StoredMessage>((m) => (m.role === "user" ? { role: "user", text: m.content, ts: m.ts, hidden: m.hidden } : { role: "assistant", c: m.content, ts: m.ts, tools: m.tools, ...(m.reasoning ? { reasoning: m.reasoning, thinkMs: m.thinkMs } : {}), ...(m.usage ? { usage: m.usage } : {}), ...(m.finish ? { finish: m.finish } : {}) })),
+      messages: msgsRef.current.map<StoredMessage>((m) => (m.role === "user" ? { id: m.id, role: "user", text: m.content, ts: m.ts, hidden: m.hidden } : { id: m.id, role: "assistant", c: m.content, ts: m.ts, tools: m.tools, ...(m.kind ? { kind: m.kind, compaction: m.compaction?.status === "running" ? { ...m.compaction, status: "error" as const } : m.compaction, summary: m.summary, cutId: m.cutId } : {}), ...(m.reasoning ? { reasoning: m.reasoning, thinkMs: m.thinkMs } : {}), ...(m.usage ? { usage: m.usage } : {}), ...(m.finish ? { finish: m.finish } : {}) })),
     };
     try { await api.syncChat(data); setListVersion((v) => v + 1); } catch { /* best effort */ }
   }, [chatId]);
 
   /** Last failed model call; retry() relaunches exactly that call from the current history. */
   const [failure, setFailure] = useState<{ message: string; retryable: boolean; nonce: number } | null>(null);
+  const [limit, setLimit] = useState<{ message: string; file: boolean } | null>(null);
+
+  /** Summarize everything except the last KEEP_RECENT model-visible messages; shows a live line in the chat. */
+  const compactNow = useCallback(async (signal: AbortSignal, ctxLen: number): Promise<boolean> => {
+    const all = msgsRef.current.filter((m) => !m.streaming);
+    const { summary: prev, start } = summaryBase(all);
+    const rest = all.slice(start).filter((m) => !m.kind);
+    if (rest.length <= KEEP_RECENT) return false;
+    const older = rest.slice(0, rest.length - KEEP_RECENT);
+    const cut = rest[rest.length - KEEP_RECENT]!;
+    let transcript = (prev ? `Resumen previo:\n${prev}\n\n` : "") + older.map((m) => `${m.role === "user" ? "Usuario" : "Erasmus"}: ${withAttachments(m)}`).join("\n\n");
+    const maxChars = Math.floor(ctxLen * 0.6) * 4;
+    if (transcript.length > maxChars) transcript = "…" + transcript.slice(-maxChars);
+    const cid = uid();
+    const t0 = Date.now();
+    commit((ms) => [...ms, { id: cid, role: "assistant", kind: "compaction", content: "", compaction: { status: "running", startedAt: t0 }, ts: t0 }]);
+    let out = "";
+    try {
+      await streamChat({ model: opts.model, messages: [{ role: "user", content: `${COMPACT_PROMPT}\n\n<conversacion>\n${transcript}\n</conversacion>` }], sessionId: chatId, signal, reasoning: "low", onToken: (tk) => { out += tk; } });
+    } catch (e) {
+      patch(cid, { compaction: { status: "error", startedAt: t0, ms: Date.now() - t0 } });
+      throw e;
+    }
+    if (signal.aborted || !out.trim()) {
+      patch(cid, { compaction: { status: "error", startedAt: t0, ms: Date.now() - t0 } });
+      return false;
+    }
+    patch(cid, { summary: out.trim(), cutId: cut.id, compaction: { status: "done", startedAt: t0, ms: Date.now() - t0 } });
+    await sleep(1000);
+    return true;
+  }, [chatId, commit, opts.model, patch]);
+
   const runLoop = useCallback(async (t: string) => {
     setBusy(true);
     setFailure(null);
+    setLimit(null);
     const ctrl = new AbortController();
     abortRef.current = ctrl;
     let executed = 0;
     try {
       for (let step = 0; step < MAX_AGENT_STEPS; step++) {
-        const aid = uid();
-        commit((ms) => [...ms, { id: aid, role: "assistant", content: "", streaming: true, tools: {}, ts: Date.now() }]);
-        const history = msgsRef.current.filter((m) => m.id !== aid).map((m) => ({ role: m.role, content: toModelContent(m) }));
-        let acc = "";
-        let reasoning = "";
-        let frame: number | undefined;
-        let r0 = 0, r1 = 0;
-        let meta: { finish?: string; usage?: StreamUsage } = {};
-        const schedulePaint = () => {
-          if (frame !== undefined) return;
-          frame = requestAnimationFrame(() => {
-            frame = undefined;
-            patch(aid, { content: acc, ...(reasoning ? { reasoning } : {}) });
-          });
-        };
-        try {
-          await streamChat({
-            model: opts.model,
-            messages: history,
-            sessionId: chatId,
-            signal: ctrl.signal,
-            onToken: (tok) => { acc += tok; schedulePaint(); },
-            onReasoning: (tok) => { const n = Date.now(); if (!r0) r0 = n; r1 = n; reasoning += tok; schedulePaint(); },
-            onMeta: (mm) => { meta = { ...meta, ...(mm.finishReason ? { finish: mm.finishReason } : {}), ...(mm.usage ? { usage: mm.usage } : {}) }; },
-          });
-        } finally {
-          if (frame !== undefined) cancelAnimationFrame(frame);
+        const ctxLen = await getContextLength(opts.model);
+        if (historyTokens(modelHistory(msgsRef.current)) > ctxLen * COMPACT_AT - ANSWER_RESERVE) {
+          await compactNow(ctrl.signal, ctxLen);
+          if (ctrl.signal.aborted) break;
         }
-        patch(aid, { content: acc, ...(reasoning ? { reasoning, thinkMs: Math.max(r1 - r0, 1) } : {}), ...meta, streaming: false });
+        let retried = false;
+        let aid = "";
+        let acc = "";
+        for (;;) {
+          aid = uid();
+          const id = aid;
+          commit((ms) => [...ms, { id, role: "assistant", content: "", streaming: true, tools: {}, ts: Date.now() }]);
+          const history = modelHistory(msgsRef.current, id);
+          acc = "";
+          let reasoning = "";
+          let frame: number | undefined;
+          let r0 = 0, r1 = 0;
+          let meta: { finish?: string; usage?: StreamUsage } = {};
+          const schedulePaint = () => {
+            if (frame !== undefined) return;
+            frame = requestAnimationFrame(() => {
+              frame = undefined;
+              patch(id, { content: acc, ...(reasoning ? { reasoning } : {}) });
+            });
+          };
+          try {
+            await streamChat({
+              model: opts.model,
+              messages: history,
+              sessionId: chatId,
+              signal: ctrl.signal,
+              onToken: (tok) => { acc += tok; schedulePaint(); },
+              onReasoning: (tok) => { const n = Date.now(); if (!r0) r0 = n; r1 = n; reasoning += tok; schedulePaint(); },
+              onMeta: (mm) => { meta = { ...meta, ...(mm.finishReason ? { finish: mm.finishReason } : {}), ...(mm.usage ? { usage: mm.usage } : {}) }; },
+            });
+          } catch (e) {
+            if (!isContextOverflow(e)) throw e;
+            commit((ms) => ms.filter((m) => m.id !== id));
+            // One automatic compaction + retry; a second overflow (or nothing left to compact) is terminal.
+            if (!retried) {
+              retried = true;
+              if (await compactNow(ctrl.signal, ctxLen)) { if (ctrl.signal.aborted) return; continue; }
+            }
+            throw new ApiError(413, "context_overflow_final", LIMIT_MSG);
+          } finally {
+            if (frame !== undefined) cancelAnimationFrame(frame);
+          }
+          patch(id, { content: acc, ...(reasoning ? { reasoning, thinkMs: Math.max(r1 - r0, 1) } : {}), ...meta, streaming: false });
+          break;
+        }
         if (ctrl.signal.aborted) break;
 
         const blocks = extractBlocks(acc);
@@ -257,6 +337,13 @@ export function useChat(opts: { model: string }) {
         commit((ms) => [...ms, { id: uid(), role: "user", hidden: true, content: `[RESULTADOS DE HERRAMIENTAS]\n${feedback.join("\n\n")}`, ts: Date.now() }]);
       }
     } catch (e) {
+      if (e instanceof ApiError && e.code === "context_overflow_final") {
+        commit((ms) => ms.filter((m) => !m.streaming));
+        const lastUser = [...msgsRef.current].reverse().find((m) => m.role === "user" && !m.hidden);
+        const bigFile = !!lastUser?.attachments?.some((a) => a.text !== undefined || a.image);
+        setLimit(bigFile ? { message: FILE_TOO_BIG_MSG, file: true } : { message: LIMIT_MSG, file: false });
+        return;
+      }
       // Drop the failed (streaming) assistant turn so a retry replays the very same request.
       commit((ms) => ms.filter((m) => !m.streaming));
       const err = e instanceof ApiError ? e : null;
@@ -269,17 +356,22 @@ export function useChat(opts: { model: string }) {
       window.dispatchEvent(new Event("erasmus:turn-done"));
       void persist(t);
     }
-  }, [chatId, commit, opts.model, patch, persist]);
+  }, [chatId, commit, compactNow, opts.model, patch, persist]);
 
   const send = useCallback(async (text: string, attachments?: Attachment[]) => {
     const clean = text.trim() || (attachments?.length ? "Revisa los archivos adjuntos." : "");
     if (!clean || busy) return;
     setError(null);
+    const withText = attachments?.filter((a) => a.text !== undefined) ?? [];
+    if (withText.length) {
+      const ctxLen = await getContextLength(opts.model);
+      if (withText.some((a) => estimateTokens(a.text!) > ctxLen * FILE_MAX_FRACTION)) { setLimit({ message: FILE_TOO_BIG_MSG, file: true }); return; }
+    }
     let t = titleRef.current;
     if (msgsRef.current.length === 0) { t = clean.slice(0, 60); setTitle(t); titleRef.current = t; }
     commit((ms) => [...ms, { id: uid(), role: "user", content: clean, ts: Date.now(), ...(attachments?.length ? { attachments } : {}) }]);
     await runLoop(t);
-  }, [busy, commit, runLoop]);
+  }, [busy, commit, opts.model, runLoop]);
 
   const retry = useCallback(() => {
     if (busy) return;
@@ -304,6 +396,7 @@ export function useChat(opts: { model: string }) {
     titleRef.current = "Nueva conversación";
     setError(null);
     setFailure(null);
+    setLimit(null);
     created.current = Date.now();
   }, []);
 
@@ -314,7 +407,14 @@ export function useChat(opts: { model: string }) {
     const src = cd.messages?.length ? cd.messages : cd.allMessages ?? [];
     const restored: UIMessage[] = src.map((sm) => {
       const content = (sm.role === "user" ? sm.text : sm.c) ?? sm.content ?? "";
-      const base: UIMessage = { id: uid(), role: sm.role, content, ts: sm.ts ?? cd.created };
+      const base: UIMessage = { id: sm.id ?? uid(), role: sm.role, content, ts: sm.ts ?? cd.created };
+      if (sm.kind === "compaction") {
+        base.kind = "compaction";
+        if (sm.compaction) base.compaction = sm.compaction.status === "running" ? { ...sm.compaction, status: "error" } : sm.compaction;
+        if (sm.summary) base.summary = sm.summary;
+        if (sm.cutId) base.cutId = sm.cutId;
+        return base;
+      }
       if (sm.hidden) base.hidden = true;
       if (sm.reasoning) { base.reasoning = sm.reasoning; if (sm.thinkMs) base.thinkMs = sm.thinkMs; }
       if (sm.usage) base.usage = sm.usage;
@@ -337,6 +437,7 @@ export function useChat(opts: { model: string }) {
     created.current = cd.created || Date.now();
     setError(null);
     setFailure(null);
+    setLimit(null);
   }, []);
 
   /** Rename = re-send chat_data with the new title through sync_chat (agreed contract). */
@@ -354,5 +455,5 @@ export function useChat(opts: { model: string }) {
     setListVersion((v) => v + 1);
   }, [chatId, persist]);
 
-  return { open, rename, listVersion, chatId, title, messages, busy, error, send, stop, reset, continueLast, retry, failure, dismissError: () => setError(null) };
+  return { open, rename, listVersion, chatId, title, messages, busy, error, send, stop, reset, continueLast, retry, failure, limit, dismissLimit: () => setLimit(null), dismissError: () => setError(null) };
 }

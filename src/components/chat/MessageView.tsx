@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { Markdown } from "./Markdown";
 import { ToolCard } from "./ToolCard";
 import { ThinkingChip } from "./Thinking";
+import { CompactionLine } from "./Compaction";
 
 function ActBtn({ label, onClick, children, active }: { label: string; onClick: () => void; children: React.ReactNode; active?: boolean }) {
   return (
@@ -33,6 +34,7 @@ export const MessageView = memo(function MessageView({ m, isLast, busy, onRegene
   const segs = useMemo(() => (m.role === "assistant" ? parseSegments(m.content) : []), [m.content, m.role]);
   const [vote, setVote] = useState<0 | 1 | -1>(0);
   if (m.hidden) return null;
+  if (m.kind === "compaction") return m.compaction ? <CompactionLine c={m.compaction} /> : null;
 
   if (m.role === "user") {
     return (
