@@ -96,7 +96,7 @@ export const api = {
       if (!res.ok) throw await parseError(res);
       const content = await res.text();
       const totalLines = content ? content.split("\n").length : 0;
-      return { ok: true, path, content, total_lines: totalLines, returned_lines: totalLines, truncated: false };
+      return { ok: true, name: path.split("/").pop() ?? path, content, total_lines: totalLines, truncated: false };
     }
   },
   fsWrite: async (path: string, content: string, append = false): Promise<FsWriteResponse> => {
