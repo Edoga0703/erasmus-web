@@ -107,14 +107,14 @@ function modelHistory(all: UIMessage[], excludeId?: string) {
 }
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-export const sandboxDir = (convId: string) => `sandbox/${convId}`;
+export const conversationDir = (convId: string) => `conversations/${convId}`;
 
 async function runBlock(b: ToolBlock, convId: string): Promise<{ state: ToolState; feedback: string | null }> {
   try {
     if (b.kind === "code:python" || b.kind === "code:bash") {
       const language = b.kind === "code:python" ? "python" : "bash";
       const t0 = performance.now();
-      const r = await api.exec({ language, code: b.body, cwd: sandboxDir(convId), timeout: EXEC_TIMEOUT_DEFAULT });
+      const r = await api.exec({ language, code: b.body, cwd: conversationDir(convId), timeout: EXEC_TIMEOUT_DEFAULT });
       const ms = r.duration_ms ?? Math.round(performance.now() - t0);
       const stdout = cap(r.stdout ?? "");
       const stderr = cap(r.stderr ?? "");

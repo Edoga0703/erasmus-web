@@ -10,7 +10,7 @@ export function TypeIcon({ name }: { name: string }) {
 import { toast } from "sonner";
 import { api, ApiError } from "@/lib/api/client";
 import type { WorkspaceFile } from "@/lib/api/types";
-import { sandboxDir } from "@/hooks/use-chat";
+import { conversationDir } from "@/hooks/use-chat";
 import { cn } from "@/lib/utils";
 import { FilePreview } from "./FilePreview";
 import type { UIMessage } from "@/hooks/use-chat";
@@ -86,8 +86,8 @@ export function FilesPanel({ convId, refreshKey, messages, initialTab = "files",
   const [tab, setTab] = useState<"activity" | "files" | "artifacts">(initialTab);
   const [sel, setSel] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const mine = sandboxDir(convId);
-  const [open, setOpen] = useState<Set<string>>(() => new Set(["sandbox", mine]));
+  const mine = conversationDir(convId);
+  const [open, setOpen] = useState<Set<string>>(() => new Set(["conversations", mine]));
 
   const load = useCallback(async () => {
     try { setFiles((await api.files()).files); setErr(null); } catch (e) { setErr(e instanceof ApiError ? e.message : "No se pudo cargar el workspace."); }
@@ -98,15 +98,15 @@ export function FilesPanel({ convId, refreshKey, messages, initialTab = "files",
     window.addEventListener("erasmus:files-changed", h);
     return () => window.removeEventListener("erasmus:files-changed", h);
   }, [load]);
-  useEffect(() => { setOpen(new Set(["sandbox", mine])); setSel(null); }, [mine]);
+  useEffect(() => { setOpen(new Set(["conversations", mine])); setSel(null); }, [mine]);
   useEffect(() => setTab(initialTab), [initialTab]);
 
   const tree = useMemo(() => {
     const t = buildTree(files);
-    // A fresh conversation has no files yet: show its (empty) sandbox folder so the context is explicit.
-    let sb = t.children.find((c) => c.name === "sandbox");
-    if (!sb) { sb = { name: "sandbox", path: "sandbox", dir: true, size: 0, children: [] }; t.children.push(sb); t.children.sort((a, b) => Number(b.dir) - Number(a.dir) || a.name.localeCompare(b.name)); }
-    if (!sb.children.some((c) => c.path === mine)) sb.children.unshift({ name: mine.split("/").pop() ?? "", path: mine, dir: true, size: 0, children: [] });
+    // A new chat gets a visible, empty workspace folder before its first file is created.
+    let conversations = t.children.find((c) => c.name === "conversations");
+    if (!conversations) { conversations = { name: "conversations", path: "conversations", dir: true, size: 0, children: [] }; t.children.push(conversations); t.children.sort((a, b) => Number(b.dir) - Number(a.dir) || a.name.localeCompare(b.name)); }
+    if (!conversations.children.some((c) => c.path === mine)) conversations.children.unshift({ name: mine.split("/").pop() ?? "", path: mine, dir: true, size: 0, children: [] });
     return t;
   }, [files, mine]);
   const artifacts = useMemo(() => files.filter((f) => f.rel_path.startsWith("artifacts/")), [files]);

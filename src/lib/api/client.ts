@@ -86,7 +86,19 @@ export const api = {
     const items = (r.entries ?? []).map((entry) => ({ ...entry, size: entry.size ?? 0, modified: 0 }));
     return { ok: r.ok, path, items, total: items.length, showing: items.length };
   },
-  fsRead: (path: string) => apiJson<FsReadResponse>("/api/fs/read", { path }),
+  fsRead: async (path: string): Promise<FsReadResponse> => {
+    try {
+      return await apiJson<FsReadResponse>("/api/fs/read", { path });
+    } catch (error) {
+      // v5.4 may reject regular files on /api/fs/read; its authenticated download route remains usable.
+      if (!(error instanceof ApiError) || error.status !== 404) throw error;
+      const res = await apiFetch(`/api/fs/download?path=${encodeURIComponent(path)}`, { method: "GET" });
+      if (!res.ok) throw await parseError(res);
+      const content = await res.text();
+      const totalLines = content ? content.split("\n").length : 0;
+      return { ok: true, path, content, total_lines: totalLines, returned_lines: totalLines, truncated: false };
+    }
+  },
   fsWrite: async (path: string, content: string, append = false): Promise<FsWriteResponse> => {
     if (append) throw new ApiError(501, "append_unavailable", "Añadir a un archivo no está disponible en el servidor v5.4.");
     const r = await apiJson<{ ok: boolean; path: string; bytes_written: number }>("/api/fs/write", { path, content });
