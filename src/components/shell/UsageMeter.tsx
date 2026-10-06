@@ -14,10 +14,7 @@ export function UsageMeter() {
   const load = useCallback(async () => {
     try {
       const a = await api.account();
-      const num = (k: string) => (typeof a[k] === "number" ? (a[k] as number) : undefined);
-      const balance = num("tokens_balance"), used = num("tokens_used");
-      if (balance === undefined) return;
-      setAcc({ plan: String(a["plan"] ?? "—"), balance, used: used ?? 0, ...(num("images_used") !== undefined ? { images: num("images_used")! } : {}), ...(num("images_quota") ? { quota: num("images_quota")! } : {}), ...(num("inflight") !== undefined ? { inflight: num("inflight")! } : {}) });
+      setAcc({ plan: a.plan || "—", balance: a.tokens_balance, used: a.tokens_used, images: a.images_used, ...(a.images_quota ? { quota: a.images_quota } : {}), inflight: a.inflight });
     } catch { /* hidden when the account is not reachable */ }
   }, []);
   useEffect(() => {

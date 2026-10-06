@@ -1,7 +1,18 @@
-# Erasmus Web v0.1.0
+# Erasmus Web
 
-Cliente web (SPA estática) de Erasmus Platform. Se conecta al puente existente tras nginx (`/erasmus-api/` → `127.0.0.1:4001`).
+SPA de Erasmus Platform conectada al gateway v5.4 mediante una única base (`VITE_API_BASE`).
 
-- `VITE_API_BASE` (defecto `/erasmus-api`). No existe modo demostración. Inicio de sesión por código `erm-…` (ver INTEGRATION_NOTES.md).
-- `npm i && npm run build` → build estático con fallback SPA.
-- Contratos, despliegue, endpoints PROPOSED: ver `INTEGRATION_NOTES.md`. Análisis: `ANALYSIS.md`.
+## Desarrollo
+
+```bash
+bun install
+bun run dev
+```
+
+`.env.development` apunta al gateway de desarrollo. En producción conviene usar `VITE_API_BASE=/erasmus-api` y servir el build estático tras nginx con fallback SPA.
+
+## Acceso
+
+No existe modo demostración. El usuario entra con una llave `erm-XXXX-XXXX-XXXXX-XXXX`; la sesión resultante vive en `sessionStorage`, y los datos locales quedan separados por `user_id`.
+
+Consulta `INTEGRATION_NOTES.md` para el contrato de red, capacidades y pendientes detectados en el servidor.

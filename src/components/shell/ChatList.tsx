@@ -1,4 +1,3 @@
-import { DIRECT } from "@/lib/api/config";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -72,7 +71,7 @@ export function ChatList({ activeId, activeTitle, version, onOpen, onRename }: {
 
   return (
     <>
-      {err && <p className={"px-2.5 py-2 text-[13px] " + (DIRECT ? "text-e-dim" : "text-e-err")}>{DIRECT ? "El historial no está disponible en esta versión." : err}</p>}
+      {err && <p className="px-2.5 py-2 text-[13px] text-e-err">{err}</p>}
       {chats === null && !err && <p className="px-2.5 py-2 text-[13px] text-e-dim">Cargando…</p>}
       {isNew && (
         <div className="mb-2">

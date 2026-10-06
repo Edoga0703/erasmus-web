@@ -4,7 +4,7 @@ import { getModelConfig, saveModelConfig, type ReasoningEffort } from "@/lib/api
 
 const EFFORTS: [ReasoningEffort, string, string][] = [["none", "Sin razonamiento", "Respuesta inmediata"], ["low", "Bajo", "Rápido, piensa poco"], ["medium", "Medio", "Equilibrado (predeterminado)"], ["high", "Alto", "Piensa más a fondo"]];
 
-/** Reasoning level pill (reasoning_effort on every /api/chat call), persisted with the model config. */
+/** Reasoning level pill (reasoning_effort on every completion), persisted with the model config. */
 function ReasoningPicker({ disabled }: { disabled?: boolean | undefined }) {
   const [v, setV] = useState<ReasoningEffort>("medium");
   useEffect(() => {
@@ -100,7 +100,7 @@ export function Composer({ busy, disabled, onSend, onStop, draft, centered }: {
           ref={ref}
           rows={1}
           value={text}
-          placeholder={disabled ? "Sin conexión con el puente" : "Pregunta lo que quieras"}
+          placeholder={disabled ? "Sin conexión con Erasmus" : "Pregunta lo que quieras"}
           aria-label="Mensaje"
           onChange={(e) => { setText(e.target.value); grow(e.target); }}
           onKeyDown={onKey}

@@ -12,6 +12,7 @@ export function useConnection() {
   const check = useCallback(async () => {
     setState("checking");
     try {
+      await api.session();
       const s = await api.status();
       setStatus(s);
       setState("online");
@@ -19,7 +20,7 @@ export function useConnection() {
     } catch (e) {
       const err = e instanceof ApiError ? e : new ApiError(0, "network", "Sin conexión");
       setState(err.status === 403 || err.status === 401 ? "denied" : "offline");
-      setMessage(err.status === 0 ? "No se pudo conectar con el puente." : err.message);
+      setMessage(err.status === 0 ? "No se pudo conectar con Erasmus." : err.message);
     }
   }, []);
 

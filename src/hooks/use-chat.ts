@@ -73,7 +73,7 @@ function recoverLocalChat(): LocalChatSnapshot | null {
     return null;
   }
 }
-/** Model-facing text of a user message: inline text of attachments (direct mode) or their sandbox paths. */
+/** Model-facing text of a user message: inline attachment text plus server workspace paths when available. */
 type ContentPart = { type: "text"; text: string } | { type: "image_url"; image_url: { url: string } };
 /** Images go as OpenAI-style image_url parts (the model accepts text + image input). */
 function toModelContent(m: UIMessage): string | ContentPart[] {
@@ -107,14 +107,14 @@ function modelHistory(all: UIMessage[], excludeId?: string) {
 }
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-export const sandboxDir = (convId: string) => `sandbox/${convId}`;
+export const conversationDir = (convId: string) => `conversations/${convId}`;
 
 async function runBlock(b: ToolBlock, convId: string): Promise<{ state: ToolState; feedback: string | null }> {
   try {
     if (b.kind === "code:python" || b.kind === "code:bash") {
       const language = b.kind === "code:python" ? "python" : "bash";
       const t0 = performance.now();
-      const r = await api.exec({ language, code: b.body, cwd: sandboxDir(convId), timeout: EXEC_TIMEOUT_DEFAULT });
+      const r = await api.exec({ language, code: b.body, cwd: conversationDir(convId), timeout: EXEC_TIMEOUT_DEFAULT });
       const ms = r.duration_ms ?? Math.round(performance.now() - t0);
       const stdout = cap(r.stdout ?? "");
       const stderr = cap(r.stderr ?? "");
@@ -355,7 +355,7 @@ export function useChat(opts: { model: string }) {
       }
       const err = e instanceof ApiError ? e : null;
       const retryable = !err || err.status === 0 || err.status === 408 || err.status >= 500;
-      const message = !err ? "Error inesperado en la conversación." : err.status === 0 ? "Sin conexión con el puente." : err.status === 504 || err.status === 408 ? "Tiempo de espera agotado." : err.message;
+      const message = !err ? "Error inesperado en la conversación." : err.status === 0 ? "Sin conexión con Erasmus." : err.status === 504 || err.status === 408 ? "Tiempo de espera agotado." : err.message;
       if (activeAssistantId) patch(activeAssistantId, { streaming: false, error: { message, retryable } });
       setFailure({ message, retryable, nonce: Date.now() });
     } finally {
