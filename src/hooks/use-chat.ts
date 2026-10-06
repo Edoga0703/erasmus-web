@@ -271,11 +271,13 @@ export function useChat(opts: { model: string }) {
     abortRef.current = ctrl;
     let executed = 0;
     let activeAssistantId: string | null = null;
+    let proactiveFailed = false;
     try {
       for (let step = 0; step < MAX_AGENT_STEPS; step++) {
         const ctxLen = await getContextLength(opts.model);
-        if (historyTokens(modelHistory(msgsRef.current)) > ctxLen * COMPACT_AT - ANSWER_RESERVE) {
-          await compactNow(ctrl.signal, ctxLen);
+        if (!proactiveFailed && historyTokens(modelHistory(msgsRef.current)) > ctxLen * COMPACT_AT - ANSWER_RESERVE) {
+          // A failed attempt is not repeated in the same turn, so the chat never shows duplicate lines.
+          if (!(await compactNow(ctrl.signal, ctxLen))) proactiveFailed = true;
           if (ctrl.signal.aborted) break;
         }
         let retried = false;
