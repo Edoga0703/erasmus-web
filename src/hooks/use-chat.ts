@@ -78,9 +78,9 @@ type ContentPart = { type: "text"; text: string } | { type: "image_url"; image_u
 /** Images go as OpenAI-style image_url parts (the model accepts text + image input). */
 function toModelContent(m: UIMessage): string | ContentPart[] {
   const text = withAttachments(m);
-  const imgs = m.attachments?.filter((a) => a.image) ?? [];
+  const imgs = (m.attachments ?? []).flatMap((a) => a.image ? [{ type: "image_url" as const, image_url: { url: a.image } }] : []);
   if (!imgs.length) return text;
-  return [{ type: "text", text }, ...imgs.map((a) => ({ type: "image_url" as const, image_url: { url: a.image! } }))];
+  return [{ type: "text", text }, ...imgs];
 }
 function withAttachments(m: UIMessage): string {
   const a = m.attachments;
@@ -92,7 +92,8 @@ function withAttachments(m: UIMessage): string {
 /** What the model sees: latest finished summary (as system) + messages from its cut point; compaction lines never go to the model. */
 function summaryBase(all: UIMessage[]): { summary?: string; start: number } {
   for (let i = all.length - 1; i >= 0; i--) {
-    const m = all[i]!;
+    const m = all[i];
+    if (!m) continue;
     if (m.kind === "compaction" && m.compaction?.status === "done" && m.summary) {
       const ci = all.findIndex((x) => x.id === m.cutId);
       return { summary: m.summary, start: ci >= 0 ? ci : i + 1 };
@@ -112,19 +113,7 @@ export const conversationDir = (convId: string) => `conversations/${convId}`;
 async function runBlock(b: ToolBlock, convId: string): Promise<{ state: ToolState; feedback: string | null }> {
   try {
     if (b.kind === "code:python" || b.kind === "code:bash") {
-      const language = b.kind === "code:python" ? "python" : "bash";
-      const t0 = performance.now();
-      const r = await api.exec({ language, code: b.body, cwd: conversationDir(convId), timeout: EXEC_TIMEOUT_DEFAULT });
-      const ms = r.duration_ms ?? Math.round(performance.now() - t0);
-      const stdout = cap(r.stdout ?? "");
-      const stderr = cap(r.stderr ?? "");
-      const secs = (ms / 1000).toFixed(1);
-      const timedOut = r.exit_code === 124;
-      const out = [stdout, stderr && `[stderr]\n${stderr}`].filter(Boolean).join("\n");
-      return {
-        state: { status: r.exit_code === 0 ? "ok" : "error", exitCode: r.exit_code, durationMs: ms, stdout, stderr, detail: timedOut ? `Tiempo agotado (${EXEC_TIMEOUT_DEFAULT} s)` : undefined },
-        feedback: `[RESULTADO ${b.kind} (exit ${r.exit_code}, ${secs}s)]\n${out.slice(0, 8000) || "(sin salida)"}`,
-      };
+      return { state: { status: "saved" }, feedback: null };
     }
     if (b.kind === "file:list") {
       const r = await api.fsList(b.target || ".");
@@ -240,7 +229,8 @@ export function useChat(opts: { model: string }) {
       return false;
     }
     const older = rest.slice(0, rest.length - KEEP_RECENT);
-    const cut = rest[rest.length - KEEP_RECENT]!;
+    const cut = rest[rest.length - KEEP_RECENT];
+    if (!cut) return false;
     let transcript = (prev ? `Resumen previo:\n${prev}\n\n` : "") + older.map((m) => `${m.role === "user" ? "Usuario" : "Erasmus"}: ${withAttachments(m)}`).join("\n\n");
     const maxChars = Math.floor(ctxLen * 0.6) * 4;
     if (transcript.length > maxChars) transcript = "…" + transcript.slice(-maxChars);
@@ -340,7 +330,8 @@ export function useChat(opts: { model: string }) {
             patch(aid, (m) => ({ tools: { ...m.tools, [i]: { status: "limit", detail: "Límite de pasos alcanzado (30 bloques por turno)." } } }));
             continue;
           }
-          const blk = blocks[i]!;
+           const blk = blocks[i];
+           if (!blk) continue;
           patch(aid, (m) => ({ tools: { ...m.tools, [i]: { status: "running" } } }));
           const { state, feedback: fb } = await runBlock(blk, chatId);
           executed++;
@@ -349,7 +340,8 @@ export function useChat(opts: { model: string }) {
         }
         if (ctrl.signal.aborted) break;
         if (limitHit) { setError("Límite de pasos alcanzado: el agente se detuvo tras 30 bloques."); break; }
-        if (step === MAX_AGENT_STEPS - 1) { setError("Pausa de control: límite de pasos del agente alcanzado."); break; }
+         if (!feedback.length) break;
+         if (step === MAX_AGENT_STEPS - 1) { setError("Pausa de control: límite de pasos del agente alcanzado."); break; }
         commit((ms) => [...ms, { id: uid(), role: "user", hidden: true, content: `[RESULTADOS DE HERRAMIENTAS]\n${feedback.join("\n\n")}`, ts: Date.now() }]);
       }
     } catch (e) {

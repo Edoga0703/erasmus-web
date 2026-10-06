@@ -32,6 +32,13 @@ export function parseSegments(content: string): Segment[] {
     const end = content.indexOf("```", start);
     const closed = end >= 0;
     const body = (closed ? content.slice(start, end) : content.slice(start)).replace(/\n$/, "");
+    if (kind === "code:python" || kind === "code:bash") {
+      // Unsupported execution blocks remain ordinary, visible Markdown code.
+      segs.push({ type: "text", text: `\`\`\`${kind === "code:python" ? "python" : "bash"}\n${body}${closed ? "\n```" : ""}` });
+      pos = closed ? end + 3 : content.length;
+      OPEN.lastIndex = pos;
+      continue;
+    }
     const target = kind === "file:write" || kind === "file:append" ? arg : body.trim().split("\n")[0] ?? "";
     segs.push({ type: "block", index: idx++, block: { kind, target: kind.startsWith("code:") ? (body.trim().split("\n")[0] ?? "") : target, body, closed } });
     pos = closed ? end + 3 : content.length;

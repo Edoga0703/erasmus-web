@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowRight, Check, Copy, Loader2, Ticket } from "lucide-react";
 import { PublicHeader } from "@/components/PublicHeader";
 import { claimCoupon } from "@/lib/auth";
@@ -28,6 +28,17 @@ function BuyPage() {
   const [accessCode, setAccessCode] = useState("");
   const [copied, setCopied] = useState(false);
 
+  useEffect(() => {
+    if (!copied) return;
+    const timer = window.setTimeout(() => setCopied(false), 2000);
+    return () => window.clearTimeout(timer);
+  }, [copied]);
+
+  const copyAccess = async () => {
+    try { await navigator.clipboard.writeText(accessCode); setCopied(true); setError(""); }
+    catch { setError("No se pudo copiar. Selecciona y copia tu código manualmente."); }
+  };
+
   const claim = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!coupon.trim() || busy) return;
@@ -53,8 +64,9 @@ function BuyPage() {
             <p className="mt-2 text-[13.5px] leading-relaxed text-e-dim">{t("buy_save_key")}</p>
             <div className="mt-5 flex items-center gap-2 rounded-xl border border-e-line bg-e-bg3 px-3 py-3">
               <code className="min-w-0 flex-1 select-all break-all text-[13px]">{accessCode}</code>
-              <button type="button" className="e-icon-btn shrink-0" aria-label={t("buy_copy")} onClick={() => { void navigator.clipboard.writeText(accessCode); setCopied(true); }}><Copy className="size-4" /></button>
+              <button type="button" className="e-icon-btn shrink-0" aria-label={t("buy_copy")} onClick={() => void copyAccess()}><Copy className="size-4" /></button>
             </div>
+            {error && <p role="alert" className="mt-2 text-[13px] text-e-err">{error}</p>}
             {copied && <p className="mt-2 text-[12.5px] text-e-ok">{t("buy_copied")}</p>}
             <button type="button" onClick={() => void navigate({ to: "/chat", replace: true })} className="mt-6 flex h-11 w-full items-center justify-center gap-2 rounded-full bg-e-acc text-[14px] font-medium text-e-bg2">
               {t("buy_continue")} <ArrowRight className="size-4" />

@@ -16,7 +16,8 @@ const snippet = (text: string, query: string) => {
 export function SearchDialog({ open, onClose, onOpen, onNew, version }: { open: boolean; onClose: () => void; onOpen: (id: string) => void; onNew: () => void; version: number }) {
   const { chats, err } = useChatManifest(version + (open ? 1 : 0));
   const [q, setQ] = useState("");
-  const [matches, setMatches] = useState<Record<string, Match>>({});
+  const [result, setResult] = useState<{ term: string; matches: Record<string, Match> }>({ term: "", matches: {} });
+  const matches = result.term === q.trim() ? result.matches : {};
   const [searchingContent, setSearchingContent] = useState(false);
   const groups = useMemo(() => {
     const term = q.trim().toLowerCase();
@@ -26,7 +27,8 @@ export function SearchDialog({ open, onClose, onOpen, onNew, version }: { open: 
 
   useEffect(() => {
     const term = q.trim();
-    if (term.length < 3 || !chats?.length) { setMatches({}); setSearchingContent(false); return; }
+    setSearchingContent(false);
+    if (!open || term.length < 3 || !chats?.length) { setResult({ term, matches: {} }); return; }
     let cancelled = false;
     const timer = window.setTimeout(async () => {
       setSearchingContent(true);
@@ -40,10 +42,10 @@ export function SearchDialog({ open, onClose, onOpen, onNew, version }: { open: 
         } catch { /* Title search remains available. */ }
         if (cancelled) return;
       }
-      if (!cancelled) { setMatches(found); setSearchingContent(false); }
+      if (!cancelled) { setResult({ term, matches: found }); setSearchingContent(false); }
     }, 350);
     return () => { cancelled = true; window.clearTimeout(timer); };
-  }, [chats, q]);
+  }, [chats, open, q]);
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) { onClose(); setQ(""); } }}>

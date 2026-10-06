@@ -1,44 +1,32 @@
 import { CustomInstructions } from "./CustomInstructions";
 import { useCallback, useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight, Download, Moon, RefreshCw, ShieldCheck, Sun, WifiOff, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Moon, RefreshCw, ShieldCheck, Sun, Trash2, X } from "lucide-react";
 import { api, ApiError } from "@/lib/api/client";
-import { API_BASE, displayModel } from "@/lib/api/config";
-import type { StatusResponse } from "@/lib/api/types";
+import { displayModel, getModelConfig } from "@/lib/api/config";
+import { Button } from "@/components/ui/button";
+import { Link } from "@tanstack/react-router";
 import { setTheme, useTheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 import { ModelSettings } from "./ModelSettings";
-import { Diagnostics } from "./Diagnostics";
-import pkg from "../../../package.json";
 
-export const APP_VERSION = "Erasmus Web v0.1.0";
+export const APP_VERSION = "Erasmus Web 1.0 · Beta test";
+const UPDATED_AT = "6 de octubre de 2026";
 
-type Probe = { kind: "idle" } | { kind: "checking" } | { kind: "ok"; ms: number; s: StatusResponse } | { kind: "error"; msg: string };
 type Counts = { chats: number; files: number; workspace: string } | null;
 
-const TABS = [["general", "General"], ["custom", "Personalización"], ["model", "Modelo"], ["bridge", "Estado"], ["diag", "Diagnóstico"], ["data", "Datos"], ["security", "Seguridad"], ["about", "Acerca de"]] as const;
+const TABS = [["general", "General"], ["custom", "Personalización"], ["model", "Modelo"], ["data", "Datos"], ["security", "Seguridad"], ["about", "Acerca de"]] as const;
 type Tab = (typeof TABS)[number][0];
 
 /** Settings modal. Rendered on top of the shell; never unmounts the chat, so chat state survives open/close. */
-export function SettingsDialog({ onClose }: { onClose: () => void }) {
-  const [tab, setTab] = useState<Tab>("general");
-  const [mobileDetail, setMobileDetail] = useState(false);
+export function SettingsDialog({ onClose, initialTab = "general" }: { onClose: () => void; initialTab?: Tab }) {
+  const [tab, setTab] = useState<Tab>(initialTab);
+  const [mobileDetail, setMobileDetail] = useState(initialTab !== "general");
   const theme = useTheme();
-  const [probe, setProbe] = useState<Probe>({ kind: "idle" });
+  const [deletionInfo, setDeletionInfo] = useState(false);
   const [counts, setCounts] = useState<Counts>(null);
   const [countErr, setCountErr] = useState("");
   const [zipping, setZipping] = useState(false);
   const [zipDone, setZipDone] = useState<{ name: string; size: number } | null>(null);
-
-  const verify = useCallback(async () => {
-    setProbe({ kind: "checking" });
-    const t0 = performance.now();
-    try {
-      const s = await api.status();
-      setProbe({ kind: "ok", ms: Math.round(performance.now() - t0), s });
-    } catch (e) {
-      setProbe({ kind: "error", msg: e instanceof ApiError && e.status !== 0 ? e.message : "No se pudo conectar con Erasmus." });
-    }
-  }, []);
 
   const loadCounts = useCallback(async () => {
     setCountErr("");
@@ -53,10 +41,10 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
 
   useEffect(() => { if (tab === "data") void loadCounts(); }, [tab, loadCounts]);
   useEffect(() => {
-    const k = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    const k = (e: KeyboardEvent) => { if (e.key === "Escape") { if (deletionInfo) setDeletionInfo(false); else onClose(); } };
     window.addEventListener("keydown", k);
     return () => window.removeEventListener("keydown", k);
-  }, [onClose]);
+  }, [deletionInfo, onClose]);
 
   const exportZip = async () => {
     setZipping(true); setZipDone(null); setCountErr("");
@@ -74,7 +62,6 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
     }
   };
 
-  const deps = Object.keys({ ...(pkg as { dependencies?: Record<string, string> }).dependencies }).sort();
   const btn = "inline-flex items-center gap-1.5 rounded-full border border-e-line px-3.5 py-1.5 text-[13.5px] hover:bg-e-bg3 disabled:opacity-50";
   const Row = ({ k, v }: { k: string; v: React.ReactNode }) => (
     <div className="flex items-baseline justify-between gap-3 border-b border-e-line py-3 text-[14px] last:border-0">
@@ -87,15 +74,15 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
       <div className="e-overlay absolute inset-0" onClick={onClose} />
       <div className="relative flex w-full max-w-2xl flex-col overflow-hidden border-e-line bg-e-bg2 text-e-tx sm:h-[min(600px,85vh)] sm:max-w-[680px] sm:rounded-2xl sm:border sm:shadow-e">
         <div className="flex h-14 shrink-0 items-center gap-1 border-b border-e-line px-4">
-          {mobileDetail && <button className="e-icon-btn sm:hidden" aria-label="Volver" onClick={() => setMobileDetail(false)}><ChevronLeft className="size-5" /></button>}
+          {mobileDetail && <Button variant="ghost" className="e-icon-btn sm:hidden" aria-label="Volver" onClick={() => setMobileDetail(false)}><ChevronLeft className="size-5" /></Button>}
           <h2 className="flex-1 text-[17px] font-semibold">{mobileDetail ? TABS.find((t) => t[0] === tab)?.[1] : "Ajustes"}<span className="hidden sm:inline">{mobileDetail ? "" : ""}</span></h2>
-          <button className="e-icon-btn" aria-label="Cerrar ajustes" onClick={onClose}><X className="size-3.5" /></button>
+          <Button variant="ghost" className="e-icon-btn" aria-label="Cerrar ajustes" onClick={onClose}><X className="size-3.5" /></Button>
         </div>
         <div className="flex min-h-0 flex-1 flex-col sm:flex-row">
           <nav className={cn("flex-col gap-0.5 p-2 sm:flex sm:w-48 sm:shrink-0", mobileDetail ? "hidden" : "flex flex-1")} role="tablist">
             {TABS.map(([id, label]) => (
-              <button key={id} role="tab" aria-selected={tab === id} onClick={() => { setTab(id); setMobileDetail(true); }}
-                className={cn("flex items-center justify-between rounded-lg px-3 py-2.5 text-left text-[14px] sm:py-2", tab === id ? "sm:bg-e-bg3" : "", "text-e-tx hover:bg-e-bg3")}>{label}<ChevronRight className="size-4 text-e-dim sm:hidden" /></button>
+              <Button variant="ghost" key={id} role="tab" aria-selected={tab === id} onClick={() => { setTab(id); setMobileDetail(true); }}
+                className={cn("flex items-center justify-between rounded-lg px-3 py-2.5 text-left text-[14px] sm:py-2", tab === id ? "sm:bg-e-bg3" : "", "text-e-tx hover:bg-e-bg3")}>{label}<ChevronRight className="size-4 text-e-dim sm:hidden" /></Button>
             ))}
           </nav>
           <div className={cn("min-h-0 flex-1 overflow-y-auto px-5 py-4 sm:block", mobileDetail ? "block" : "hidden")} role="tabpanel">
@@ -104,9 +91,9 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
                 <h3 className="mb-2 text-[13px] font-medium">Tema</h3>
                 <div className="flex gap-2">
                   {(["dark", "light"] as const).map((t) => (
-                    <button key={t} aria-pressed={theme === t} onClick={() => setTheme(t)} className={cn(btn, theme === t && "bg-e-bg3 text-e-tx")}>
+                    <Button variant="ghost" key={t} aria-pressed={theme === t} onClick={() => setTheme(t)} className={cn(btn, theme === t && "bg-e-bg3 text-e-tx")}>
                       {t === "dark" ? <Moon className="size-3.5" /> : <Sun className="size-3.5" />} {t === "dark" ? "Oscuro" : "Claro"}
-                    </button>
+                    </Button>
                   ))}
                 </div>
                 <p className="mt-2 text-[12px] text-e-dim">Se guarda en este navegador. Los gráficos y diagramas se redibujan al cambiarlo.</p>
@@ -114,30 +101,6 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
             )}
             {tab === "custom" && <CustomInstructions />}
             {tab === "model" && <ModelSettings />}
-            {tab === "diag" && <Diagnostics />}
-            {tab === "bridge" && (
-              <section>
-                <Row k="Endpoint" v={API_BASE} />
-                <div className="mt-3"><button className={btn} onClick={() => void verify()} disabled={probe.kind === "checking"}>
-                  <RefreshCw className={cn("size-3.5", probe.kind === "checking" && "animate-spin")} /> Verificar servidor
-                </button></div>
-                {probe.kind === "ok" && (
-                  <div className="mt-3" data-probe="ok">
-                    <Row k="Estado" v={<span className="text-e-ok">{probe.s.status}</span>} />
-                    <Row k="Latencia" v={`${probe.ms} ms`} />
-                    <Row k="Modelo activo" v={displayModel(probe.s.brand_model ?? "erasmus-v1")} />
-                    <Row k="Servicio" v="Erasmus" />
-                  </div>
-                )}
-                {probe.kind === "error" && (
-                  <div className="e-err-banner mt-3 flex items-center gap-3 px-3 py-2 text-[13px]" role="alert" data-probe="error">
-                    <WifiOff className="size-4 shrink-0" />
-                    <span className="flex-1">Servidor no disponible: {probe.msg}</span>
-                    <button onClick={() => void verify()} className="inline-flex items-center gap-1 rounded-md border border-current px-2 py-1 text-[12px]"><RefreshCw className="size-3" /> Reintentar</button>
-                  </div>
-                )}
-              </section>
-            )}
             {tab === "data" && (
               <section>
                 {counts && (<>
@@ -149,30 +112,31 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
                 {countErr && (
                   <div className="e-err-banner mt-3 flex items-center gap-3 px-3 py-2 text-[13px]" role="alert">
                     <span className="flex-1">{countErr}</span>
-                    <button onClick={() => void loadCounts()} className="inline-flex items-center gap-1 rounded-md border border-current px-2 py-1 text-[12px]"><RefreshCw className="size-3" /> Reintentar</button>
+                    <Button variant="ghost" onClick={() => void loadCounts()} className="inline-flex items-center gap-1 rounded-md border border-current px-2 py-1 text-[12px]"><RefreshCw className="size-3" /> Reintentar</Button>
                   </div>
                 )}
-                <div className="mt-4"><button className={btn} onClick={() => void exportZip()} disabled={zipping} data-zip-export>
+                <div className="mt-4"><Button variant="ghost" className={btn} onClick={() => void exportZip()} disabled={zipping} data-zip-export>
                   <Download className="size-3.5" /> {zipping ? "Exportando…" : "Exportar workspace (ZIP)"}
-                </button>
+                </Button>
                 {zipDone && <p className="mt-2 text-[12.5px] text-e-ok" data-zip-done>Descargado {zipDone.name} ({(zipDone.size / 1024).toFixed(1)} KB).</p>}
                 </div>
               </section>
             )}
             {tab === "security" && (
-              <section className="flex items-center gap-2 text-[13px]">
-                <ShieldCheck className="size-4 text-e-ok" />
-                <span>Sesión protegida y aislada por cuenta.</span>
-                <span className="text-e-dim">El identificador nunca se muestra.</span>
+              <section className="space-y-5 text-[13px] leading-relaxed">
+                <h3 className="flex items-center gap-2 text-[15px] font-medium"><ShieldCheck className="size-4 text-e-ok" /> Tus datos y tu cuenta</h3>
+                <div><h4 className="font-medium">Conversaciones y archivos</h4><p className="mt-1 text-e-dim">Los mensajes, respuestas y archivos guardados se asocian a tu cuenta. El contenido necesario de la conversación se envía al servicio de IA para generar respuestas; no hay cifrado de extremo a extremo.</p></div>
+                <div><h4 className="font-medium">En este navegador</h4><p className="mt-1 text-e-dim">La sesión se guarda en esta pestaña. Las preferencias y la recuperación de tu conversación se guardan por cuenta en el navegador. Cerrar sesión elimina esos datos locales, pero no borra el historial ni los archivos del servidor.</p></div>
+                <div><h4 className="font-medium">Conservación y control</h4><p className="mt-1 text-e-dim">La política establece un máximo de 30 días de conservación. La activación del borrado automático en el servidor está pendiente de confirmación. Puedes exportar tus conversaciones y archivos desde Datos antes de solicitar su eliminación.</p><Link to="/privacidad" className="mt-2 inline-block text-e-tx underline underline-offset-4">Política de privacidad</Link></div>
+                <div className="border-t border-e-line pt-4"><h4 className="font-medium">Eliminar cuenta</h4><p className="mb-3 mt-1 text-e-dim">El borrado definitivo debe eliminar la cuenta y sus datos guardados. Esta opción aún no está disponible en el servidor.</p><Button variant="outline" className="border-e-line bg-transparent text-e-err hover:bg-e-bg3 hover:text-e-err" onClick={() => setDeletionInfo(true)}><Trash2 /> Eliminar cuenta</Button>
+                  {deletionInfo && <div role="status" className="mt-3 border-l-2 border-e-line pl-3"><p className="font-medium">Eliminación todavía no disponible</p><p className="mt-1 text-e-dim">No se ha eliminado tu cuenta ni enviado ninguna solicitud. El borrado definitivo se habilitará cuando el servidor lo permita; el canal de contacto también está pendiente.</p><Button variant="ghost" size="sm" className="mt-2 text-e-tx" onClick={() => setDeletionInfo(false)}>Entendido</Button></div>}
+                </div>
               </section>
             )}
             {tab === "about" && (
               <section className="text-[13px]">
-                <p className="font-medium">{APP_VERSION}</p>
-                <p className="mt-1 text-e-dim">Licencias de dependencias npm: MIT (provisional, pendiente de auditoría final).</p>
-                <ul className="mt-3 columns-1 gap-4 font-mono text-[11.5px] text-e-dim sm:columns-2">
-                  {deps.map((d) => <li key={d} className="truncate">{d} · MIT*</li>)}
-                </ul>
+                <h3 className="text-[16px] font-medium">{APP_VERSION}</h3>
+                <div className="mt-4"><Row k="Modelo" v={displayModel(getModelConfig().model)} /><Row k="Última actualización" v={UPDATED_AT} /></div>
               </section>
             )}
           </div>
