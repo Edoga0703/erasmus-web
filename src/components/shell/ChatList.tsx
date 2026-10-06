@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { MoreHorizontal, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { api, ApiError } from "@/lib/api/client";
 import type { ChatMeta } from "@/lib/api/types";
@@ -37,7 +37,7 @@ export function useChatManifest(version: number) {
   return { chats, setChats, err };
 }
 
-/** History from GET /api/workspace/chats, updated desc. Delete stays disabled while delete_chat is PROPOSED. */
+/** History from GET /api/workspace/chats, updated desc. Deletion is omitted until the server supports it. */
 export function ChatList({ activeId, activeTitle, version, onOpen, onRename }: {
   activeId: string;
   activeTitle: string;
@@ -111,9 +111,7 @@ export function ChatList({ activeId, activeTitle, version, onOpen, onRename }: {
                       <DropdownMenuItem className="gap-2.5 rounded-lg px-3 py-2 text-[14px]" onSelect={() => { setDraft(c.title); setEditing(c.id); }}>
                         <Pencil className="size-4" /> Cambiar nombre
                       </DropdownMenuItem>
-                      <DropdownMenuItem disabled className="gap-2.5 rounded-lg px-3 py-2 text-[14px] text-e-err" title="Disponible pronto">
-                        <Trash2 className="size-4" /> Eliminar <span className="ml-auto text-[11px] text-e-dim">disponible pronto</span>
-                      </DropdownMenuItem>
+
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </>

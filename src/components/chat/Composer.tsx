@@ -17,9 +17,9 @@ function ReasoningPicker({ disabled }: { disabled?: boolean | undefined }) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <button type="button" disabled={disabled} aria-label={`Nivel de razonamiento: ${label}`} className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-[13.5px] text-e-dim hover:bg-e-bg3 hover:text-e-tx">
-          <Brain className="size-4" /><span className="hidden sm:inline">{v === "none" ? "Sin razonar" : `Razonar: ${label}`}</span>
-        </button>
+        <Button variant="ghost" type="button" disabled={disabled} aria-label={`Nivel de razonamiento: ${label}`} className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-[13.5px] text-e-dim hover:bg-e-bg3 hover:text-e-tx">
+          <Brain className="size-4" /><span>{v === "none" ? "Sin razonar" : label}</span>
+        </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" side="top" className="e-pop min-w-64 p-1.5">
         <div className="px-3 pb-1 pt-1.5 text-[12px] font-medium text-e-dim">Nivel de razonamiento</div>
@@ -33,6 +33,7 @@ function ReasoningPicker({ disabled }: { disabled?: boolean | undefined }) {
     </DropdownMenu>
   );
 }
+import { Button } from "@/components/ui/button";
 import { AttachChip } from "./AttachChip";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
@@ -43,13 +44,26 @@ export function Composer({ busy, disabled, onSend, onStop, draft, centered }: {
 }) {
   const [text, setText] = useState("");
   const [files, setFiles] = useState<{ f: File; url?: string | undefined }[]>([]);
+  const queuedFiles = useRef<typeof files>([]);
+  const [fileNotice, setFileNotice] = useState("");
+  useEffect(() => () => queuedFiles.current.forEach((x) => { if (x.url) URL.revokeObjectURL(x.url); }), []);
   const addFiles = (list: FileList | null) => {
     if (!list) return;
-    const add = Array.from(list).slice(0, 20).map((f) => ({ f, url: f.type.startsWith("image/") ? URL.createObjectURL(f) : undefined }));
-    setFiles((cur) => [...cur, ...add].slice(0, 20));
+    const incoming = Array.from(list);
+    const available = Math.max(0, 20 - queuedFiles.current.length);
+    const accepted = incoming.slice(0, available).map((f) => ({ f, url: f.type.startsWith("image/") ? URL.createObjectURL(f) : undefined }));
+    const discarded = incoming.length - accepted.length;
+    queuedFiles.current = [...queuedFiles.current, ...accepted];
+    setFiles(queuedFiles.current);
+    setFileNotice(discarded ? `Puedes añadir hasta 20 archivos por mensaje. Se ${discarded === 1 ? "descartó 1 archivo" : `descartaron ${discarded} archivos`} adicionales; los que ya habías añadido se mantienen.` : "");
     ref.current?.focus();
   };
-  const removeFile = (i: number) => setFiles((cur) => { const x = cur[i]; if (x?.url) URL.revokeObjectURL(x.url); return cur.filter((_, j) => j !== i); });
+  const removeFile = (i: number) => {
+    const x = queuedFiles.current[i];
+    if (x?.url) URL.revokeObjectURL(x.url);
+    queuedFiles.current = queuedFiles.current.filter((_, j) => j !== i);
+    setFiles(queuedFiles.current);
+  };
   const ref = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -64,7 +78,10 @@ export function Composer({ busy, disabled, onSend, onStop, draft, centered }: {
     if ((!text.trim() && !files.length) || busy || disabled) return;
     onSend(text, files.map((x) => x.f));
     setText("");
+    queuedFiles.current.forEach((x) => { if (x.url) URL.revokeObjectURL(x.url); });
+    queuedFiles.current = [];
     setFiles([]);
+    setFileNotice("");
     if (ref.current) ref.current.style.height = "auto";
   };
   const onKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -87,7 +104,7 @@ export function Composer({ busy, disabled, onSend, onStop, draft, centered }: {
         <input ref={fileRef} type="file" hidden multiple accept="image/*,.txt,.csv,.md,.json,.py,.sh,.html,.xml,.yaml,.yml,.tsv,.log,.pdf" onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }} />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button type="button" aria-label="Añadir archivos" className="e-icon-btn shrink-0 text-e-tx" disabled={disabled}><Plus className="size-5" /></button>
+            <Button variant="ghost" type="button" aria-label="Añadir archivos" className="e-icon-btn shrink-0 text-e-tx" disabled={disabled}><Plus className="size-5" /></Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" side="top" className="e-pop min-w-56 p-1.5">
             <DropdownMenuItem className="gap-2 rounded-lg px-3 py-2 text-[14px]" onSelect={() => fileRef.current?.click()}>
@@ -107,15 +124,16 @@ export function Composer({ busy, disabled, onSend, onStop, draft, centered }: {
           className="max-h-[220px] min-h-[36px] flex-1 resize-none self-center bg-transparent py-1.5 text-[16px] leading-6 text-e-tx outline-none placeholder:text-e-dim"
         />
         {busy ? (
-          <button type="button" onClick={onStop} aria-label="Detener" className="inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-e-acc text-e-bg2">
+          <Button variant="ghost" type="button" onClick={onStop} aria-label="Detener" className="inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-e-acc text-e-bg2">
             <Square className="size-3.5" fill="currentColor" />
-          </button>
+          </Button>
         ) : (
-          <button type="button" onClick={submit} disabled={(!text.trim() && !files.length) || disabled} aria-label="Enviar" className="inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-e-acc text-e-bg2 disabled:opacity-30">
+          <Button variant="ghost" type="button" onClick={submit} disabled={(!text.trim() && !files.length) || disabled} aria-label="Enviar" className="inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-e-acc text-e-bg2 disabled:opacity-30">
             <ArrowUp className="size-5" strokeWidth={2.4} />
-          </button>
+          </Button>
         )}
       </div>
+      {fileNotice && <p role="status" className="mx-auto mt-2 max-w-3xl text-[12px] leading-5 text-e-dim">{fileNotice}</p>}
       {!centered && <p className="mx-auto mt-2 max-w-3xl text-center text-[12px] text-e-dim">Erasmus puede cometer errores. Comprueba la información importante.</p>}
     </section>
   );
