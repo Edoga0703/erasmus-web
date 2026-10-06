@@ -10,3 +10,5 @@
 - Treat model output as untrusted: sanitize rendered HTML/SVG and isolate HTML previews in sandboxed iframes.
 - Public status requests deliberately bypass the private client and must send no session credentials.
 - See `INTEGRATION_NOTES.md` for the active v5.4 contract and known server-side gaps.
+- Unsupported execution fences render as ordinary Markdown, never tool tasks — the documented gateway has no execution endpoint.
+- Account deletion stays informational until an authenticated deletion contract exists — clearing browser data is not server-side account deletion.

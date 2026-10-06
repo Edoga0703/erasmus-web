@@ -11,6 +11,7 @@ import { Composer } from "@/components/chat/Composer";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
 import { ChatList } from "./ChatList";
 import { SearchDialog } from "./SearchDialog";
 import { FilesPanel } from "@/components/files/FilesPanel";
@@ -55,6 +56,8 @@ export function AppShell() {
   const [filesOpen, setFilesOpen] = useState(false);
   const [panelTab, setPanelTab] = useState<"activity" | "files" | "artifacts">("files");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<"general" | "model" | "about">("general");
+  const [preparingFiles, setPreparingFiles] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [imagesOpen, setImagesOpen] = useState(false);
   const [viewImg, setViewImg] = useState<ChatImage | null>(null);
@@ -108,9 +111,9 @@ export function AppShell() {
   const visible = chat.messages.filter((m) => !m.hidden);
   const down = conn.state === "offline" || conn.state === "denied";
   const lastAssistant = [...visible].reverse().find((m) => m.role === "assistant" && !m.kind)?.id;
-  const lastUser = [...visible].reverse().find((m) => m.role === "user")?.content;
+  const lastUser = [...visible].reverse().find((m) => m.role === "user");
 
-  const regenerate = useCallback(() => { if (lastUser) void chat.send(lastUser); }, [lastUser, chat]);
+  const regenerate = useCallback(() => { if (lastUser && !preparingFiles) void chat.send(lastUser.content, lastUser.attachments); }, [lastUser, chat, preparingFiles]);
   const canLeave = () => !chat.temporary || chat.messages.length === 0 || window.confirm("Esta conversación temporal desaparecerá al salir. ¿Continuar?");
   const newChat = () => { if (!canLeave()) return; chat.reset(); setSideOpen(false); };
   const openChat = (id: string) => { if (!canLeave()) return; setSideOpen(false); setOpeningChat(true); chat.open(id).catch(() => toast.error("No se pudo abrir la conversación.")).finally(() => setOpeningChat(false)); };
@@ -121,31 +124,37 @@ export function AppShell() {
     const k = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
     const c = document.createElement("canvas");
     c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
-    c.getContext("2d")!.drawImage(bmp, 0, 0, c.width, c.height);
+    const ctx = c.getContext("2d");
+    if (!ctx) { bmp.close(); throw new Error("No se pudo procesar la imagen."); }
+    ctx.drawImage(bmp, 0, 0, c.width, c.height);
     bmp.close();
     return c.toDataURL(f.type === "image/png" ? "image/png" : "image/jpeg", 0.85);
   };
 
   /** Saves textual attachments in this conversation's workspace and sends their content to the model. */
   const sendWithFiles = async (text: string, files: File[]) => {
+    if (chat.busy || preparingFiles) return;
+    setPreparingFiles(true);
     const atts: Attachment[] = [];
+    try {
     for (const f of files) {
       const isImg = f.type.startsWith("image/");
       const att: Attachment = { name: f.name, size: f.size, url: isImg ? URL.createObjectURL(f) : undefined };
       if (isImg) { try { att.image = await imageToDataUrl(f); } catch { toast.error(`No se pudo leer ${f.name}.`); } }
       const textual = !isImg && f.type !== "application/pdf";
-      if (textual && f.size <= 2_000_000) {
+      if (textual) {
         try {
-          const path = `${conversationDir(chat.chatId)}/${f.name}`;
-          await api.fsWrite(path, await f.text());
           att.text = await f.text();
+          const path = `${conversationDir(chat.chatId)}/${f.name}`;
+          await api.fsWrite(path, att.text);
           att.path = path;
         } catch (e) { toast.error(e instanceof ApiError ? e.message : `No se pudo subir ${f.name}.`); }
-      } else if (textual) toast.error(`${f.name} supera 2 MB.`);
+      }
       atts.push(att);
     }
     if (atts.some((a) => a.path)) window.dispatchEvent(new Event("erasmus:files-changed"));
-    void chat.send(text, atts);
+    await chat.send(text, atts);
+    } finally { setPreparingFiles(false); }
   };
 
   const rail = !mobile && collapsed;
@@ -192,12 +201,12 @@ export function AppShell() {
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent side="top" align="start" className="e-pop w-60 p-1.5">
-            <DropdownMenuItem className="gap-2.5 rounded-lg px-3 py-2 text-[14px]" onSelect={() => { setSettingsOpen(true); setSideOpen(false); }}><Settings className="size-4" /> Ajustes</DropdownMenuItem>
+            <DropdownMenuItem className="gap-2.5 rounded-lg px-3 py-2 text-[14px]" onSelect={() => { setSettingsTab("general"); setSettingsOpen(true); setSideOpen(false); }}><Settings className="size-4" /> Ajustes</DropdownMenuItem>
             <DropdownMenuItem className="gap-2.5 rounded-lg px-3 py-2 text-[14px]" onSelect={() => setTheme(theme === "dark" ? "light" : "dark")}>
               {theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />} Tema {theme === "dark" ? "claro" : "oscuro"}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="gap-2.5 rounded-lg px-3 py-2 text-[14px]" onSelect={() => { setSettingsOpen(true); setSideOpen(false); }}><Info className="size-4" /> Acerca de</DropdownMenuItem>
+            <DropdownMenuItem className="gap-2.5 rounded-lg px-3 py-2 text-[14px]" onSelect={() => { setSettingsTab("about"); setSettingsOpen(true); setSideOpen(false); }}><Info className="size-4" /> Acerca de</DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem className="gap-2.5 rounded-lg px-3 py-2 text-[14px]" onSelect={() => void signOut()}><LogOut className="size-4" /> Cerrar sesión</DropdownMenuItem>
           </DropdownMenuContent>
@@ -208,7 +217,7 @@ export function AppShell() {
 
   const empty = visible.length === 0;
   const composer = (
-    <Composer busy={chat.busy} disabled={down} onSend={(t, f) => void sendWithFiles(t, f)} onStop={chat.stop} draft={draft} centered={empty} />
+    <Composer busy={chat.busy} disabled={down || preparingFiles} onSend={(t, f) => void sendWithFiles(t, f)} onStop={chat.stop} draft={draft} centered={empty} />
   );
 
   return (
@@ -241,7 +250,7 @@ export function AppShell() {
             <DropdownMenuContent align="start" className="e-pop min-w-60 p-1.5">
               <DropdownMenuItem className="gap-2.5 rounded-lg px-3 py-2" onSelect={() => chat.startTemporary()}><TimerReset /> Nueva conversación temporal</DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem className="gap-2.5 rounded-lg px-3 py-2" onSelect={() => setSettingsOpen(true)}><Settings /> Modelo y conexión</DropdownMenuItem>
+              <DropdownMenuItem className="gap-2.5 rounded-lg px-3 py-2" onSelect={() => { setSettingsTab("model"); setSettingsOpen(true); }}><Settings /> Modelo</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
           {conn.state !== "online" && <span className="ml-1 flex shrink-0 items-center gap-1.5 text-[12px] text-e-dim"><i className={cn("inline-block size-2 rounded-full", conn.state === "checking" ? "bg-e-dim" : "bg-e-err")} /><span className="hidden sm:inline">{conn.state === "checking" ? "Conectando…" : "Sin conexión"}</span></span>}
@@ -278,7 +287,8 @@ export function AppShell() {
           </section>
         ) : (
           <>
-            <section ref={scroller} onScroll={onScroll} className="flex-1 overflow-y-auto" onClick={(e) => {
+            <div className="relative flex min-h-0 flex-1">
+            <section ref={scroller} onScroll={onScroll} className="min-w-0 flex-1 overflow-y-auto" onClick={(e) => {
               const t = e.target as HTMLElement;
               if (t.tagName === "IMG" && t.closest(".e-md")) { const im = t as HTMLImageElement; setViewImg({ src: im.currentSrc || im.src, alt: im.alt || "Imagen", fromUser: false }); }
             }}>
@@ -291,10 +301,11 @@ export function AppShell() {
               </div>
             </section>
             {!atBottom && (
-              <button onClick={toBottom} aria-label="Ir al final" className="e-pop absolute bottom-32 left-1/2 z-10 inline-flex size-9 -translate-x-1/2 items-center justify-center rounded-full">
+               <Button variant="ghost" size="icon" onClick={toBottom} aria-label="Ir al final" title="Ir al final" className="e-pop absolute bottom-3 left-1/2 z-10 inline-flex size-9 -translate-x-1/2 items-center justify-center rounded-full">
                 <ArrowDown className="size-4" />
-              </button>
+               </Button>
             )}
+            </div>
             {chat.limit && (
               <div className="e-err-banner mx-auto mb-2 flex w-[calc(100%-2rem)] max-w-3xl flex-wrap items-center gap-2 px-3 py-2 text-[13px]" role="alert" data-limit={chat.limit.file ? "file" : "context"}>
                 <span className="flex-1">{chat.limit.message}</span>
@@ -324,7 +335,7 @@ export function AppShell() {
       )}
       {imagesOpen && <ImagesDialog images={collectImages(chat.messages)} onClose={() => setImagesOpen(false)} />}
       {viewImg && <ImageViewer img={viewImg} onClose={() => setViewImg(null)} />}
-      {settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)} />}
+       {settingsOpen && <SettingsDialog initialTab={settingsTab} onClose={() => setSettingsOpen(false)} />}
       <SearchDialog open={searchOpen} onClose={() => setSearchOpen(false)} onOpen={openChat} onNew={newChat} version={chat.listVersion} />
     </div>
   );
