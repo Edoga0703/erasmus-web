@@ -177,6 +177,9 @@
 .e-code-head button:hover { background: var(--bg4); color: var(--tx); }
 .e-code pre { margin: 0; padding: 14px 16px; overflow-x: auto; background: transparent; border: 0; border-radius: 0; white-space: pre; }
 .e-code pre code, .e-md pre code { font-family: var(--font-mono); font-size: 13.5px; line-height: 1.6; background: none; padding: 0; }
+.e-code-lines code { counter-reset: code-line; display: block; }
+.e-code-lines code > span { display: block; padding-left: 3.25rem; position: relative; min-height: 1.6em; }
+.e-code-lines code > span::before { counter-increment: code-line; content: counter(code-line); position: absolute; left: 0; width: 2.25rem; color: var(--dim); text-align: right; user-select: none; opacity: .7; }
 
 /* highlight.js — github / github-dark palettes */
 .hljs-comment, .hljs-quote { color: #6a737d; font-style: italic; }

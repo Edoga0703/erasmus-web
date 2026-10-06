@@ -4,6 +4,7 @@ import { CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsi
 import { activitySummary } from "@/lib/activity";
 import type { UIMessage } from "@/hooks/use-chat";
 import { ToolCard } from "./ToolCard";
+import { parseSegments } from "@/lib/blocks";
 
 const fmt = (ms: number) => {
   const seconds = Math.max(1, Math.round(ms / 1000));
@@ -34,23 +35,5 @@ export function ActivitySummary({ message }: { message: UIMessage }) {
 }
 
 function messageActivityBlocks(message: UIMessage) {
-  const { parseSegments } = requireBlocks();
   return parseSegments(message.content).flatMap((segment) => segment.type === "block" ? [{ index: segment.index, block: segment.block }] : []);
-}
-
-function requireBlocks() {
-  return { parseSegments: (content: string) => {
-    const out: { type: "block"; index: number; block: import("@/lib/blocks").ToolBlock }[] = [];
-    const pattern = /```(code:python|code:bash|file:list|file:read|file:write|file:append)([^\n]*)\n([\s\S]*?)(?:```|$)/gi;
-    let match: RegExpExecArray | null;
-    let index = 0;
-    while ((match = pattern.exec(content))) {
-      const kind = match[1] as import("@/lib/blocks").BlockKind;
-      const body = (match[3] ?? "").replace(/\n$/, "");
-      const arg = (match[2] ?? "").trim();
-      const target = kind.startsWith("code:") ? body.trim().split("\n")[0] ?? "" : (kind === "file:write" || kind === "file:append" ? arg : body.trim().split("\n")[0] ?? "");
-      out.push({ type: "block", index: index++, block: { kind, body, target, closed: content.indexOf("```", (match.index ?? 0) + 3) >= 0 } });
-    }
-    return out;
-  }};
 }
