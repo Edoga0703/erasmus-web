@@ -99,6 +99,7 @@ export function FilesPanel({ convId, refreshKey, messages, initialTab = "files",
     return () => window.removeEventListener("erasmus:files-changed", h);
   }, [load]);
   useEffect(() => { setOpen(new Set(["sandbox", mine])); setSel(null); }, [mine]);
+  useEffect(() => setTab(initialTab), [initialTab]);
 
   const tree = useMemo(() => {
     const t = buildTree(files);

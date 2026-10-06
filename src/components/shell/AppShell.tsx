@@ -89,6 +89,16 @@ export function AppShell() {
   }, []);
 
   useEffect(() => {
+    const openPanel = (event: Event) => {
+      const detail = (event as CustomEvent<"activity" | "files" | "artifacts">).detail;
+      setPanelTab(detail || "activity");
+      setFilesOpen(true);
+    };
+    window.addEventListener("erasmus:open-panel", openPanel);
+    return () => window.removeEventListener("erasmus:open-panel", openPanel);
+  }, []);
+
+  useEffect(() => {
     const el = scroller.current;
     if (el && el.scrollHeight - el.scrollTop - el.clientHeight < 160) el.scrollTop = el.scrollHeight;
   }, [chat.messages]);
@@ -101,8 +111,9 @@ export function AppShell() {
   const lastUser = [...visible].reverse().find((m) => m.role === "user")?.content;
 
   const regenerate = useCallback(() => { if (lastUser) void chat.send(lastUser); }, [lastUser, chat]);
-  const newChat = () => { chat.reset(); setSideOpen(false); };
-  const openChat = (id: string) => { setSideOpen(false); setOpeningChat(true); chat.open(id).catch(() => toast.error("No se pudo abrir la conversación.")).finally(() => setOpeningChat(false)); };
+  const canLeave = () => !chat.temporary || chat.messages.length === 0 || window.confirm("Esta conversación temporal desaparecerá al salir. ¿Continuar?");
+  const newChat = () => { if (!canLeave()) return; chat.reset(); setSideOpen(false); };
+  const openChat = (id: string) => { if (!canLeave()) return; setSideOpen(false); setOpeningChat(true); chat.open(id).catch(() => toast.error("No se pudo abrir la conversación.")).finally(() => setOpeningChat(false)); };
 
   /** Downscale photos (max 1600 px, JPEG) so they travel inline to the model. */
   const imageToDataUrl = async (f: File): Promise<string> => {

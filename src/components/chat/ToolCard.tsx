@@ -52,7 +52,7 @@ export function ToolCard({ block, state, streaming, compact = false }: { block: 
   const { label, Icon } = META[block.kind];
   const key = state?.status ?? (streaming && !block.closed ? "pending" : "queued");
   const st = STATUS[key] ?? { text: "", cls: "" };
-  const codeHtml = useMemo(() => (isCode && open ? highlight(block.body, block.kind === "code:python" ? "python" : "bash") : ""), [isCode, open, block.body, block.kind]);
+  const codeHtml = useMemo(() => (isCode && open ? highlight(block.body, block.kind === "code:python" ? "python" : "bash").split("\n").map((line) => `<span>${line || " "}</span>`).join("\n") : ""), [isCode, open, block.body, block.kind]);
   const hasBody = isCode || !!(state?.diff?.length || state?.output || block.body);
 
   return (

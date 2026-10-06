@@ -86,7 +86,7 @@ export const MessageView = memo(function MessageView({ m, isLast, busy, onRegene
           <CopyBtn text={plain} />
           <ActBtn label="Buena respuesta" active={vote === 1} onClick={() => setVote(vote === 1 ? 0 : 1)}><ThumbsUp className="size-4" fill={vote === 1 ? "currentColor" : "none"} /></ActBtn>
           <ActBtn label="Mala respuesta" active={vote === -1} onClick={() => setVote(vote === -1 ? 0 : -1)}><ThumbsDown className="size-4" fill={vote === -1 ? "currentColor" : "none"} /></ActBtn>
-          <ResponseMenu text={plain} disabled={busy} onRegenerate={isLast ? onRegenerate : undefined} onBranch={onBranch} />
+          <ResponseMenu text={plain} disabled={!!busy} onRegenerate={isLast ? onRegenerate : undefined} onBranch={onBranch} />
           {m.usage && (
             <span className="ml-2 text-[12px] tabular-nums text-e-dim" data-usage
               title={`Entrada: ${m.usage.prompt.toLocaleString("es-ES")} · Salida: ${m.usage.completion.toLocaleString("es-ES")}${m.usage.reasoning ? ` (razonamiento ${m.usage.reasoning.toLocaleString("es-ES")})` : ""}`}>

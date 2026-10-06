@@ -17,7 +17,7 @@ export function ActivitySummary({ message }: { message: UIMessage }) {
   if (!blocks.length) return null;
   return (
     <Tool defaultOpen={false} className="my-3 overflow-hidden rounded-xl border-e-line bg-e-bg2">
-      <CollapsibleTrigger className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-[13px] hover:bg-e-bg3">
+      <CollapsibleTrigger className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-[13px] hover:bg-e-bg3" onDoubleClick={() => window.dispatchEvent(new CustomEvent("erasmus:open-panel", { detail: "activity" }))}>
         {summary.running ? <Loader2 className="size-3.5 shrink-0 animate-spin text-e-dim" /> : <CheckCircle2 className="size-3.5 shrink-0 text-e-ok" />}
         <span className="font-medium">{summary.running ? "Erasmus está trabajando" : "Actividad completada"}</span>
         <span className="min-w-0 flex-1 truncate text-e-dim">

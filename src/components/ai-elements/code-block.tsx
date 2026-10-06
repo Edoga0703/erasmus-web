@@ -522,6 +522,7 @@ export type CodeBlockLanguageSelectorTriggerProps = ComponentProps<
 
 export const CodeBlockLanguageSelectorTrigger = ({
   className,
+  size: _size,
   ...props
 }: CodeBlockLanguageSelectorTriggerProps) => (
   <SelectTrigger
