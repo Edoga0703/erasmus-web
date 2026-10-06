@@ -73,7 +73,6 @@ function LoginPage() {
             className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-e-acc text-[15px] font-medium text-e-bg2 transition-opacity disabled:opacity-40">
             {busy ? <Loader2 className="size-4 animate-spin" /> : wait > 0 ? `Espera ${wait} s` : <>Entrar <ArrowRight className="size-4" /></>}
           </button>
-          <p className="mt-6 text-center text-[13.5px] text-e-dim">¿No tienes código? <Link to="/" hash="planes" className="text-e-tx underline underline-offset-4">Ver planes</Link></p>
           {DEV_LOCAL_LOGIN && <p className="mt-6 rounded-xl bg-e-bg3 px-3 py-2 text-[12px] text-e-dim">Vista de desarrollo: si el servidor aún no valida códigos, cualquier código con formato válido abre un espacio local separado. En la versión publicada esto no existe.</p>}
         </form>
       </div>
