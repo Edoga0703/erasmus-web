@@ -4,6 +4,7 @@ import { ArrowRight, KeyRound, Loader2 } from "lucide-react";
 import { CODE_RE, formatCode, getSession } from "@/lib/session";
 import { DEV_LOCAL_LOGIN, login } from "@/lib/auth";
 import { PublicHeader } from "@/components/PublicHeader";
+import { useT } from "@/lib/i18n";
 
 export const Route = createFileRoute("/entrar")({
   head: () => ({
@@ -29,10 +30,12 @@ const MSG = {
 
 function LoginPage() {
   const navigate = useNavigate();
+  const t = useT();
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [wait, setWait] = useState(0);
+  const [contactNotice, setContactNotice] = useState(false);
   const fails = useRef(0);
 
   useEffect(() => { if (getSession()) void navigate({ to: "/chat", replace: true }); }, [navigate]);
@@ -60,9 +63,9 @@ function LoginPage() {
       <PublicHeader />
       <div className="flex flex-1 items-center justify-center px-5 pb-20">
         <form onSubmit={submit} className="w-full max-w-sm">
-          <h1 className="text-[28px] font-semibold tracking-tight">Entrar</h1>
-          <p className="mt-1.5 text-[14.5px] text-e-dim">Usa tu código de acceso. Sin correo, sin contraseña.</p>
-          <label htmlFor="code" className="mt-7 block text-[13px] font-medium">Código de acceso</label>
+          <h1 className="text-[28px] font-semibold tracking-tight">{t("login_title")}</h1>
+          <p className="mt-1.5 text-[14.5px] text-e-dim">{t("login_sub")}</p>
+          <label htmlFor="code" className="mt-7 block text-[13px] font-medium">{t("login_code")}</label>
           <div className="mt-1.5 flex items-center gap-2 rounded-2xl border border-e-line bg-e-bg2 px-3.5 focus-within:border-e-dim">
             <KeyRound className="size-4 shrink-0 text-e-dim" />
             <input id="code" autoFocus autoComplete="off" spellCheck={false} inputMode="text" placeholder="erm-XXXX-XXXX-XXXXX-XXXX"
@@ -72,8 +75,13 @@ function LoginPage() {
           {err && <p role="alert" className="mt-2 text-[13px] text-e-err">{err}</p>}
           <button type="submit" disabled={!valid || busy || wait > 0}
             className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-e-acc text-[15px] font-medium text-e-bg2 transition-opacity disabled:opacity-40">
-            {busy ? <Loader2 className="size-4 animate-spin" /> : wait > 0 ? `Espera ${wait} s` : <>Entrar <ArrowRight className="size-4" /></>}
+            {busy ? <Loader2 className="size-4 animate-spin" /> : wait > 0 ? `${t("login_wait")} ${wait} s` : <>{t("login_action")} <ArrowRight className="size-4" /></>}
           </button>
+          <div className="mt-6 border-t border-e-line pt-5 text-center text-[13.5px] text-e-dim">
+            <span>{t("login_no_key")} </span>
+            <button type="button" onClick={() => setContactNotice(true)} className="font-medium text-e-tx underline decoration-e-line underline-offset-4 hover:decoration-e-tx">{t("login_contact")}</button>
+            {contactNotice && <p role="status" className="mt-3 rounded-xl bg-e-bg3 px-3 py-2 text-[12.5px] leading-relaxed">{t("login_contact_pending")}</p>}
+          </div>
           {DEV_LOCAL_LOGIN && <p className="mt-6 rounded-xl bg-e-bg3 px-3 py-2 text-[12px] text-e-dim">Vista de desarrollo: si el servidor aún no valida códigos, cualquier código con formato válido abre un espacio local separado. En la versión publicada esto no existe.</p>}
         </form>
       </div>
