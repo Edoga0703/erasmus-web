@@ -1,7 +1,4 @@
-import { API_BASE, DIRECT, MODEL_BASE, customSystemText, getModelConfig, getToken, isValidVpsKey } from "./config";
-
-/** Routes the bridge proxies to the VPS: only these carry the ms- key (local fs/exec routes use the token only). */
-const REMOTE = /^\/(v1\/|api\/chat|api\/models|api\/account\/|api\/images\/)/;
+import { API_BASE, customSystemText, getModelConfig } from "./config";
 import type {
   ChatData,
   ChatListResponse,
@@ -12,6 +9,8 @@ import type {
   ExecResponse,
   StatusResponse,
   FilesResponse,
+  AccountResponse,
+  SessionProfile,
 } from "./types";
 import { clearSession, getSession } from "@/lib/session";
 
@@ -31,42 +30,15 @@ export class ApiError extends Error {
   }
 }
 
-/** All network I/O goes through here. The user session header is attached to bridge calls only (never to the model origin). */
+/** All private network I/O goes through here and is authorized by the current Erasmus session. */
 export async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
-  if (DIRECT) return directFetch(path, init);
   const headers = new Headers(init.headers);
   if (!headers.has("Content-Type") && init.body) headers.set("Content-Type", "application/json");
-  const token = getToken();
-  if (token) headers.set("X-Erasmus-Token", token);
-  if (REMOTE.test(path)) {
-    const cfg = getModelConfig();
-    if (isValidVpsKey(cfg.apiKey) && !headers.has("Authorization")) headers.set("Authorization", `Bearer ${cfg.apiKey}`);
-  }
   const session = getSession();
   if (session && !session.local) headers.set("X-Erasmus-Session", session.token);
   const res = await fetch(`${API_BASE}${path}`, { ...init, headers });
-  if (res.status === 401 && session && !session.local && res.headers.get("X-Erasmus-Auth") === "expired") onSessionRejected();
+  if (res.status === 401 && session && !session.local && path !== "/api/auth/login") onSessionRejected();
   return res;
-}
-
-/** Routes the model server answers itself while the bridge is not deployed. */
-const DIRECT_ROUTES = /^\/(v1\/|api\/account\/|api\/images\/|api\/status$)/;
-export const BRIDGE_MISSING_MSG = "Esta función no está disponible en esta versión.";
-
-/** Direct mode: /api/chat → /v1/chat/completions on the model server; only CORS-allowed headers; bridge routes answer 503 locally. */
-async function directFetch(path: string, init: RequestInit): Promise<Response> {
-  const target = path === "/api/chat" ? "/v1/chat/completions" : path;
-  if (!DIRECT_ROUTES.test(target)) {
-    return new Response(JSON.stringify({ error: { code: "bridge_unavailable", message: BRIDGE_MISSING_MSG } }), { status: 503, headers: { "Content-Type": "application/json" } });
-  }
-  const src = new Headers(init.headers);
-  const headers = new Headers();
-  if (init.body) headers.set("Content-Type", "application/json");
-  const cfg = getModelConfig();
-  if (isValidVpsKey(cfg.apiKey)) headers.set("Authorization", `Bearer ${cfg.apiKey}`);
-  const sid = src.get("X-Session-ID");
-  if (sid) headers.set("X-Session-ID", sid);
-  return fetch(`${MODEL_BASE}${target}`, { ...init, headers });
 }
 
 async function parseError(res: Response): Promise<ApiError> {
@@ -84,10 +56,8 @@ async function parseError(res: Response): Promise<ApiError> {
   } catch {
     /* non-json */
   }
-  if (res.status === 403) message = "Acceso denegado: falta el token o el origen no está autorizado.";
-  if (res.status === 401 && code === "bridge_session_expired") message = "La sesión caducó: vuelve a abrir la página desde su enlace.";
-  else if (res.status === 401 && (code === "unauthorized" || code === "http_401")) message = "Falta o no es válida la clave de API (ms-…). Configúrala en Ajustes → Modelo y API.";
-  if (res.status === 401 && code === "not_a_key") message = "Clave de API inválida o inactiva.";
+  if (res.status === 403) message = "No tienes permiso para realizar esta acción.";
+  if (res.status === 401) message = "Tu sesión ya no es válida. Vuelve a entrar.";
   if (res.status === 402) message = code === "weekly_allowance_reached" ? "Cupo de imágenes agotado para esta clave." : "Sin crédito suficiente. Contacta con el administrador para recargar.";
   if (res.status === 429) message = "Ya hay 4 respuestas en curso con esta clave. Espera a que termine alguna.";
   if (res.status === 502) message = "El modelo no respondió. Inténtalo de nuevo en unos segundos.";
@@ -101,52 +71,79 @@ export async function apiJson<T>(path: string, body?: unknown, method?: "GET" | 
     if (body !== undefined) init.body = JSON.stringify(body);
     res = await apiFetch(path, init);
   } catch {
-    throw new ApiError(0, "network", "No se pudo conectar con el puente.");
+    throw new ApiError(0, "network", "No se pudo conectar con Erasmus.");
   }
   if (!res.ok) throw await parseError(res);
   return (await res.json()) as T;
 }
 
 export const api = {
-  status: async (): Promise<StatusResponse> => {
-    if (!DIRECT) return apiJson<StatusResponse>("/api/status");
-    const r = await apiJson<{ state?: string }>("/api/status");
-    if (r.state !== "up") throw new ApiError(503, "model_down", "El servidor del modelo no está disponible ahora mismo.");
-    return { ok: true, app: "Erasmus", status: r.state, gateway_active: true, brand_model: getModelConfig().model || "erasmus-v1", workspace_name: "Sin sandbox", cwd: "" };
+  status: () => apiJson<StatusResponse>("/health"),
+  session: () => apiJson<SessionProfile>("/api/auth/me"),
+  fsList: async (path: string): Promise<FsListResponse> => {
+    const r = await apiJson<{ ok: boolean; entries: { name: string; is_dir: boolean; size?: number }[] }>(`/api/workspace/list?path=${encodeURIComponent(path)}`);
+    const items = (r.entries ?? []).map((entry) => ({ ...entry, size: entry.size ?? 0, modified: 0 }));
+    return { ok: r.ok, path, items, total: items.length, showing: items.length };
   },
-  fsList: (path: string) => apiJson<FsListResponse>("/api/fs/list", { path }),
   fsRead: (path: string) => apiJson<FsReadResponse>("/api/fs/read", { path }),
-  fsWrite: (path: string, content: string, append = false) =>
-    apiJson<FsWriteResponse>("/api/fs/write", { path, content, append }),
-  exec: (req: ExecRequest) => apiJson<ExecResponse>("/api/exec", req),
-  chats: () => apiJson<ChatListResponse>("/api/workspace/chats"),
-  getChat: (id: string) =>
-    apiJson<{ ok: boolean; chat_data: ChatData }>(`/api/workspace/chat?id=${encodeURIComponent(id)}`),
-  files: () => apiJson<FilesResponse>("/api/workspace/files"),
-  /** GET /api/fs/download?path=&t= (token in query as in the reference; header still added by apiFetch). */
+  fsWrite: async (path: string, content: string, append = false): Promise<FsWriteResponse> => {
+    if (append) throw new ApiError(501, "append_unavailable", "Añadir a un archivo no está disponible en el servidor v5.4.");
+    const r = await apiJson<{ ok: boolean; path: string; bytes_written: number }>("/api/fs/write", { path, content });
+    return { ok: r.ok, name: r.path, mode: "write", bytes_written: r.bytes_written };
+  },
+  exec: (_req: ExecRequest): Promise<ExecResponse> => Promise.reject(new ApiError(501, "exec_unavailable", "La ejecución de código no está disponible en el servidor v5.4.")),
+  chats: async (): Promise<ChatListResponse> => {
+    const r = await apiJson<{ ok: boolean; chats: ChatMeta[] }>("/api/workspace/chats");
+    return { ok: r.ok, workspace_name: "Mi espacio", chats: (r.chats ?? []).map((chat) => ({ ...chat, created: chat.created_at ?? chat.created, updated: chat.updated_at ?? chat.updated })) };
+  },
+  getChat: async (id: string): Promise<{ ok: boolean; chat_data: ChatData }> => {
+    const r = await apiJson<{ ok: boolean; chat: ChatData & { created_at?: number; updated_at?: number } }>(`/api/workspace/chat?id=${encodeURIComponent(id)}`);
+    const chat = r.chat;
+    return { ok: r.ok, chat_data: { ...chat, created: chat.created ?? chat.created_at ?? Date.now(), updated: chat.updated ?? chat.updated_at ?? Date.now(), messages: chat.messages ?? [] } };
+  },
+  files: async (): Promise<FilesResponse> => {
+    const files: FilesResponse["files"] = [];
+    const walk = async (dir: string, depth: number) => {
+      if (depth > 8 || files.length >= 500) return;
+      let listing: FsListResponse;
+      try { listing = await api.fsList(dir); } catch (error) { if (dir) return; throw error; }
+      for (const item of listing.items) {
+        const relPath = [dir, item.name].filter(Boolean).join("/");
+        if (item.is_dir) { if (relPath !== "chats") await walk(relPath, depth + 1); }
+        else files.push({ name: item.name, rel_path: relPath, size: item.size, modified: item.modified });
+        if (files.length >= 500) break;
+      }
+    };
+    await walk("", 0);
+    return { ok: true, workspace_name: "Mi espacio", files };
+  },
   download: async (path: string): Promise<Blob> => {
     let res: Response;
     try {
-      res = await apiFetch(`/api/fs/download?path=${encodeURIComponent(path)}&t=${encodeURIComponent(getToken() ?? "")}`, { method: "GET" });
+      res = await apiFetch(`/api/fs/download?path=${encodeURIComponent(path)}`, { method: "GET" });
     } catch {
-      throw new ApiError(0, "network", "No se pudo conectar con el puente.");
+      throw new ApiError(0, "network", "No se pudo conectar con Erasmus.");
     }
     if (!res.ok) throw await parseError(res);
     return res.blob();
   },
-  /** POST /api/workspace/zip → {ok, zip_name, size}; the ZIP is then fetched with api.download(zip_name). */
-  zip: () => apiJson<{ ok: boolean; zip_name: string; size: number }>("/api/workspace/zip", {}),
+  zip: async (): Promise<{ name: string; blob: Blob }> => {
+    const res = await apiFetch("/api/workspace/zip", { method: "GET" });
+    if (!res.ok) throw await parseError(res);
+    const disposition = res.headers.get("Content-Disposition") ?? "";
+    const name = disposition.match(/filename="?([^";]+)"?/i)?.[1] ?? "workspace_erasmus.zip";
+    return { name, blob: await res.blob() };
+  },
   /** GET /v1/models (bridge proxy; presents erasmus-v1). */
   models: () => apiJson<{ data: { id: string; context_length?: number }[] }>("/v1/models"),
-  /** GET /api/account/me (VPS proxy; compatibility unverified per API_Erasmus.md). */
-  account: () => apiJson<Record<string, unknown>>("/api/account/me"),
-  syncChat: (chat: ChatData) => apiJson<{ ok: boolean }>("/api/workspace/sync_chat", { id: chat.id, chat_data: chat }),
+  account: () => apiJson<AccountResponse>("/api/account/me"),
+  redeemCoupon: (code: string) => apiJson<{ ok: boolean; message: string; type: string; value: number; expires_at?: string | null }>("/api/coupons/redeem", { code: code.trim().toUpperCase() }),
+  syncChat: (chat: ChatData) => apiJson<{ ok: boolean; id: string }>("/api/workspace/sync_chat", { ...chat, created_at: chat.created, updated_at: chat.updated }),
 };
 
 /** Public health snapshot: deliberately bypasses apiFetch so no user, bridge, or model credentials are attached. */
 export async function publicStatus(): Promise<{ available: boolean }> {
-  const base = DIRECT ? MODEL_BASE : API_BASE;
-  const response = await fetch(`${base}/api/status`, {
+  const response = await fetch(`${API_BASE}/health`, {
     method: "GET",
     headers: { Accept: "application/json" },
     credentials: "omit",
@@ -179,19 +176,16 @@ function toUsage(u: Record<string, unknown> | null | undefined): StreamUsage | u
   return { prompt: Number(u["prompt_tokens"] ?? 0), completion: Number(u["completion_tokens"] ?? 0), reasoning: Number(det["reasoning_tokens"] ?? 0), total: Number(u["total_tokens"]) };
 }
 
-/** Direct mode has no bridge to add tool instructions, and no sandbox: tell the model to answer in plain Markdown. */
-const DIRECT_SYSTEM = "Eres Erasmus, un asistente de IA para empresarios. Tu nombre es Erasmus; si te preguntan qué modelo eres, responde simplemente que eres Erasmus, sin hablar de proveedores ni nombres técnicos. Responde en el idioma del usuario, con Markdown claro. Ahora mismo no tienes sandbox ni herramientas: no emitas bloques code:python, code:bash ni file:*; si hace falta código, muéstralo como bloque normal (```python) para que el usuario lo vea.";
-
 function withSystem(msgs: StreamOptions["messages"]): StreamOptions["messages"] {
-  const sys = [DIRECT ? DIRECT_SYSTEM : "", customSystemText()].filter(Boolean).join("\n\n");
+  const sys = customSystemText();
   return sys ? [{ role: "system", content: sys }, ...msgs] : msgs;
 }
 
-/** POST /api/chat with stream:true; parses SSE "data:" lines token by token. */
+/** POST /v1/chat/completions with stream:true; parses SSE "data:" lines token by token. */
 export async function streamChat(opts: StreamOptions): Promise<void> {
   let res: Response;
   try {
-    res = await apiFetch("/api/chat", {
+    res = await apiFetch("/v1/chat/completions", {
       method: "POST",
       signal: opts.signal ?? null,
       headers: opts.sessionId ? { "X-Session-ID": opts.sessionId } : {},
@@ -199,7 +193,7 @@ export async function streamChat(opts: StreamOptions): Promise<void> {
     });
   } catch (e) {
     if ((e as Error)?.name === "AbortError") return;
-    throw new ApiError(0, "network", "No se pudo conectar con el puente.");
+    throw new ApiError(0, "network", "No se pudo conectar con Erasmus.");
   }
   if (!res.ok) throw await parseError(res);
   const ctype = res.headers.get("Content-Type") ?? "";
