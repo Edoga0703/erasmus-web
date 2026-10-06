@@ -1,4 +1,4 @@
-import { Activity, CheckCircle2, ChevronDown, Clock3, FileText, Loader2 } from "lucide-react";
+import { CheckCircle2, ChevronDown, Loader2 } from "lucide-react";
 import { Tool } from "@/components/ai-elements/tool";
 import { CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { activitySummary } from "@/lib/activity";

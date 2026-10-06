@@ -102,7 +102,7 @@ function summaryBase(all: UIMessage[]): { summary?: string; start: number } {
 }
 function modelHistory(all: UIMessage[], excludeId?: string) {
   const { summary, start } = summaryBase(all);
-  const rest = all.slice(start).filter((m) => !m.kind && m.id !== excludeId).map((m) => ({ role: m.role as string, content: toModelContent(m) }));
+  const rest = all.slice(start).filter((m) => !m.kind && !m.error && m.id !== excludeId).map((m) => ({ role: m.role as string, content: toModelContent(m) }));
   return summary ? [{ role: "system", content: `[RESUMEN DE LA CONVERSACIÓN ANTERIOR]\n${summary}` }, ...rest] : rest;
 }
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
