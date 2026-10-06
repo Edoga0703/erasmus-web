@@ -58,7 +58,7 @@ export function Diagnostics() {
         <button onClick={() => void runAll()} className="inline-flex items-center gap-1.5 rounded-full border border-e-line px-3.5 py-1.5 hover:bg-e-bg3"><RefreshCw className="size-3.5" /> Ejecutar todo</button>
         <span className="text-e-dim">Probados {done}/{CHECKS.length} · Éxitos {okN} · Fallos {done - okN}</span>
       </div>
-      <p className="mb-3 text-[12px] text-e-dim">Pruebas de solo lectura con tu sesión. Las datos sensibles se ocultan.</p>
+      <p className="mb-3 text-[12px] text-e-dim">Pruebas de solo lectura con tu sesión. Los datos sensibles se ocultan.</p>
       <ul className="divide-y divide-e-line rounded-xl border border-e-line">
         {CHECKS.map((c) => {
           const r = res[c.id] ?? { state: "idle" };
