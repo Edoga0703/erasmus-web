@@ -24,6 +24,7 @@ export function ModelSettings() {
   const [cfg, setCfg] = useState<ModelConfig>(() => getModelConfig());
   const [models, setModels] = useState<string[]>([cfg.model || "erasmus-v1"]);
   const [show, setShow] = useState(false);
+  const [editing, setEditing] = useState(() => !getModelConfig().apiKey);
   const [test, setTest] = useState<Test>({ kind: "idle" });
   const keyBad = cfg.apiKey !== "" && !isValidVpsKey(cfg.apiKey);
   const input = "w-full rounded-xl border border-e-line bg-e-bg2 px-3 py-2 text-[14px] text-e-tx outline-none focus:border-e-acc2";
@@ -38,7 +39,11 @@ export function ModelSettings() {
 
   const save = (quiet = false) => {
     if (keyBad) { toast.error("La clave debe empezar por ms- y tener más de 10 caracteres."); return false; }
-    saveModelConfig(cfg);
+    // While editing with an empty field, keep the previously saved key instead of wiping it.
+    const toSave = editing && !cfg.apiKey ? { ...cfg, apiKey: getModelConfig().apiKey } : cfg;
+    saveModelConfig(toSave);
+    setCfg(toSave); setShow(false);
+    if (toSave.apiKey) setEditing(false);
     if (!quiet) toast.success("Conexión del modelo guardada.");
     return true;
   };
