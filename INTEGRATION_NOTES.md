@@ -170,3 +170,7 @@ Reintento ante fallo permanente (`vps_error`, `offline`): vuelve a fallar hasta 
 - Errores normalizados `{error:{code,type,message,request_id}}`: 402 `insufficient_credit` / `weekly_allowance_reached`, 429 `turns_in_flight` (4 por clave), 502 `upstream_unavailable`.
 - Imágenes generadas llegan como enlaces `/api/images/...`; en modo directo se resuelven contra `VITE_MODEL_BASE`.
 - `/api/account/me` añade `images_used`, `images_quota`, `inflight`.
+
+
+## nginx: cabeceras de seguridad (PROPOSED)
+La página ya incluye una CSP en <meta>. Añadir en nginx: `add_header Content-Security-Policy "frame-ancestors 'self'" always;`, `X-Frame-Options SAMEORIGIN`, `Strict-Transport-Security "max-age=31536000"` y `Referrer-Policy no-referrer`.

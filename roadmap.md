@@ -10,3 +10,7 @@
 - [x] Fluidez del streaming y recuperación local de la conversación activa tras recargar
 
 - [x] Razonamiento plegable, aviso de corte + Continuar, tokens por respuesta, galería de imágenes, Personalización, indicador de uso del plan, exportar Markdown/PDF
+- [x] Seguridad: clave solo en la pestaña y enmascarada; CSP en la versión publicada
+- [ ] Usuarios con inicio de sesión mediante la API (espera: diseño del login en el servidor)
+- [ ] Panel de administración para crear y controlar usuarios (espera: endpoints del servidor)
+- [ ] Eliminar conversaciones y su contenido (espera: endpoint del servidor)

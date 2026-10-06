@@ -17,7 +17,9 @@
 - Charts are rendered by the in-house SVG renderer (`src/components/chat/Chart.tsx`) and mermaid is bundled from npm — no chart libraries or CDNs, keeps the static build self-contained.
 - Workspace panel lives in `src/components/files/`; all reads/downloads go through `api.files`/`api.fsRead`/`api.download` (blob via apiFetch) — keeps the token single-source and makes mock downloads real blobs.
 - Assistant messages persist their tool-card state (`tools`) inside chat_data so reopened chats render identical cards; blocks without saved state show as "Del historial" — no re-execution on open.
-- The ms- VPS key is attached only in `apiFetch` and only for proxied routes (/v1/*, /api/chat, /api/models, /api/account/*, /api/images/*); stored in sessionStorage unless the user opts into localStorage — local fs/exec routes must never see it.
+- The ms- VPS key is attached only in `apiFetch` and only for proxied routes (/v1/*, /api/chat, /api/models, /api/account/*, /api/images/*); stored only in sessionStorage and shown masked (last 4 chars) — local fs/exec routes must never see it.
 - Direct-to-model mode (`VITE_MODEL_BASE` set, `VITE_MOCK` off) is a temporary path inside `apiFetch` while the bridge is not deployed: chat/models/account/status go to the model server with only its CORS-allowed branded headers (X-Session-ID, X-Compact-Mode); bridge routes return a local 503 — keeps one swap point and the token off foreign origins.
 - The active conversation has a versioned localStorage recovery snapshot while server sync remains authoritative — direct-model sessions survive reloads without introducing a database.
 - Context management is client-side in `src/lib/context.ts` + `use-chat`: proactive summary at 80 % of `/v1/models` context_length, one compaction+retry on `context_overflow`, then a terminal "new conversation" notice; summaries live in `kind:"compaction"` messages inside chat_data — the server never compacts on its own.
+
+- Production builds ship a CSP <meta> from `src/routes/__root.tsx` (scripts/connect only self + model origin); frame-ancestors/HSTS belong to nginx — meta CSP cannot set them.
