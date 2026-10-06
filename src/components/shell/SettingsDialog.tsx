@@ -7,6 +7,7 @@ import type { StatusResponse } from "@/lib/api/types";
 import { setTheme, useTheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 import { ModelSettings } from "./ModelSettings";
+import { Diagnostics } from "./Diagnostics";
 import pkg from "../../../package.json";
 
 export const APP_VERSION = "Erasmus Web v0.1.0";
@@ -14,7 +15,7 @@ export const APP_VERSION = "Erasmus Web v0.1.0";
 type Probe = { kind: "idle" } | { kind: "checking" } | { kind: "ok"; ms: number; s: StatusResponse } | { kind: "error"; msg: string };
 type Counts = { chats: number; files: number; workspace: string } | null;
 
-const TABS = [["general", "General"], ["custom", "Personalización"], ["model", "Modelo"], ["bridge", "Estado"], ["data", "Datos"], ["security", "Seguridad"], ["about", "Acerca de"]] as const;
+const TABS = [["general", "General"], ["custom", "Personalización"], ["model", "Modelo"], ["bridge", "Estado"], ["diag", "Diagnóstico"], ["data", "Datos"], ["security", "Seguridad"], ["about", "Acerca de"]] as const;
 type Tab = (typeof TABS)[number][0];
 
 /** Settings modal. Rendered on top of the shell; never unmounts the chat, so chat state survives open/close. */
@@ -113,6 +114,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
             )}
             {tab === "custom" && <CustomInstructions />}
             {tab === "model" && <ModelSettings />}
+            {tab === "diag" && <Diagnostics />}
             {tab === "bridge" && (
               <section>
                 <Row k="Endpoint" v={API_BASE} />
