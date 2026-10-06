@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 import { Download, ExternalLink, ImageIcon, X } from "lucide-react";
-import { DIRECT, MODEL_BASE } from "@/lib/api/config";
+import { API_BASE } from "@/lib/api/config";
 import type { UIMessage } from "@/hooks/use-chat";
 
 export interface ChatImage { src: string; alt: string; fromUser: boolean }
 
-const abs = (u: string) => (DIRECT && u.startsWith("/api/images/") ? MODEL_BASE + u : u);
+const abs = (u: string) => (API_BASE.startsWith("http") && u.startsWith("/api/images/") ? API_BASE + u : u);
 
 /** Every image in the conversation: model-generated (Markdown/HTML img) and user photo attachments. */
 export function collectImages(messages: UIMessage[]): ChatImage[] {

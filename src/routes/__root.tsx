@@ -13,7 +13,6 @@ import { useEffect, type ReactNode } from "react";
 import appCss from "../styles.css?url";
 import { Toaster } from "@/components/ui/sonner";
 import { reportLovableError } from "../lib/lovable-error-reporting";
-import { captureTokenFromUrl } from "../lib/api/config";
 import { THEME_BOOT } from "../lib/theme";
 import { onForeignLogout } from "../lib/session";
 
@@ -77,14 +76,14 @@ function ErrorComponent({ error, reset }: ErrorComponentProps) {
   );
 }
 
-const MODEL_ORIGIN = (() => { try { return import.meta.env["VITE_MODEL_BASE"] ? new URL(String(import.meta.env["VITE_MODEL_BASE"])).origin : ""; } catch { return ""; } })();
+const API_ORIGIN = (() => { try { return String(import.meta.env["VITE_API_BASE"] ?? "").startsWith("http") ? new URL(String(import.meta.env["VITE_API_BASE"])).origin : ""; } catch { return ""; } })();
 /** Blocks third-party scripts, plugins, <base> hijacking and form exfiltration; network only to this site and the model server. */
 const CSP = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-inline'",
   "style-src 'self' 'unsafe-inline'",
-  `img-src 'self' data: blob: ${MODEL_ORIGIN}`.trim(),
-  `connect-src 'self' ${MODEL_ORIGIN}`.trim(),
+  `img-src 'self' data: blob: ${API_ORIGIN}`.trim(),
+  `connect-src 'self' ${API_ORIGIN}`.trim(),
   "frame-src 'self' blob: data:",
   "font-src 'self' data:",
   "worker-src 'self' blob:",
@@ -136,8 +135,6 @@ function RootShell({ children }: { children: ReactNode }) {
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   useEffect(() => {
-    // Public pages never capture private bridge credentials from shared URLs.
-    if (window.location.pathname === "/chat") captureTokenFromUrl();
     // Sign-out in another tab of this browser ends this tab's session too.
     return onForeignLogout(() => { queryClient.clear(); window.location.assign("/entrar"); });
   }, [queryClient]);

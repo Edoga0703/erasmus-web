@@ -1,7 +1,7 @@
 import { marked } from "marked";
 import DOMPurify from "dompurify";
 import hljs from "highlight.js/lib/common";
-import { DIRECT, MODEL_BASE } from "@/lib/api/config";
+import { API_BASE } from "@/lib/api/config";
 
 /** Same sanitizer rules as the desktop reference (index.html:1768). */
 export const PURIFY_CONFIG = {
@@ -15,8 +15,8 @@ export function sanitize(html: string): string {
 }
 
 export function renderMarkdown(md: string): string {
-  // Generated images arrive as relative /api/images/... links; in direct mode they live on the model server.
-  const src = DIRECT ? md.replace(/(\]\(|src=["'])\/api\/images\//g, `$1${MODEL_BASE}/api/images/`) : md;
+  // Generated image paths belong to the same Erasmus API origin.
+  const src = API_BASE.startsWith("http") ? md.replace(/(\]\(|src=["'])\/api\/images\//g, `$1${API_BASE}/api/images/`) : md;
   const html = marked.parse(src, { async: false, gfm: true, breaks: true }) as string;
   return sanitize(html);
 }
