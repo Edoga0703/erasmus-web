@@ -1,3 +1,4 @@
+import { userKey } from "@/lib/session";
 import { api, ApiError } from "@/lib/api/client";
 
 /** Fallback when /v1/models does not publish context_length. */
@@ -9,14 +10,14 @@ export const ANSWER_RESERVE = 8_000;
 export const FILE_MAX_FRACTION = 0.5;
 export const KEEP_RECENT = 6;
 const IMAGE_TOKENS = 1_500;
-const OVERRIDE_KEY = "erasmus.ctx.override";
+const OVERRIDE_KEY = () => userKey("ctx.override");
 
 let cached: Promise<number> | null = null;
 
 /** Context window in tokens (cached). localStorage override exists only for testing compaction. */
 export function getContextLength(model?: string): Promise<number> {
   try {
-    const o = Number(localStorage.getItem(OVERRIDE_KEY));
+    const o = Number(localStorage.getItem(OVERRIDE_KEY()));
     if (o > 0) return Promise.resolve(o);
   } catch { /* ignore */ }
   if (!cached) {

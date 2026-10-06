@@ -3,7 +3,7 @@ import { ArrowDown, ChevronDown, Download, FileText, FolderOpen, ImageIcon, Prin
 import { sandboxDir, useChat, type Attachment } from "@/hooks/use-chat";
 import { useConnection } from "@/hooks/use-connection";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { DIRECT, MOCK, displayModel } from "@/lib/api/config";
+import { DIRECT, displayModel } from "@/lib/api/config";
 import { api, ApiError } from "@/lib/api/client";
 import { setTheme, useTheme } from "@/lib/theme";
 import { MessageView } from "@/components/chat/MessageView";
@@ -174,7 +174,7 @@ export function AppShell() {
           <DropdownMenuTrigger asChild>
             <button className={rail ? "e-icon-btn" : "e-side-item"} aria-label="Menú de cuenta">
               <span className="grid size-8 shrink-0 place-items-center rounded-full bg-e-ok text-[13px] font-semibold text-e-bg2">TU</span>
-              {!rail && <span className="min-w-0 flex-1 leading-tight"><span className="block truncate text-[14px]">Workspace</span><span className="block text-[12px] text-e-dim">Erasmus Web{MOCK ? " · demo" : ""}</span></span>}
+              {!rail && <span className="min-w-0 flex-1 leading-tight"><span className="block truncate text-[14px]">Workspace</span><span className="block text-[12px] text-e-dim">Erasmus Web</span></span>}
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent side="top" align="start" className="e-pop w-60 p-1.5">

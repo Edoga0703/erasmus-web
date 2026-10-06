@@ -2,7 +2,7 @@ import { CustomInstructions } from "./CustomInstructions";
 import { useCallback, useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight, Download, Moon, RefreshCw, ShieldCheck, ShieldOff, Sun, WifiOff, X } from "lucide-react";
 import { api, ApiError } from "@/lib/api/client";
-import { API_BASE, DIRECT, MOCK, displayModel, getToken } from "@/lib/api/config";
+import { API_BASE, DIRECT, displayModel, getToken } from "@/lib/api/config";
 import type { StatusResponse } from "@/lib/api/types";
 import { setTheme, useTheme } from "@/lib/theme";
 import { downloadFile } from "@/components/files/FilesPanel";
@@ -115,7 +115,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
             {tab === "model" && <ModelSettings />}
             {tab === "bridge" && (
               <section>
-                <Row k="Endpoint" v={API_BASE + (MOCK ? " (demostración)" : "")} />
+                <Row k="Endpoint" v={API_BASE} />
                 <div className="mt-3"><button className={btn} onClick={() => void verify()} disabled={probe.kind === "checking"}>
                   <RefreshCw className={cn("size-3.5", probe.kind === "checking" && "animate-spin")} /> Verificar servidor
                 </button></div>

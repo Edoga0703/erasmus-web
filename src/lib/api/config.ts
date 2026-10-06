@@ -1,9 +1,9 @@
+import { userKey } from "@/lib/session";
 /** Single source of truth for the API base URL and mock switch. */
 export const API_BASE: string = String(import.meta.env['VITE_API_BASE'] ?? "/erasmus-api").replace(/\/+$/, "");
-export const MOCK: boolean = import.meta.env['VITE_MOCK'] === "1";
 /** Direct-to-model mode: set while the bridge is not yet deployed. Chat/models/account go straight to the model server; sandbox/files/history degrade. */
 export const MODEL_BASE: string = String(import.meta.env['VITE_MODEL_BASE'] ?? "").replace(/\/+$/, "");
-export const DIRECT: boolean = !MOCK && MODEL_BASE !== "";
+export const DIRECT: boolean = MODEL_BASE !== "";
 
 const TOKEN_KEY = "erasmus_bridge_token";
 
@@ -18,9 +18,6 @@ export function captureTokenFromUrl(): void {
       params.delete("t");
       const qs = params.toString();
       window.history.replaceState({}, document.title, window.location.pathname + (qs ? `?${qs}` : ""));
-    } else if (MOCK && !sessionStorage.getItem(TOKEN_KEY)) {
-      // Mock-only demo token so the preview is navigable; never used in real mode.
-      sessionStorage.setItem(TOKEN_KEY, "mock-token");
     }
   } catch {
     /* storage unavailable */
@@ -50,8 +47,8 @@ export function setToken(t: string): void {
 /* ---- Model connection settings (API_Erasmus.md §2) ---- */
 export type ReasoningEffort = "none" | "low" | "medium" | "high";
 export interface ModelConfig { apiKey: string; remember: boolean; model: string; reasoning: ReasoningEffort; compact: boolean }
-const CFG_KEY = "erasmus.model.cfg";
-const KEY_KEY = "erasmus.model.key";
+const CFG_KEY = () => userKey("model.cfg");
+const KEY_KEY = () => userKey("model.key");
 export const DEFAULT_MODEL_CFG: ModelConfig = { apiKey: "", remember: false, model: "erasmus-v1", reasoning: "medium", compact: false };
 
 /** The bridge only forwards Bearer keys that start with "ms-" and are longer than 10 chars. */
@@ -60,11 +57,8 @@ export const isValidVpsKey = (k: string) => k.startsWith("ms-") && k.length > 10
 export function getModelConfig(): ModelConfig {
   if (typeof window === "undefined") return DEFAULT_MODEL_CFG;
   try {
-    // Migration: older builds could persist the key in localStorage ("recordar"). Move it to the tab session and wipe it.
-    const legacy = localStorage.getItem(KEY_KEY);
-    if (legacy) { if (!sessionStorage.getItem(KEY_KEY)) sessionStorage.setItem(KEY_KEY, legacy); localStorage.removeItem(KEY_KEY); }
-    const raw = JSON.parse(localStorage.getItem(CFG_KEY) ?? "{}") as Partial<ModelConfig>;
-    const apiKey = sessionStorage.getItem(KEY_KEY) ?? "";
+    const raw = JSON.parse(localStorage.getItem(CFG_KEY()) ?? "{}") as Partial<ModelConfig>;
+    const apiKey = sessionStorage.getItem(KEY_KEY()) ?? "";
     return { ...DEFAULT_MODEL_CFG, ...raw, remember: false, apiKey };
   } catch { return DEFAULT_MODEL_CFG; }
 }
@@ -73,9 +67,9 @@ export function getModelConfig(): ModelConfig {
 export function saveModelConfig(c: ModelConfig): void {
   try {
     const { apiKey, remember: _r, ...rest } = c;
-    localStorage.setItem(CFG_KEY, JSON.stringify(rest));
-    localStorage.removeItem(KEY_KEY);
-    if (apiKey) sessionStorage.setItem(KEY_KEY, apiKey); else sessionStorage.removeItem(KEY_KEY);
+    localStorage.setItem(CFG_KEY(), JSON.stringify(rest));
+    localStorage.removeItem(KEY_KEY());
+    if (apiKey) sessionStorage.setItem(KEY_KEY(), apiKey); else sessionStorage.removeItem(KEY_KEY());
     window.dispatchEvent(new Event("erasmus:model-config"));
   } catch { /* */ }
 }
@@ -92,12 +86,12 @@ export function displayModel(id: string | undefined | null): string {
 
 /** Personalización: instrucciones del usuario que se añaden como mensaje de sistema en cada conversación. */
 export interface CustomInstructions { about: string; style: string }
-const CUSTOM_KEY = "erasmus.custom.v1";
+const CUSTOM_KEY = () => userKey("custom.v1");
 export function getCustomInstructions(): CustomInstructions {
-  try { const j = JSON.parse(localStorage.getItem(CUSTOM_KEY) ?? "null"); return { about: String(j?.about ?? ""), style: String(j?.style ?? "") }; } catch { return { about: "", style: "" }; }
+  try { const j = JSON.parse(localStorage.getItem(CUSTOM_KEY()) ?? "null"); return { about: String(j?.about ?? ""), style: String(j?.style ?? "") }; } catch { return { about: "", style: "" }; }
 }
 export function saveCustomInstructions(c: CustomInstructions): void {
-  try { localStorage.setItem(CUSTOM_KEY, JSON.stringify({ about: c.about.slice(0, 1500), style: c.style.slice(0, 1500) })); } catch { /* */ }
+  try { localStorage.setItem(CUSTOM_KEY(), JSON.stringify({ about: c.about.slice(0, 1500), style: c.style.slice(0, 1500) })); } catch { /* */ }
 }
 export function customSystemText(): string {
   const c = getCustomInstructions();
