@@ -370,11 +370,7 @@ export function useChat(opts: { model: string }) {
     const clean = text.trim() || (attachments?.length ? "Revisa los archivos adjuntos." : "");
     if (!clean || busy) return;
     setError(null);
-    const withText = attachments?.filter((a) => a.text !== undefined) ?? [];
-    if (withText.length) {
-      const ctxLen = await getContextLength(opts.model);
-      if (withText.some((a) => estimateTokens(a.text!) > ctxLen * FILE_MAX_FRACTION)) { setLimit({ message: FILE_TOO_BIG_MSG, file: true }); return; }
-    }
+    // Límite de tamaño de adjuntos desactivado temporalmente para pruebas (ver FILE_MAX_FRACTION).
     let t = titleRef.current;
     if (msgsRef.current.length === 0) { t = clean.slice(0, 60); setTitle(t); titleRef.current = t; }
     commit((ms) => [...ms, { id: uid(), role: "user", content: clean, ts: Date.now(), ...(attachments?.length ? { attachments } : {}) }]);
