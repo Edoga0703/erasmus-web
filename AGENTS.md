@@ -10,7 +10,7 @@
 <!-- LOVABLE:END -->
 
 ## Architecture rules
-- All network I/O goes through `apiFetch` in `src/lib/api/client.ts`, relative to `VITE_API_BASE`; mocks in `src/mocks` are only loaded when `VITE_MOCK=1` — keeps one swap point and never mixes mock/real.
+- All network I/O goes through `apiFetch` in `src/lib/api/client.ts`, relative to `VITE_API_BASE`; there is no demo/mock mode — one swap point, never fake answers.
 - Model Markdown is rendered only via `src/lib/markdown.ts` (marked + DOMPurify with reference FORBID rules) — security parity with the desktop app.
 - No Supabase/DB/new services; production is a static SPA build served by nginx — backend is the existing Erasmus gateway.
 - Only endpoints listed in ANALYSIS.md; missing ones go to INTEGRATION_NOTES.md as PROPOSED and the UI degrades — contract with the gateway team.
@@ -23,3 +23,7 @@
 - Context management is client-side in `src/lib/context.ts` + `use-chat`: proactive summary at 80 % of `/v1/models` context_length, one compaction+retry on `context_overflow`, then a terminal "new conversation" notice; summaries live in `kind:"compaction"` messages inside chat_data — the server never compacts on its own.
 
 - Production builds ship a CSP <meta> from `src/routes/__root.tsx` (scripts/connect only self + model origin); frame-ancestors/HSTS belong to nginx — meta CSP cannot set them.
+
+- Login is by server-validated `erm-` access code (`src/lib/auth.ts`, `src/lib/session.ts`); session token in sessionStorage, sent as X-Erasmus-Session only to bridge routes; all per-user browser data uses `userKey()` (`erasmus:<user_id>:*`) and is wiped on logout/user switch — server is the only authority, browser isolation is defense in depth.
+- Routes: `/` public landing, `/entrar` login, protected pages under `src/routes/_auth/` (client-only gate) — session lives in sessionStorage, which SSR cannot read.
+- Dev builds only (`import.meta.env.DEV`) fall back to a local per-code session when /api/auth/login is missing; production fails closed.
