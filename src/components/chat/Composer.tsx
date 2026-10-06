@@ -48,7 +48,7 @@ export function Composer({ busy, disabled, onSend, onStop, draft, centered }: {
   const [fileNotice, setFileNotice] = useState("");
   useEffect(() => () => queuedFiles.current.forEach((x) => { if (x.url) URL.revokeObjectURL(x.url); }), []);
   const addFiles = (list: FileList | null) => {
-    if (!list) return;
+    if (!list || disabled || busy) return;
     const incoming = Array.from(list);
     const available = Math.max(0, 20 - queuedFiles.current.length);
     const accepted = incoming.slice(0, available).map((f) => ({ f, url: f.type.startsWith("image/") ? URL.createObjectURL(f) : undefined }));

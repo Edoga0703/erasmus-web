@@ -74,15 +74,15 @@ export function SettingsDialog({ onClose, initialTab = "general" }: { onClose: (
       <div className="e-overlay absolute inset-0" onClick={onClose} />
       <div className="relative flex w-full max-w-2xl flex-col overflow-hidden border-e-line bg-e-bg2 text-e-tx sm:h-[min(600px,85vh)] sm:max-w-[680px] sm:rounded-2xl sm:border sm:shadow-e">
         <div className="flex h-14 shrink-0 items-center gap-1 border-b border-e-line px-4">
-          {mobileDetail && <button className="e-icon-btn sm:hidden" aria-label="Volver" onClick={() => setMobileDetail(false)}><ChevronLeft className="size-5" /></button>}
+          {mobileDetail && <Button variant="ghost" className="e-icon-btn sm:hidden" aria-label="Volver" onClick={() => setMobileDetail(false)}><ChevronLeft className="size-5" /></Button>}
           <h2 className="flex-1 text-[17px] font-semibold">{mobileDetail ? TABS.find((t) => t[0] === tab)?.[1] : "Ajustes"}<span className="hidden sm:inline">{mobileDetail ? "" : ""}</span></h2>
-          <button className="e-icon-btn" aria-label="Cerrar ajustes" onClick={onClose}><X className="size-3.5" /></button>
+          <Button variant="ghost" className="e-icon-btn" aria-label="Cerrar ajustes" onClick={onClose}><X className="size-3.5" /></Button>
         </div>
         <div className="flex min-h-0 flex-1 flex-col sm:flex-row">
           <nav className={cn("flex-col gap-0.5 p-2 sm:flex sm:w-48 sm:shrink-0", mobileDetail ? "hidden" : "flex flex-1")} role="tablist">
             {TABS.map(([id, label]) => (
-              <button key={id} role="tab" aria-selected={tab === id} onClick={() => { setTab(id); setMobileDetail(true); }}
-                className={cn("flex items-center justify-between rounded-lg px-3 py-2.5 text-left text-[14px] sm:py-2", tab === id ? "sm:bg-e-bg3" : "", "text-e-tx hover:bg-e-bg3")}>{label}<ChevronRight className="size-4 text-e-dim sm:hidden" /></button>
+              <Button variant="ghost" key={id} role="tab" aria-selected={tab === id} onClick={() => { setTab(id); setMobileDetail(true); }}
+                className={cn("flex items-center justify-between rounded-lg px-3 py-2.5 text-left text-[14px] sm:py-2", tab === id ? "sm:bg-e-bg3" : "", "text-e-tx hover:bg-e-bg3")}>{label}<ChevronRight className="size-4 text-e-dim sm:hidden" /></Button>
             ))}
           </nav>
           <div className={cn("min-h-0 flex-1 overflow-y-auto px-5 py-4 sm:block", mobileDetail ? "block" : "hidden")} role="tabpanel">
@@ -91,9 +91,9 @@ export function SettingsDialog({ onClose, initialTab = "general" }: { onClose: (
                 <h3 className="mb-2 text-[13px] font-medium">Tema</h3>
                 <div className="flex gap-2">
                   {(["dark", "light"] as const).map((t) => (
-                    <button key={t} aria-pressed={theme === t} onClick={() => setTheme(t)} className={cn(btn, theme === t && "bg-e-bg3 text-e-tx")}>
+                    <Button variant="ghost" key={t} aria-pressed={theme === t} onClick={() => setTheme(t)} className={cn(btn, theme === t && "bg-e-bg3 text-e-tx")}>
                       {t === "dark" ? <Moon className="size-3.5" /> : <Sun className="size-3.5" />} {t === "dark" ? "Oscuro" : "Claro"}
-                    </button>
+                    </Button>
                   ))}
                 </div>
                 <p className="mt-2 text-[12px] text-e-dim">Se guarda en este navegador. Los gráficos y diagramas se redibujan al cambiarlo.</p>
@@ -112,12 +112,12 @@ export function SettingsDialog({ onClose, initialTab = "general" }: { onClose: (
                 {countErr && (
                   <div className="e-err-banner mt-3 flex items-center gap-3 px-3 py-2 text-[13px]" role="alert">
                     <span className="flex-1">{countErr}</span>
-                    <button onClick={() => void loadCounts()} className="inline-flex items-center gap-1 rounded-md border border-current px-2 py-1 text-[12px]"><RefreshCw className="size-3" /> Reintentar</button>
+                    <Button variant="ghost" onClick={() => void loadCounts()} className="inline-flex items-center gap-1 rounded-md border border-current px-2 py-1 text-[12px]"><RefreshCw className="size-3" /> Reintentar</Button>
                   </div>
                 )}
-                <div className="mt-4"><button className={btn} onClick={() => void exportZip()} disabled={zipping} data-zip-export>
+                <div className="mt-4"><Button variant="ghost" className={btn} onClick={() => void exportZip()} disabled={zipping} data-zip-export>
                   <Download className="size-3.5" /> {zipping ? "Exportando…" : "Exportar workspace (ZIP)"}
-                </button>
+                </Button>
                 {zipDone && <p className="mt-2 text-[12.5px] text-e-ok" data-zip-done>Descargado {zipDone.name} ({(zipDone.size / 1024).toFixed(1)} KB).</p>}
                 </div>
               </section>
