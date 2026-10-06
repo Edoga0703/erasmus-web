@@ -45,8 +45,8 @@ export function Composer({ busy, disabled, onSend, onStop, draft, centered }: {
   const [files, setFiles] = useState<{ f: File; url?: string | undefined }[]>([]);
   const addFiles = (list: FileList | null) => {
     if (!list) return;
-    const add = Array.from(list).slice(0, 10).map((f) => ({ f, url: f.type.startsWith("image/") ? URL.createObjectURL(f) : undefined }));
-    setFiles((cur) => [...cur, ...add].slice(0, 10));
+    const add = Array.from(list).slice(0, 20).map((f) => ({ f, url: f.type.startsWith("image/") ? URL.createObjectURL(f) : undefined }));
+    setFiles((cur) => [...cur, ...add].slice(0, 20));
     ref.current?.focus();
   };
   const removeFile = (i: number) => setFiles((cur) => { const x = cur[i]; if (x?.url) URL.revokeObjectURL(x.url); return cur.filter((_, j) => j !== i); });
