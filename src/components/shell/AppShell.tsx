@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowDown, ChevronDown, Download, FileText, FolderOpen, ImageIcon, Printer, Info, Moon, PanelLeft, RefreshCw, Search, Settings, SquarePen, Sun, WifiOff, X } from "lucide-react";
+import { LogOut, ArrowDown, ChevronDown, Download, FileText, FolderOpen, ImageIcon, Printer, Info, Moon, PanelLeft, RefreshCw, Search, Settings, SquarePen, Sun, WifiOff, X } from "lucide-react";
 import { sandboxDir, useChat, type Attachment } from "@/hooks/use-chat";
 import { useConnection } from "@/hooks/use-connection";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { DIRECT, MOCK, displayModel } from "@/lib/api/config";
+import { DIRECT, displayModel } from "@/lib/api/config";
 import { api, ApiError } from "@/lib/api/client";
 import { setTheme, useTheme } from "@/lib/theme";
 import { MessageView } from "@/components/chat/MessageView";
@@ -18,6 +18,10 @@ import { SettingsDialog } from "./SettingsDialog";
 import { UsageMeter } from "./UsageMeter";
 import { ImagesDialog, ImageViewer, collectImages, type ChatImage } from "@/components/chat/Images";
 import { downloadMarkdown, printAsPdf } from "@/lib/export-chat";
+import { logout } from "@/lib/auth";
+import { getSession } from "@/lib/session";
+import { useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
 
 const LS = { side: "erasmus.side.w", collapsed: "erasmus.side.collapsed", panel: "erasmus.panel.w" };
 const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
@@ -56,6 +60,16 @@ export function AppShell() {
   const [atBottom, setAtBottom] = useState(true);
   const [draft, setDraft] = useState<{ text: string; n: number }>();
   const scroller = useRef<HTMLElement>(null);
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const signOut = async () => {
+    chat.stop();
+    await queryClient.cancelQueries();
+    queryClient.clear();
+    await logout();
+    void navigate({ to: "/entrar", replace: true });
+  };
+  const sessionPlan = getSession()?.plan;
 
   useEffect(() => {
     setSideW(readNum(LS.side, 260)); setPanelW(readNum(LS.panel, 460));
@@ -174,7 +188,7 @@ export function AppShell() {
           <DropdownMenuTrigger asChild>
             <button className={rail ? "e-icon-btn" : "e-side-item"} aria-label="Menú de cuenta">
               <span className="grid size-8 shrink-0 place-items-center rounded-full bg-e-ok text-[13px] font-semibold text-e-bg2">TU</span>
-              {!rail && <span className="min-w-0 flex-1 leading-tight"><span className="block truncate text-[14px]">Workspace</span><span className="block text-[12px] text-e-dim">Erasmus Web{MOCK ? " · demo" : ""}</span></span>}
+              {!rail && <span className="min-w-0 flex-1 leading-tight"><span className="block truncate text-[14px]">Mi cuenta</span><span className="block text-[12px] text-e-dim">{sessionPlan ? `Plan ${sessionPlan}` : "Erasmus Web"}</span></span>}
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent side="top" align="start" className="e-pop w-60 p-1.5">
@@ -184,6 +198,8 @@ export function AppShell() {
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem className="gap-2.5 rounded-lg px-3 py-2 text-[14px]" onSelect={() => { setSettingsOpen(true); setSideOpen(false); }}><Info className="size-4" /> Acerca de</DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem className="gap-2.5 rounded-lg px-3 py-2 text-[14px]" onSelect={() => void signOut()}><LogOut className="size-4" /> Cerrar sesión</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

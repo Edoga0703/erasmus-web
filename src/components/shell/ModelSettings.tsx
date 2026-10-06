@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { CheckCircle2, Eye, EyeOff, KeyRound, Loader2, PlugZap, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { api, ApiError } from "@/lib/api/client";
-import { MOCK, getModelConfig, isValidVpsKey, maskKey, saveModelConfig, type ModelConfig, displayModel } from "@/lib/api/config";
+import { getModelConfig, isValidVpsKey, maskKey, saveModelConfig, type ModelConfig, displayModel } from "@/lib/api/config";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
@@ -65,11 +65,6 @@ export function ModelSettings() {
 
   return (
     <section>
-      {MOCK && (
-        <p className="mb-2 rounded-xl bg-e-bg3 px-3 py-2 text-[12.5px] text-e-dim">
-          Esta vista previa está en modo demostración: la prueba responde con datos simulados. En la versión publicada conectada al servidor, la prueba consulta el servidor real.
-        </p>
-      )}
       <Field label="Clave de API" hint="Solo se usa para hablar con el modelo. Se guarda únicamente en esta pestaña y se borra al cerrarla.">
         {!editing ? (
           <div className="flex items-center gap-2">
@@ -110,7 +105,7 @@ export function ModelSettings() {
 
       {test.kind === "ok" && (
         <div className="mt-4 rounded-2xl border border-e-line p-4 text-[13.5px]" data-model-test="ok">
-          <div className="flex items-center gap-2 font-medium text-e-ok"><CheckCircle2 className="size-4" /> Modelo conectado · {test.ms} ms{MOCK ? " (demostración)" : ""}</div>
+          <div className="flex items-center gap-2 font-medium text-e-ok"><CheckCircle2 className="size-4" /> Modelo conectado · {test.ms} ms</div>
           <div className="mt-2 text-e-dim">Modelos: <span className="font-mono text-e-tx">{test.models.map(displayModel).join(", ") || "—"}</span></div>
           <div className="mt-1 text-e-dim">Cuenta: <span className="text-e-tx">{test.account}</span></div>
         </div>

@@ -1,4 +1,4 @@
-import { API_BASE, DIRECT, MOCK, MODEL_BASE, customSystemText, getModelConfig, getToken, isValidVpsKey } from "./config";
+import { API_BASE, DIRECT, MODEL_BASE, customSystemText, getModelConfig, getToken, isValidVpsKey } from "./config";
 
 /** Routes the bridge proxies to the VPS: only these carry the ms- key (local fs/exec routes use the token only). */
 const REMOTE = /^\/(v1\/|api\/chat|api\/models|api\/account\/|api\/images\/)/;
@@ -13,6 +13,13 @@ import type {
   StatusResponse,
   FilesResponse,
 } from "./types";
+import { clearSession, getSession } from "@/lib/session";
+
+/** Server says the session is no longer valid → wipe it locally and go to the login page. */
+function onSessionRejected() {
+  clearSession();
+  if (typeof window !== "undefined" && window.location.pathname !== "/entrar") window.location.assign("/entrar");
+}
 
 export class ApiError extends Error {
   status: number;
@@ -24,7 +31,7 @@ export class ApiError extends Error {
   }
 }
 
-/** All network I/O goes through here. In mock mode the request is served by /src/mocks. */
+/** All network I/O goes through here. The user session header is attached to bridge calls only (never to the model origin). */
 export async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
   if (DIRECT) return directFetch(path, init);
   const headers = new Headers(init.headers);
@@ -35,12 +42,11 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
     const cfg = getModelConfig();
     if (isValidVpsKey(cfg.apiKey) && !headers.has("Authorization")) headers.set("Authorization", `Bearer ${cfg.apiKey}`);
   }
-  const req = { ...init, headers };
-  if (MOCK) {
-    const { mockFetch } = await import("@/mocks");
-    return mockFetch(path, req);
-  }
-  return fetch(`${API_BASE}${path}`, req);
+  const session = getSession();
+  if (session && !session.local) headers.set("X-Erasmus-Session", session.token);
+  const res = await fetch(`${API_BASE}${path}`, { ...init, headers });
+  if (res.status === 401 && session && !session.local && res.headers.get("X-Erasmus-Auth") === "expired") onSessionRejected();
+  return res;
 }
 
 /** Routes the model server answers itself while the bridge is not deployed. */

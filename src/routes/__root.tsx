@@ -15,6 +15,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { captureTokenFromUrl } from "../lib/api/config";
 import { THEME_BOOT } from "../lib/theme";
+import { onForeignLogout } from "../lib/session";
 
 function NotFoundComponent() {
   return (
@@ -136,7 +137,9 @@ function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   useEffect(() => {
     captureTokenFromUrl();
-  }, []);
+    // Sign-out in another tab of this browser ends this tab's session too.
+    return onForeignLogout(() => { queryClient.clear(); window.location.assign("/entrar"); });
+  }, [queryClient]);
 
   return (
     <QueryClientProvider client={queryClient}>

@@ -174,3 +174,11 @@ Reintento ante fallo permanente (`vps_error`, `offline`): vuelve a fallar hasta 
 
 ## nginx: cabeceras de seguridad (PROPOSED)
 La página ya incluye una CSP en <meta>. Añadir en nginx: `add_header Content-Security-Policy "frame-ancestors 'self'" always;`, `X-Frame-Options SAMEORIGIN`, `Strict-Transport-Security "max-age=31536000"` y `Referrer-Policy no-referrer`.
+
+
+## PROPOSED — Inicio de sesión por código (erm-)
+- `POST /api/auth/login {code}` → `200 {session, user_id, plan, expires}`; `401` código inválido; `429` + `Retry-After` por límite de intentos (por IP y por código). Formato: `erm-XXXX-XXXX-XXXXX-XXXX` alfanumérico; guardar solo hash (p. ej. SHA-256 + pepper), comparación en tiempo constante.
+- `POST /api/auth/logout` invalida la sesión. `GET /api/auth/me` → `{user_id, plan, expires}`.
+- Toda petición lleva `X-Erasmus-Session`; el servidor DEBE filtrar chats, archivos, ZIPs y sandbox por `user_id` (carpeta `users/<user_id>/`), nunca por ids que envíe el cliente. Sesión inválida/caducada → `401` con cabecera `X-Erasmus-Auth: expired` (el cliente borra la sesión y vuelve a /entrar).
+- `user_id` debe cumplir `[A-Za-z0-9_-]{1,64}`. Añadir `X-Erasmus-Session` a CORS allow-headers.
+- Mientras esto no exista, la versión publicada no deja entrar (fallo cerrado). Los códigos se crean manualmente por el administrador.

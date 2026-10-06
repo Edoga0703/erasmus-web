@@ -1,3 +1,4 @@
+import { userKey } from "@/lib/session";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError, streamChat, type StreamUsage } from "@/lib/api/client";
 import { extractBlocks, lineDiff, type DiffRow, type ToolBlock } from "@/lib/blocks";
@@ -38,7 +39,7 @@ const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(
 export const EXEC_TIMEOUT_DEFAULT = 60;
 export const EXEC_TIMEOUT_MAX = 300;
 const OUTPUT_CAP = 64 * 1024;
-const LOCAL_CHAT_KEY = "erasmus.active-chat.v1";
+const LOCAL_CHAT_KEY = () => userKey("active-chat.v1");
 const cap = (t: string) => (t.length > OUTPUT_CAP ? t.slice(0, OUTPUT_CAP) + "\n…[salida truncada a 64 KB]" : t);
 
 interface LocalChatSnapshot {
@@ -58,7 +59,7 @@ function withoutTemporaryUrls(m: UIMessage): UIMessage {
 
 function recoverLocalChat(): LocalChatSnapshot | null {
   try {
-    const parsed = JSON.parse(localStorage.getItem(LOCAL_CHAT_KEY) ?? "null") as Partial<LocalChatSnapshot> | null;
+    const parsed = JSON.parse(localStorage.getItem(LOCAL_CHAT_KEY()) ?? "null") as Partial<LocalChatSnapshot> | null;
     if (parsed?.v !== 1 || typeof parsed.chatId !== "string" || typeof parsed.title !== "string" || !Array.isArray(parsed.messages)) return null;
     return {
       v: 1,
@@ -191,7 +192,7 @@ export function useChat(opts: { model: string }) {
           created: created.current,
           messages: messages.map(withoutTemporaryUrls),
         };
-        localStorage.setItem(LOCAL_CHAT_KEY, JSON.stringify(snapshot));
+        localStorage.setItem(LOCAL_CHAT_KEY(), JSON.stringify(snapshot));
       } catch {
         // Server persistence remains authoritative; local recovery is best effort.
       }
