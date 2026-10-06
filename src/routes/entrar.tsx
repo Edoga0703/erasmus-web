@@ -2,7 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { ArrowRight, KeyRound, Loader2 } from "lucide-react";
 import { CODE_RE, formatCode, getSession } from "@/lib/session";
-import { DEV_LOCAL_LOGIN, login } from "@/lib/auth";
+import { login } from "@/lib/auth";
 import { PublicHeader } from "@/components/PublicHeader";
 import { useT } from "@/lib/i18n";
 
@@ -82,7 +82,6 @@ function LoginPage() {
             <button type="button" onClick={() => setContactNotice(true)} className="font-medium text-e-tx underline decoration-e-line underline-offset-4 hover:decoration-e-tx">{t("login_contact")}</button>
             {contactNotice && <p role="status" className="mt-3 rounded-xl bg-e-bg3 px-3 py-2 text-[12.5px] leading-relaxed">{t("login_contact_pending")}</p>}
           </div>
-          {DEV_LOCAL_LOGIN && <p className="mt-6 rounded-xl bg-e-bg3 px-3 py-2 text-[12px] text-e-dim">Vista de desarrollo: si el servidor aún no valida códigos, cualquier código con formato válido abre un espacio local separado. En la versión publicada esto no existe.</p>}
         </form>
       </div>
     </main>

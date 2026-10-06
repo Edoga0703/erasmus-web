@@ -100,7 +100,7 @@ export function Composer({ busy, disabled, onSend, onStop, draft, centered }: {
           ref={ref}
           rows={1}
           value={text}
-          placeholder={disabled ? "Sin conexión con el puente" : "Pregunta lo que quieras"}
+          placeholder={disabled ? "Sin conexión con Erasmus" : "Pregunta lo que quieras"}
           aria-label="Mensaje"
           onChange={(e) => { setText(e.target.value); grow(e.target); }}
           onKeyDown={onKey}

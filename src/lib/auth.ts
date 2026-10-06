@@ -5,15 +5,7 @@ export type LoginResult = { ok: true } | { ok: false; reason: "format" | "invali
 export interface CouponClaim { session: string; accessCode: string; userId: string; plan: string; expires: number; message: string }
 export type CouponResult = { ok: true; claim: CouponClaim } | { ok: false; message: string };
 
-/** Dev-only escape hatch so the editor preview stays usable while the server lacks /api/auth/*. Never in a production build. */
-export const DEV_LOCAL_LOGIN = import.meta.env.DEV;
-
-async function sha256(s: string): Promise<string> {
-  const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
-  return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, "0")).join("");
-}
-
-/** POST /api/auth/login {code} → {session, user_id, plan, expires}. PROPOSED (INTEGRATION_NOTES.md). */
+/** POST /api/auth/login {code} → an authenticated Erasmus session. */
 export async function login(code: string): Promise<LoginResult> {
   if (!CODE_RE.test(code)) return { ok: false, reason: "format" };
   let res: Response;
@@ -33,12 +25,6 @@ export async function login(code: string): Promise<LoginResult> {
   }
   if (res.status === 429) return { ok: false, reason: "rate", retryAfter: Number(res.headers.get("Retry-After")) || 30 };
   if (res.status === 401 || res.status === 403) return { ok: false, reason: "invalid" };
-  if ((res.status === 404 || res.status === 503) && DEV_LOCAL_LOGIN) {
-    // Dev preview only: the user id is derived from the code so each code gets its own isolated space.
-    const userId = "dev_" + (await sha256(code)).slice(0, 24);
-    setSession({ token: "", userId, plan: "desarrollo", expires: Date.now() + 12 * 3600_000, local: true });
-    return { ok: true };
-  }
   return { ok: false, reason: "unavailable" };
 }
 

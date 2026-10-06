@@ -73,7 +73,7 @@ function recoverLocalChat(): LocalChatSnapshot | null {
     return null;
   }
 }
-/** Model-facing text of a user message: inline text of attachments (direct mode) or their sandbox paths. */
+/** Model-facing text of a user message: inline attachment text plus server workspace paths when available. */
 type ContentPart = { type: "text"; text: string } | { type: "image_url"; image_url: { url: string } };
 /** Images go as OpenAI-style image_url parts (the model accepts text + image input). */
 function toModelContent(m: UIMessage): string | ContentPart[] {

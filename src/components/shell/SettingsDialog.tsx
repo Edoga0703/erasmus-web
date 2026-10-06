@@ -1,11 +1,10 @@
 import { CustomInstructions } from "./CustomInstructions";
 import { useCallback, useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight, Download, Moon, RefreshCw, ShieldCheck, ShieldOff, Sun, WifiOff, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Moon, RefreshCw, ShieldCheck, Sun, Ticket, WifiOff, X } from "lucide-react";
 import { api, ApiError } from "@/lib/api/client";
-import { API_BASE, DIRECT, displayModel, getToken } from "@/lib/api/config";
+import { API_BASE, displayModel } from "@/lib/api/config";
 import type { StatusResponse } from "@/lib/api/types";
 import { setTheme, useTheme } from "@/lib/theme";
-import { downloadFile } from "@/components/files/FilesPanel";
 import { cn } from "@/lib/utils";
 import { ModelSettings } from "./ModelSettings";
 import pkg from "../../../package.json";
@@ -28,7 +27,9 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
   const [countErr, setCountErr] = useState("");
   const [zipping, setZipping] = useState(false);
   const [zipDone, setZipDone] = useState<{ name: string; size: number } | null>(null);
-  const hasToken = getToken() !== "";
+  const [coupon, setCoupon] = useState("");
+  const [couponState, setCouponState] = useState<"idle" | "busy" | "ok" | "error">("idle");
+  const [couponMessage, setCouponMessage] = useState("");
 
   const verify = useCallback(async () => {
     setProbe({ kind: "checking" });
@@ -37,7 +38,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
       const s = await api.status();
       setProbe({ kind: "ok", ms: Math.round(performance.now() - t0), s });
     } catch (e) {
-      setProbe({ kind: "error", msg: e instanceof ApiError && e.status !== 0 ? e.message : "No se pudo conectar con el puente." });
+      setProbe({ kind: "error", msg: e instanceof ApiError && e.status !== 0 ? e.message : "No se pudo conectar con Erasmus." });
     }
   }, []);
 
@@ -48,7 +49,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
       setCounts({ chats: c.chats.length, files: f.files.length, workspace: f.workspace_name || c.workspace_name });
     } catch (e) {
       setCounts(null);
-      setCountErr(e instanceof ApiError && e.status !== 0 ? e.message : "No se pudo conectar con el puente.");
+      setCountErr(e instanceof ApiError && e.status !== 0 ? e.message : "No se pudo conectar con Erasmus.");
     }
   }, []);
 
@@ -63,13 +64,27 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
     setZipping(true); setZipDone(null); setCountErr("");
     try {
       const r = await api.zip();
-      window.dispatchEvent(new Event("erasmus:files-changed")); // zip now lives in the workspace root → refresh tree
-      await downloadFile(r.zip_name);
-      setZipDone({ name: r.zip_name, size: r.size });
+      const url = URL.createObjectURL(r.blob);
+      const anchor = document.createElement("a");
+      anchor.href = url; anchor.download = r.name; anchor.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setZipDone({ name: r.name, size: r.blob.size });
     } catch (e) {
       setCountErr(e instanceof ApiError && e.status !== 0 ? e.message : "No se pudo exportar el workspace.");
     } finally {
       setZipping(false);
+    }
+  };
+
+  const redeemCoupon = async () => {
+    if (!coupon.trim()) return;
+    setCouponState("busy"); setCouponMessage("");
+    try {
+      const r = await api.redeemCoupon(coupon);
+      setCouponState("ok"); setCouponMessage(r.message || "Cupón aplicado."); setCoupon("");
+      window.dispatchEvent(new Event("erasmus:turn-done"));
+    } catch (e) {
+      setCouponState("error"); setCouponMessage(e instanceof ApiError ? e.message : "No se pudo aplicar el cupón.");
     }
   };
 
@@ -123,8 +138,8 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
                   <div className="mt-3" data-probe="ok">
                     <Row k="Estado" v={<span className="text-e-ok">{probe.s.status}</span>} />
                     <Row k="Latencia" v={`${probe.ms} ms`} />
-                    <Row k="Modelo activo" v={displayModel(probe.s.brand_model)} />
-                    <Row k="Workspace" v={probe.s.workspace_name} />
+                    <Row k="Modelo activo" v={displayModel(probe.s.brand_model ?? "erasmus-v1")} />
+                    <Row k="Servicio" v="Erasmus" />
                   </div>
                 )}
                 {probe.kind === "error" && (
@@ -150,19 +165,27 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
                     <button onClick={() => void loadCounts()} className="inline-flex items-center gap-1 rounded-md border border-current px-2 py-1 text-[12px]"><RefreshCw className="size-3" /> Reintentar</button>
                   </div>
                 )}
-                <div className="mt-4"><button className={btn} onClick={() => void exportZip()} disabled={zipping || DIRECT} data-zip-export>
+                <div className="mt-4"><button className={btn} onClick={() => void exportZip()} disabled={zipping} data-zip-export>
                   <Download className="size-3.5" /> {zipping ? "Exportando…" : "Exportar workspace (ZIP)"}
                 </button>
-                {DIRECT && <p className="mt-2 text-[12.5px] text-e-dim">Disponible pronto.</p>}
-                {zipDone && <p className="mt-2 text-[12.5px] text-e-ok" data-zip-done>Descargado {zipDone.name} ({(zipDone.size / 1024).toFixed(1)} KB). También aparece en la raíz del workspace.</p>}
+                {zipDone && <p className="mt-2 text-[12.5px] text-e-ok" data-zip-done>Descargado {zipDone.name} ({(zipDone.size / 1024).toFixed(1)} KB).</p>}
+                </div>
+                <div className="mt-6 border-t border-e-line pt-5">
+                  <label htmlFor="coupon" className="text-[13px] font-medium">Canjear cupón</label>
+                  <p className="mt-1 text-[12.5px] text-e-dim">Aplica créditos o beneficios a esta cuenta.</p>
+                  <div className="mt-2 flex gap-2">
+                    <div className="flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-e-line px-3"><Ticket className="size-4 shrink-0 text-e-dim" /><input id="coupon" value={coupon} onChange={(e) => { setCoupon(e.target.value.toUpperCase()); setCouponState("idle"); }} className="h-10 min-w-0 flex-1 bg-transparent font-mono text-[13px] outline-none" placeholder="Código de cupón" /></div>
+                    <button className={btn} onClick={() => void redeemCoupon()} disabled={!coupon.trim() || couponState === "busy"}>{couponState === "busy" ? "Aplicando…" : "Aplicar"}</button>
+                  </div>
+                  {couponMessage && <p className={cn("mt-2 text-[12.5px]", couponState === "ok" ? "text-e-ok" : "text-e-err")} role="status">{couponMessage}</p>}
                 </div>
               </section>
             )}
             {tab === "security" && (
-              <section className="flex items-center gap-2 text-[13px]" data-token={hasToken ? "present" : "absent"}>
-                {hasToken ? <ShieldCheck className="size-4 text-e-ok" /> : <ShieldOff className="size-4 text-e-err" />}
-                <span>Token de acceso: {hasToken ? "presente" : "ausente"}</span>
-                <span className="text-e-dim">· el valor nunca se muestra</span>
+              <section className="flex items-center gap-2 text-[13px]">
+                <ShieldCheck className="size-4 text-e-ok" />
+                <span>Sesión protegida y aislada por cuenta.</span>
+                <span className="text-e-dim">El identificador nunca se muestra.</span>
               </section>
             )}
             {tab === "about" && (
