@@ -1,4 +1,7 @@
 # Roadmap Erasmus Web
+- [ ] Pulir chat y adjuntos según auditoría; conservar límite de tamaño desactivado y actividad ilustrativa.
+- [ ] Ajustes 1.0 beta: retirar Estado/Diagnóstico, ampliar Seguridad y simplificar Acerca de.
+- [ ] Eliminar cuenta desde la web (bloqueo: contrato v5.4 no incluye endpoint de eliminación).
 - [x] H1. Núcleo: chat SSE + ejecución automática de code:python, code:bash y file:* (sandbox simulado)
 - [x] H2 (hecho). Renderizado: mermaid, chart SVG, diffs, indicador de pensamiento, toasts con reintento
 - [x] H3. Archivos y artifacts
