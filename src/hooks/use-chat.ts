@@ -233,7 +233,12 @@ export function useChat(opts: { model: string }) {
     const all = msgsRef.current.filter((m) => !m.streaming);
     const { summary: prev, start } = summaryBase(all);
     const rest = all.slice(start).filter((m) => !m.kind);
-    if (rest.length <= KEEP_RECENT) return false;
+    if (rest.length <= KEEP_RECENT) {
+      // Always visible: there is no older history to summarize, so the current message itself does not fit.
+      const t = Date.now();
+      commit((ms) => [...ms, { id: uid(), role: "assistant", kind: "compaction", content: "", compaction: { status: "error", startedAt: t, ms: 0, note: "Compactación intentada: no hay mensajes anteriores que resumir" }, ts: t }]);
+      return false;
+    }
     const older = rest.slice(0, rest.length - KEEP_RECENT);
     const cut = rest[rest.length - KEEP_RECENT]!;
     let transcript = (prev ? `Resumen previo:\n${prev}\n\n` : "") + older.map((m) => `${m.role === "user" ? "Usuario" : "Erasmus"}: ${withAttachments(m)}`).join("\n\n");
