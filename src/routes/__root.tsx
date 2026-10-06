@@ -136,7 +136,8 @@ function RootShell({ children }: { children: ReactNode }) {
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   useEffect(() => {
-    captureTokenFromUrl();
+    // Public pages never capture private bridge credentials from shared URLs.
+    if (window.location.pathname === "/chat") captureTokenFromUrl();
     // Sign-out in another tab of this browser ends this tab's session too.
     return onForeignLogout(() => { queryClient.clear(); window.location.assign("/entrar"); });
   }, [queryClient]);

@@ -126,6 +126,7 @@ function Landing() {
           <span className="mr-auto">{t("footer_rights")}</span>
           <Link to="/ayuda" className="hover:text-e-tx">{t("nav_help")}</Link>
           <Link to="/estado" className="hover:text-e-tx">{t("nav_status")}</Link>
+          <Link to="/privacidad" className="hover:text-e-tx">{t("nav_privacy")}</Link>
           <Link to="/entrar" className="hover:text-e-tx">{t("nav_login")}</Link>
         </div>
       </footer>
