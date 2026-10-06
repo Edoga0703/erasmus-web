@@ -64,7 +64,9 @@ function StatusPage() {
               <>
                 <div className="flex justify-between py-3"><dt className="text-e-dim">{t("status_latency")}</dt><dd className="font-mono">{probe.ms} ms</dd></div>
                 <div className="flex justify-between py-3"><dt className="text-e-dim">{t("status_model")}</dt><dd className="font-mono">Erasmus</dd></div>
-                <div className="flex justify-between py-3"><dt className="text-e-dim">{t("status_workspace")}</dt><dd className="font-mono">{probe.workspace || "—"}</dd></div>
+                {probe.workspace && probe.workspace !== "Sin sandbox" && (
+                  <div className="flex justify-between py-3"><dt className="text-e-dim">{t("status_workspace")}</dt><dd className="font-mono">{probe.workspace}</dd></div>
+                )}
               </>
             )}
             {probe.state !== "checking" && (
