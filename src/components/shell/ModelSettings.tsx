@@ -2,8 +2,7 @@ import { useEffect, useState } from "react";
 import { CheckCircle2, Eye, EyeOff, KeyRound, Loader2, PlugZap, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { api, ApiError } from "@/lib/api/client";
-import { MOCK, getModelConfig, isValidVpsKey, saveModelConfig, type ModelConfig, displayModel } from "@/lib/api/config";
-import { Switch } from "@/components/ui/switch";
+import { MOCK, getModelConfig, isValidVpsKey, maskKey, saveModelConfig, type ModelConfig, displayModel } from "@/lib/api/config";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
