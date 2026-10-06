@@ -1,10 +1,8 @@
 import { useEffect, useState } from "react";
-import { CheckCircle2, Eye, EyeOff, KeyRound, Loader2, PlugZap, XCircle } from "lucide-react";
-import { toast } from "sonner";
+import { CheckCircle2, Loader2, PlugZap, XCircle } from "lucide-react";
 import { api, ApiError } from "@/lib/api/client";
-import { getModelConfig, isValidVpsKey, maskKey, saveModelConfig, type ModelConfig, displayModel } from "@/lib/api/config";
+import { getModelConfig, displayModel } from "@/lib/api/config";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { cn } from "@/lib/utils";
 
 type Test = { kind: "idle" } | { kind: "run" } | { kind: "ok"; ms: number; models: string[]; account: string } | { kind: "err"; msg: string };
 
@@ -18,15 +16,10 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
   );
 }
 
-/** Ajustes → Modelo y API: user-level API key, model choice from GET /v1/models and a live test. Server endpoint/token are deployment config, not user settings. */
+/** Server-assigned model connection. Users never manage infrastructure credentials. */
 export function ModelSettings() {
-  const [cfg, setCfg] = useState<ModelConfig>(() => getModelConfig());
-  const [models, setModels] = useState<string[]>([cfg.model || "erasmus-v1"]);
-  const [show, setShow] = useState(false);
-  const [editing, setEditing] = useState(() => !getModelConfig().apiKey);
+  const [models, setModels] = useState<string[]>([getModelConfig().model]);
   const [test, setTest] = useState<Test>({ kind: "idle" });
-  const keyBad = cfg.apiKey !== "" && !isValidVpsKey(cfg.apiKey);
-  const input = "w-full rounded-xl border border-e-line bg-e-bg2 px-3 py-2 text-[14px] text-e-tx outline-none focus:border-e-acc2";
 
   const loadModels = async () => {
     const m = await api.models();
@@ -36,19 +29,7 @@ export function ModelSettings() {
   };
   useEffect(() => { loadModels().catch(() => { /* list stays at the saved model */ }); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const save = (quiet = false) => {
-    if (keyBad) { toast.error("La clave debe empezar por ms- y tener más de 10 caracteres."); return false; }
-    // While editing with an empty field, keep the previously saved key instead of wiping it.
-    const toSave = editing && !cfg.apiKey ? { ...cfg, apiKey: getModelConfig().apiKey } : cfg;
-    saveModelConfig(toSave);
-    setCfg(toSave); setShow(false);
-    if (toSave.apiKey) setEditing(false);
-    if (!quiet) toast.success("Conexión del modelo guardada.");
-    return true;
-  };
-
   const run = async () => {
-    if (!save(true)) return;
     setTest({ kind: "run" });
     const t0 = performance.now();
     try {
@@ -65,30 +46,14 @@ export function ModelSettings() {
 
   return (
     <section>
-      <Field label="Clave de API" hint="Solo se usa para hablar con el modelo. Se guarda únicamente en esta pestaña y se borra al cerrarla.">
-        {!editing ? (
-          <div className="flex items-center gap-2">
-            <div className={cn(input, "flex items-center gap-2 font-mono")} data-key-masked>
-              <KeyRound className="size-4 text-e-dim" /> {maskKey(cfg.apiKey)}
-            </div>
-            <button type="button" onClick={() => { setEditing(true); setCfg({ ...cfg, apiKey: "" }); }} className="shrink-0 rounded-full border border-e-line px-3 py-2 text-[13.5px] hover:bg-e-bg3">Cambiar</button>
-            <button type="button" onClick={() => { const c = { ...cfg, apiKey: "" }; setCfg(c); saveModelConfig(c); setEditing(true); toast.success("Clave eliminada."); }} className="shrink-0 rounded-full border border-e-line px-3 py-2 text-[13.5px] hover:bg-e-bg3">Quitar</button>
-          </div>
-        ) : (
-          <div className="relative">
-            <KeyRound className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-e-dim" />
-            <input type={show ? "text" : "password"} autoComplete="off" spellCheck={false} placeholder="ms-…" value={cfg.apiKey} aria-label="Clave de API"
-              onChange={(e) => setCfg({ ...cfg, apiKey: e.target.value.trim() })} className={cn(input, "pl-9 pr-10 font-mono", keyBad && "border-e-err")} />
-            <button type="button" className="absolute right-2 top-1/2 -translate-y-1/2 text-e-dim hover:text-e-tx" aria-label={show ? "Ocultar clave" : "Mostrar clave"} onClick={() => setShow(!show)}>
-              {show ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-            </button>
-          </div>
-        )}
-        {keyBad && <p className="mt-1.5 text-[12.5px] text-e-err">Formato no válido: debe empezar por ms- y tener más de 10 caracteres.</p>}
+      <Field label="Acceso al modelo" hint="La conexión se asigna automáticamente a tu cuenta; no necesitas configurar claves.">
+        <div className="flex items-center gap-2 rounded-xl border border-e-line bg-e-bg3 px-3 py-2.5 text-[13.5px]">
+          <CheckCircle2 className="size-4 text-e-ok" /> Gestionado por Erasmus
+        </div>
       </Field>
 
       <Field label="Modelo" hint="Modelos disponibles para tu clave.">
-        <Select value={cfg.model} onValueChange={(v) => setCfg({ ...cfg, model: v })}>
+        <Select value="erasmus-v1" disabled>
           <SelectTrigger aria-label="Modelo" className="h-10 rounded-xl"><SelectValue /></SelectTrigger>
           <SelectContent>
             {models.map((m) => <SelectItem key={m} value={m}>{displayModel(m)}</SelectItem>)}
@@ -97,7 +62,6 @@ export function ModelSettings() {
       </Field>
 
       <div className="flex flex-wrap gap-2 pt-4">
-        <button type="button" onClick={() => save()} className="rounded-full bg-e-acc px-4 py-2 text-[14px] font-medium text-e-bg2">Guardar</button>
         <button type="button" onClick={() => void run()} disabled={test.kind === "run"} className="inline-flex items-center gap-1.5 rounded-full border border-e-line px-4 py-2 text-[14px] hover:bg-e-bg3 disabled:opacity-50">
           {test.kind === "run" ? <Loader2 className="size-4 animate-spin" /> : <PlugZap className="size-4" />} Probar conexión
         </button>

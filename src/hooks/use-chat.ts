@@ -355,7 +355,7 @@ export function useChat(opts: { model: string }) {
       }
       const err = e instanceof ApiError ? e : null;
       const retryable = !err || err.status === 0 || err.status === 408 || err.status >= 500;
-      const message = !err ? "Error inesperado en la conversación." : err.status === 0 ? "Sin conexión con el puente." : err.status === 504 || err.status === 408 ? "Tiempo de espera agotado." : err.message;
+      const message = !err ? "Error inesperado en la conversación." : err.status === 0 ? "Sin conexión con Erasmus." : err.status === 504 || err.status === 408 ? "Tiempo de espera agotado." : err.message;
       if (activeAssistantId) patch(activeAssistantId, { streaming: false, error: { message, retryable } });
       setFailure({ message, retryable, nonce: Date.now() });
     } finally {

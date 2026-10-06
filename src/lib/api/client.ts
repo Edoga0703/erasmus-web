@@ -1,6 +1,7 @@
 import { API_BASE, customSystemText, getModelConfig } from "./config";
 import type {
   ChatData,
+  ChatMeta,
   ChatListResponse,
   FsListResponse,
   FsReadResponse,

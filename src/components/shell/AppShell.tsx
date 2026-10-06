@@ -3,7 +3,7 @@ import { LogOut, ArrowDown, ChevronDown, Download, FileText, FolderOpen, ImageIc
 import { sandboxDir, useChat, type Attachment } from "@/hooks/use-chat";
 import { useConnection } from "@/hooks/use-connection";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { DIRECT, displayModel } from "@/lib/api/config";
+import { displayModel } from "@/lib/api/config";
 import { api, ApiError } from "@/lib/api/client";
 import { setTheme, useTheme } from "@/lib/theme";
 import { MessageView } from "@/components/chat/MessageView";
@@ -134,12 +134,11 @@ export function AppShell() {
       const att: Attachment = { name: f.name, size: f.size, url: isImg ? URL.createObjectURL(f) : undefined };
       if (isImg) { try { att.image = await imageToDataUrl(f); } catch { toast.error(`No se pudo leer ${f.name}.`); } }
       const textual = !isImg && f.type !== "application/pdf";
-      if (textual && DIRECT) {
-        if (f.size <= 200_000) att.text = await f.text(); else toast.error(`${f.name} supera 200 KB; no se puede enviar.`);
-      } else if (textual && f.size <= 2_000_000) {
+      if (textual && f.size <= 2_000_000) {
         try {
           const path = `${sandboxDir(chat.chatId)}/${f.name}`;
           await api.fsWrite(path, await f.text());
+          att.text = await f.text();
           att.path = path;
         } catch (e) { toast.error(e instanceof ApiError ? e.message : `No se pudo subir ${f.name}.`); }
       } else if (textual) toast.error(`${f.name} supera 2 MB.`);
