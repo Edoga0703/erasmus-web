@@ -95,7 +95,14 @@ export const api = {
   exec: (_req: ExecRequest): Promise<ExecResponse> => Promise.reject(new ApiError(501, "exec_unavailable", "La ejecución de código no está disponible en el servidor v5.4.")),
   chats: async (): Promise<ChatListResponse> => {
     const r = await apiJson<{ ok: boolean; chats: ChatMeta[] }>("/api/workspace/chats");
-    return { ok: r.ok, workspace_name: "Mi espacio", chats: (r.chats ?? []).map((chat) => ({ ...chat, created: chat.created_at ?? chat.created, updated: chat.updated_at ?? chat.updated })) };
+    return { ok: r.ok, workspace_name: "Mi espacio", chats: (r.chats ?? []).map((chat) => {
+      const normalized: ChatMeta = { ...chat };
+      const created = chat.created_at ?? chat.created;
+      const updated = chat.updated_at ?? chat.updated;
+      if (created !== undefined) normalized.created = created;
+      if (updated !== undefined) normalized.updated = updated;
+      return normalized;
+    }) };
   },
   getChat: async (id: string): Promise<{ ok: boolean; chat_data: ChatData }> => {
     const r = await apiJson<{ ok: boolean; chat: ChatData & { created_at?: number; updated_at?: number } }>(`/api/workspace/chat?id=${encodeURIComponent(id)}`);
@@ -135,14 +142,14 @@ export const api = {
     const name = disposition.match(/filename="?([^";]+)"?/i)?.[1] ?? "workspace_erasmus.zip";
     return { name, blob: await res.blob() };
   },
-  /** GET /v1/models (bridge proxy; presents erasmus-v1). */
+  /** GET /v1/models; the server presents the Erasmus model brand. */
   models: () => apiJson<{ data: { id: string; context_length?: number }[] }>("/v1/models"),
   account: () => apiJson<AccountResponse>("/api/account/me"),
   redeemCoupon: (code: string) => apiJson<{ ok: boolean; message: string; type: string; value: number; expires_at?: string | null }>("/api/coupons/redeem", { code: code.trim().toUpperCase() }),
   syncChat: (chat: ChatData) => apiJson<{ ok: boolean; id: string }>("/api/workspace/sync_chat", { ...chat, created_at: chat.created, updated_at: chat.updated }),
 };
 
-/** Public health snapshot: deliberately bypasses apiFetch so no user, bridge, or model credentials are attached. */
+/** Public health snapshot: deliberately bypasses apiFetch so no user credentials are attached. */
 export async function publicStatus(): Promise<{ available: boolean }> {
   const response = await fetch(`${API_BASE}/health`, {
     method: "GET",
