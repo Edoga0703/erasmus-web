@@ -14,6 +14,7 @@ import { Route as AuthRouteRouteImport } from './routes/_auth/route'
 import { Route as AyudaRouteImport } from './routes/ayuda'
 import { Route as EntrarRouteImport } from './routes/entrar'
 import { Route as EstadoRouteImport } from './routes/estado'
+import { Route as PrivacidadRouteImport } from './routes/privacidad'
 import { Route as AuthChatRouteImport } from './routes/_auth/chat'
 
 const IndexRoute = IndexRouteImport.update({
@@ -40,6 +41,11 @@ const EstadoRoute = EstadoRouteImport.update({
   path: '/estado',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PrivacidadRoute = PrivacidadRouteImport.update({
+  id: '/privacidad',
+  path: '/privacidad',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthChatRoute = AuthChatRouteImport.update({
   id: '/chat',
   path: '/chat',
@@ -51,6 +57,7 @@ export interface FileRoutesByFullPath {
   '/ayuda': typeof AyudaRoute
   '/entrar': typeof EntrarRoute
   '/estado': typeof EstadoRoute
+  '/privacidad': typeof PrivacidadRoute
   '/chat': typeof AuthChatRoute
 }
 export interface FileRoutesByTo {
@@ -58,6 +65,7 @@ export interface FileRoutesByTo {
   '/ayuda': typeof AyudaRoute
   '/entrar': typeof EntrarRoute
   '/estado': typeof EstadoRoute
+  '/privacidad': typeof PrivacidadRoute
   '/chat': typeof AuthChatRoute
 }
 export interface FileRoutesById {
@@ -67,13 +75,14 @@ export interface FileRoutesById {
   '/ayuda': typeof AyudaRoute
   '/entrar': typeof EntrarRoute
   '/estado': typeof EstadoRoute
+  '/privacidad': typeof PrivacidadRoute
   '/_auth/chat': typeof AuthChatRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/ayuda' | '/entrar' | '/estado' | '/chat'
+  fullPaths: '/' | '/ayuda' | '/entrar' | '/estado' | '/privacidad' | '/chat'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/ayuda' | '/entrar' | '/estado' | '/chat'
+  to: '/' | '/ayuda' | '/entrar' | '/estado' | '/privacidad' | '/chat'
   id:
     | '__root__'
     | '/'
@@ -81,6 +90,7 @@ export interface FileRouteTypes {
     | '/ayuda'
     | '/entrar'
     | '/estado'
+    | '/privacidad'
     | '/_auth/chat'
   fileRoutesById: FileRoutesById
 }
@@ -90,6 +100,7 @@ export interface RootRouteChildren {
   AyudaRoute: typeof AyudaRoute
   EntrarRoute: typeof EntrarRoute
   EstadoRoute: typeof EstadoRoute
+  PrivacidadRoute: typeof PrivacidadRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -129,6 +140,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof EstadoRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/privacidad': {
+      id: '/privacidad'
+      path: '/privacidad'
+      fullPath: '/privacidad'
+      preLoaderRoute: typeof PrivacidadRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_auth/chat': {
       id: '/_auth/chat'
       path: '/chat'
@@ -157,6 +175,7 @@ const rootRouteChildren: RootRouteChildren = {
   AyudaRoute: AyudaRoute,
   EntrarRoute: EntrarRoute,
   EstadoRoute: EstadoRoute,
+  PrivacidadRoute: PrivacidadRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

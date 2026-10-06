@@ -42,6 +42,9 @@ Lo aplica el equipo de backend antes de la integración real. El origen web se t
 ## Endpoints usados
 `GET /api/status`, `GET /api/models`, `POST /api/chat` (SSE), `POST /api/fs/list`, `POST /api/fs/read`, `POST /api/fs/write`, `GET /api/workspace/chats`, `GET /api/workspace/chat?id=`, `POST /api/workspace/sync_chat` (también para renombrar), `GET /api/workspace/files` (artifacts = `rel_path` que empieza por `artifacts/`), `POST /api/workspace/upload`, `GET /api/fs/download`.
 
+### Estado público seguro (PROPOSED para producción)
+La página `/estado` consulta una instantánea de `GET /api/status` sin `X-Erasmus-Token`, `X-Erasmus-Session` ni `Authorization`. El servidor debe actualizar esa instantánea mediante su comprobación programada, limitar frecuencia y responder solo `{"ok":true,"status":"ready","checked_at":"..."}`. No debe publicar `cwd`, workspace, versión, componentes internos, contadores globales ni identificadores del modelo. El cliente filtra la respuesta, pero esa medida no sustituye reducir el JSON en el servidor: todo payload recibido por el navegador es visible. Se recomienda caché pública breve (30–60 s) y protección antiabuso en el servidor.
+
 ## PROPOSED (no existen todavía; la UI muestra el botón deshabilitado con la nota "disponible pronto")
 - Extensión de `POST /api/exec` con `language`/`code` (ver Herramientas).
 - `POST /api/workspace/delete_chat` `{"id"}` → `{"ok":true,"deleted":true}`

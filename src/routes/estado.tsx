@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
-import { Activity, CheckCircle2, Clock3, Files, Loader2, MessageSquareText, RefreshCw, Sparkles, XCircle } from "lucide-react";
-import { api } from "@/lib/api/client";
+import { Activity, CheckCircle2, Clock3, Files, Loader2, MessageSquareText, Radio, Sparkles, XCircle } from "lucide-react";
+import { publicStatus } from "@/lib/api/client";
 import { PublicHeader } from "@/components/PublicHeader";
 import { useT } from "@/lib/i18n";
 
@@ -19,7 +19,7 @@ export const Route = createFileRoute("/estado")({
   component: StatusPage,
 });
 
-type Probe = { state: "checking" } | { state: "ok"; ms: number; model: string; workspace: string; at: Date } | { state: "down"; at: Date };
+type Probe = { state: "checking" } | { state: "ok"; ms: number; at: Date } | { state: "down"; at: Date };
 
 function StatusPage() {
   const t = useT();
@@ -30,8 +30,9 @@ function StatusPage() {
     setProbe({ state: "checking" });
     const t0 = performance.now();
     try {
-      const s = await api.status();
-      setProbe({ state: "ok", ms: Math.round(performance.now() - t0), model: s.brand_model, workspace: s.workspace_name, at: new Date() });
+      const result = await publicStatus();
+      if (!result.available) throw new Error("unavailable");
+      setProbe({ state: "ok", ms: Math.round(performance.now() - t0), at: new Date() });
     } catch {
       setProbe({ state: "down", at: new Date() });
     }
@@ -76,15 +77,14 @@ function StatusPage() {
                 {probe.state === "ok" ? t("status_all_good_desc") : t("status_sub")}
               </p>
             </div>
-            <button onClick={() => void check()} disabled={probe.state === "checking"}
-              className="flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-full border border-e-line px-4 text-[13px] font-medium hover:bg-e-bg3 disabled:opacity-40">
-              <RefreshCw className={`size-3.5 ${probe.state === "checking" ? "animate-spin" : ""}`} /> {t("status_retry")}
-            </button>
+            <span className="flex h-9 shrink-0 items-center gap-2 rounded-full bg-e-bg3 px-3 text-[12px] font-medium text-e-dim">
+              <Radio className="size-3.5" /> {t("status_automatic")}
+            </span>
           </div>
 
           <dl className="grid border-t border-e-line text-[13px] sm:grid-cols-3">
             <div className="border-b border-e-line px-5 py-4 sm:border-b-0 sm:border-r"><dt className="text-e-dim">{t("status_latency")}</dt><dd className="mt-1 font-mono font-medium">{probe.state === "ok" ? `${probe.ms} ms` : "—"}</dd></div>
-            <div className="border-b border-e-line px-5 py-4 sm:border-b-0 sm:border-r"><dt className="text-e-dim">{t("status_model")}</dt><dd className="mt-1 font-medium">Erasmus</dd></div>
+            <div className="border-b border-e-line px-5 py-4 sm:border-b-0 sm:border-r"><dt className="text-e-dim">{t("status_source")}</dt><dd className="mt-1 font-medium">{t("status_automatic")}</dd></div>
             <div className="px-5 py-4"><dt className="text-e-dim">{t("status_updated")}</dt><dd className="mt-1 font-mono font-medium">{probe.state === "checking" ? "—" : probe.at.toLocaleTimeString()}</dd></div>
           </dl>
         </section>

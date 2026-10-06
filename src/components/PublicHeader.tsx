@@ -61,9 +61,10 @@ export function PublicHeader() {
         <Link to="/entrar" className="hidden w-[68px] shrink-0 rounded-full px-2 py-1.5 text-center text-[14px] hover:bg-e-bg3 md:block">{t("nav_login")}</Link>
         <Link to="/entrar" className="w-[94px] shrink-0 rounded-full bg-e-acc px-2 py-1.5 text-center text-[14px] font-medium text-e-bg2">{t("nav_start")}</Link>
       </div>
-      <nav className="mx-auto flex h-10 max-w-6xl items-center gap-5 border-t border-e-line/60 px-4 text-[13px] text-e-dim sm:hidden" aria-label="Navegación pública">
+      <nav className="mx-auto flex h-10 max-w-6xl items-center gap-5 overflow-x-auto border-t border-e-line/60 px-4 text-[13px] text-e-dim sm:hidden" aria-label="Navegación pública">
         <Link to="/ayuda" className="hover:text-e-tx">{t("nav_help")}</Link>
         <Link to="/estado" className="hover:text-e-tx">{t("nav_status")}</Link>
+        <Link to="/privacidad" className="hover:text-e-tx">{t("nav_privacy")}</Link>
         <Link to="/entrar" className="hover:text-e-tx">{t("nav_login")}</Link>
       </nav>
     </header>

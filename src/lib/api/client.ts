@@ -143,6 +143,21 @@ export const api = {
   syncChat: (chat: ChatData) => apiJson<{ ok: boolean }>("/api/workspace/sync_chat", { id: chat.id, chat_data: chat }),
 };
 
+/** Public health snapshot: deliberately bypasses apiFetch so no user, bridge, or model credentials are attached. */
+export async function publicStatus(): Promise<{ available: boolean }> {
+  const base = DIRECT ? MODEL_BASE : API_BASE;
+  const response = await fetch(`${base}/api/status`, {
+    method: "GET",
+    headers: { Accept: "application/json" },
+    credentials: "omit",
+    referrerPolicy: "no-referrer",
+  });
+  if (!response.ok) return { available: false };
+  const data = await response.json().catch(() => null) as Record<string, unknown> | null;
+  const state = String(data?.["status"] ?? data?.["state"] ?? "").toLowerCase();
+  return { available: data?.["ok"] === true || state === "up" || state === "ready" };
+}
+
 export interface StreamOptions {
   model: string;
   messages: { role: string; content: string | unknown[] }[];

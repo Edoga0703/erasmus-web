@@ -27,3 +27,4 @@
 - Login is by server-validated `erm-` access code (`src/lib/auth.ts`, `src/lib/session.ts`); session token in sessionStorage, sent as X-Erasmus-Session only to bridge routes; all per-user browser data uses `userKey()` (`erasmus:<user_id>:*`) and is wiped on logout/user switch — server is the only authority, browser isolation is defense in depth.
 - Routes: `/` public landing, `/entrar` login, protected pages under `src/routes/_auth/` (client-only gate) — session lives in sessionStorage, which SSR cannot read.
 - Dev builds only (`import.meta.env.DEV`) fall back to a local per-code session when /api/auth/login is missing; production fails closed.
+- Public status checks bypass `apiFetch` and carry no session, bridge, or model credentials; the production endpoint must return only a cached availability snapshot — prevents public routes from leaking private headers or infrastructure details.

@@ -14,3 +14,5 @@
 - [ ] Usuarios con inicio de sesión mediante la API (espera: diseño del login en el servidor)
 - [ ] Panel de administración para crear y controlar usuarios (espera: endpoints del servidor)
 - [ ] Eliminar conversaciones y su contenido (espera: endpoint del servidor)
+- [x] Estado público sin credenciales ni comprobación manual; política de privacidad ES/EN/PT
+- [ ] Aplicar en el servidor la eliminación automática a 30 días y el payload mínimo de Estado
