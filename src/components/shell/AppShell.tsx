@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { LogOut, ArrowDown, ChevronDown, Download, FileText, FolderOpen, ImageIcon, Printer, Info, Moon, PanelLeft, RefreshCw, Search, Settings, SquarePen, Sun, WifiOff, X } from "lucide-react";
+import { LogOut, ArrowDown, ChevronDown, Download, FileText, FolderOpen, ImageIcon, Printer, Info, Moon, PanelLeft, RefreshCw, Search, Settings, SquarePen, Sun, TimerReset, WifiOff, X } from "lucide-react";
 import { sandboxDir, useChat, type Attachment } from "@/hooks/use-chat";
 import { useConnection } from "@/hooks/use-connection";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -53,12 +53,14 @@ export function AppShell() {
   const [sideW, setSideW] = useState(260);
   const [panelW, setPanelW] = useState(460);
   const [filesOpen, setFilesOpen] = useState(false);
+  const [panelTab, setPanelTab] = useState<"activity" | "files" | "artifacts">("files");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [imagesOpen, setImagesOpen] = useState(false);
   const [viewImg, setViewImg] = useState<ChatImage | null>(null);
   const [atBottom, setAtBottom] = useState(true);
-  const [draft, setDraft] = useState<{ text: string; n: number }>();
+  const [draft] = useState<{ text: string; n: number }>();
+  const [openingChat, setOpeningChat] = useState(false);
   const scroller = useRef<HTMLElement>(null);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -86,16 +88,15 @@ export function AppShell() {
     return () => window.removeEventListener("keydown", k);
   }, []);
 
-  // Network / timeout / 5xx → toast with "Reintentar" that replays the same failed call.
   useEffect(() => {
-    const f = chat.failure;
-    if (!f) return;
-    toast.error(f.message, {
-      id: "chat-failure",
-      duration: f.retryable ? Infinity : 6000,
-      action: f.retryable ? { label: "Reintentar", onClick: () => chat.retry() } : undefined,
-    });
-  }, [chat.failure]); // eslint-disable-line react-hooks/exhaustive-deps
+    const openPanel = (event: Event) => {
+      const detail = (event as CustomEvent<"activity" | "files" | "artifacts">).detail;
+      setPanelTab(detail || "activity");
+      setFilesOpen(true);
+    };
+    window.addEventListener("erasmus:open-panel", openPanel);
+    return () => window.removeEventListener("erasmus:open-panel", openPanel);
+  }, []);
 
   useEffect(() => {
     const el = scroller.current;
@@ -110,9 +111,9 @@ export function AppShell() {
   const lastUser = [...visible].reverse().find((m) => m.role === "user")?.content;
 
   const regenerate = useCallback(() => { if (lastUser) void chat.send(lastUser); }, [lastUser, chat]);
-  const edit = useCallback((text: string) => setDraft({ text, n: Date.now() }), []);
-  const newChat = () => { chat.reset(); setSideOpen(false); };
-  const openChat = (id: string) => { setSideOpen(false); chat.open(id).catch(() => toast.error("No se pudo abrir la conversación.")); };
+  const canLeave = () => !chat.temporary || chat.messages.length === 0 || window.confirm("Esta conversación temporal desaparecerá al salir. ¿Continuar?");
+  const newChat = () => { if (!canLeave()) return; chat.reset(); setSideOpen(false); };
+  const openChat = (id: string) => { if (!canLeave()) return; setSideOpen(false); setOpeningChat(true); chat.open(id).catch(() => toast.error("No se pudo abrir la conversación.")).finally(() => setOpeningChat(false)); };
 
   /** Downscale photos (max 1600 px, JPEG) so they travel inline to the model. */
   const imageToDataUrl = async (f: File): Promise<string> => {
@@ -168,7 +169,7 @@ export function AppShell() {
           { label: "Nueva conversación", Icon: SquarePen, on: newChat, kbd: "" },
           { label: "Buscar conversaciones", Icon: Search, on: () => { setSearchOpen(true); setSideOpen(false); }, kbd: "Ctrl K" },
           { label: "Imágenes", Icon: ImageIcon, on: () => { setImagesOpen(true); setSideOpen(false); }, kbd: "" },
-          { label: "Archivos", Icon: FolderOpen, on: () => { setFilesOpen(true); setSideOpen(false); }, kbd: "" },
+          { label: "Archivos", Icon: FolderOpen, on: () => { setPanelTab("files"); setFilesOpen(true); setSideOpen(false); }, kbd: "" },
         ].map(({ label, Icon, on, kbd }) =>
           rail ? (
             <button key={label} className="e-icon-btn text-e-tx" aria-label={label} title={label} onClick={on}><Icon className="size-5" /></button>
@@ -230,15 +231,21 @@ export function AppShell() {
       <main className="relative flex min-w-0 flex-1 flex-col">
         <header className="flex h-14 shrink-0 items-center gap-1 px-2 sm:px-3">
           {mobile && <button className="e-icon-btn text-e-tx" aria-label="Abrir barra lateral" onClick={() => setSideOpen(true)}><PanelLeft className="size-5" /></button>}
-          <button className="flex min-w-0 items-center gap-1 rounded-lg px-2.5 py-1.5 text-[17px] font-medium hover:bg-e-bg3" onClick={() => setSettingsOpen(true)} aria-label="Modelo y conexión">
-            <span className="truncate">Erasmus</span>
-            {displayModel(model) !== "Erasmus" && <span className="hidden truncate text-e-dim sm:inline">{displayModel(model)}</span>}
-            <ChevronDown className="size-4 shrink-0 text-e-dim" />
-          </button>
-          <span className="ml-1 flex shrink-0 items-center gap-1.5 text-[12px] text-e-dim" title={conn.state === "online" ? "Conectado" : "Sin conexión"}>
-            <i className={cn("inline-block size-2 rounded-full", conn.state === "online" ? "bg-e-ok" : conn.state === "checking" ? "bg-e-dim" : "bg-e-err")} />
-            <span className="hidden sm:inline">{conn.state === "online" ? "Conectado" : conn.state === "checking" ? "Conectando…" : "Sin conexión"}</span>
-          </span>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="flex min-w-0 items-center gap-1 rounded-lg px-2.5 py-1.5 text-[17px] font-medium hover:bg-e-bg3" aria-label="Opciones de conversación">
+                <span className="truncate">{chat.temporary ? "Conversación temporal" : "Erasmus"}</span>
+                {!chat.temporary && displayModel(model) !== "Erasmus" && <span className="hidden truncate text-e-dim sm:inline">{displayModel(model)}</span>}
+                <ChevronDown className="size-4 shrink-0 text-e-dim" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="e-pop min-w-60 p-1.5">
+              <DropdownMenuItem className="gap-2.5 rounded-lg px-3 py-2" onSelect={() => chat.startTemporary()}><TimerReset /> Nueva conversación temporal</DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem className="gap-2.5 rounded-lg px-3 py-2" onSelect={() => setSettingsOpen(true)}><Settings /> Modelo y conexión</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          {conn.state !== "online" && <span className="ml-1 flex shrink-0 items-center gap-1.5 text-[12px] text-e-dim"><i className={cn("inline-block size-2 rounded-full", conn.state === "checking" ? "bg-e-dim" : "bg-e-err")} /><span className="hidden sm:inline">{conn.state === "checking" ? "Conectando…" : "Sin conexión"}</span></span>}
           <span className="flex-1" />
           <h1 className="sr-only">{chat.title}</h1>
           <UsageMeter />
@@ -253,7 +260,7 @@ export function AppShell() {
               </DropdownMenuContent>
             </DropdownMenu>
           )}
-          <button className={cn("e-icon-btn text-e-tx", filesOpen && "bg-e-bg3")} aria-label="Archivos" aria-pressed={filesOpen} onClick={() => setFilesOpen((o) => !o)}><FolderOpen className="size-5" /></button>
+          <button className={cn("e-icon-btn text-e-tx", filesOpen && "bg-e-bg3")} aria-label="Archivos y actividad" aria-pressed={filesOpen} onClick={() => { setPanelTab("files"); setFilesOpen((o) => !o); }}><FolderOpen className="size-5" /></button>
           {mobile && <button className="e-icon-btn text-e-tx" aria-label="Nueva conversación" onClick={newChat}><SquarePen className="size-5" /></button>}
         </header>
 
@@ -276,10 +283,11 @@ export function AppShell() {
               const t = e.target as HTMLElement;
               if (t.tagName === "IMG" && t.closest(".e-md")) { const im = t as HTMLImageElement; setViewImg({ src: im.currentSrc || im.src, alt: im.alt || "Imagen", fromUser: false }); }
             }}>
-              <div className="mx-auto flex max-w-3xl flex-col gap-8 px-4 pb-10 pt-4 sm:px-6">
+              <div className="mx-auto flex min-h-full max-w-3xl flex-col gap-8 px-4 pb-10 pt-4 sm:px-6">
+                {openingChat && <div className="space-y-5 py-6" role="status" aria-label="Abriendo conversación"><div className="h-4 w-2/3 animate-pulse rounded bg-e-bg3" /><div className="h-4 w-full animate-pulse rounded bg-e-bg3" /><div className="h-4 w-4/5 animate-pulse rounded bg-e-bg3" /></div>}
                 {visible.map((m) => (
                   <MessageView key={m.id} m={m} isLast={m.id === lastAssistant} busy={chat.busy}
-                    onRegenerate={m.id === lastAssistant ? regenerate : undefined} onEdit={m.role === "user" ? edit : undefined} onContinue={m.id === lastAssistant ? chat.continueLast : undefined} />
+                    onRegenerate={m.id === lastAssistant ? regenerate : undefined} onBranch={m.role === "assistant" ? () => void chat.branchFrom(m.id) : undefined} onRetry={m.error?.retryable ? chat.retry : undefined} onContinue={m.id === lastAssistant ? chat.continueLast : undefined} />
                 ))}
               </div>
             </section>
@@ -307,11 +315,11 @@ export function AppShell() {
       </main>
       {filesOpen && (
         mobile ? (
-          <FilesPanel convId={chat.chatId} refreshKey={`${chat.busy}-${chat.messages.length}`} onClose={() => setFilesOpen(false)} />
+          <FilesPanel convId={chat.chatId} refreshKey={`${chat.busy}-${chat.messages.length}`} messages={chat.messages} initialTab={panelTab} onClose={() => setFilesOpen(false)} />
         ) : (
           <div className="relative flex shrink-0" style={{ width: panelW }}>
             <Resizer dir={-1} label="Redimensionar panel de archivos" onDrag={(dx) => setPanelW((w) => clamp(w + dx, 320, 860))} />
-            <FilesPanel convId={chat.chatId} refreshKey={`${chat.busy}-${chat.messages.length}`} onClose={() => setFilesOpen(false)} />
+            <FilesPanel convId={chat.chatId} refreshKey={`${chat.busy}-${chat.messages.length}`} messages={chat.messages} initialTab={panelTab} onClose={() => setFilesOpen(false)} />
           </div>
         )
       )}

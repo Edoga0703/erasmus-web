@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ChevronDown, ChevronRight, Download, FileCode2, FileImage, FileSpreadsheet, FileText, Folder, RefreshCw, X } from "lucide-react";
+import { Activity, CheckCircle2, ChevronDown, ChevronRight, Download, FileCode2, FileImage, FileSpreadsheet, FileText, Folder, Loader2, RefreshCw, X } from "lucide-react";
 
 /** Colored type icon (ChatGPT sources style). */
 export function TypeIcon({ name }: { name: string }) {
@@ -13,6 +13,8 @@ import type { WorkspaceFile } from "@/lib/api/types";
 import { sandboxDir } from "@/hooks/use-chat";
 import { cn } from "@/lib/utils";
 import { FilePreview } from "./FilePreview";
+import type { UIMessage } from "@/hooks/use-chat";
+import { allActivity } from "@/lib/activity";
 
 interface Node { name: string; path: string; dir: boolean; size: number; children: Node[] }
 
@@ -79,9 +81,9 @@ function TreeRow({ n, depth, open, toggle, sel, onSelect, highlight }: { n: Node
   );
 }
 
-export function FilesPanel({ convId, refreshKey, onClose }: { convId: string; refreshKey: unknown; onClose: () => void }) {
+export function FilesPanel({ convId, refreshKey, messages, initialTab = "files", onClose }: { convId: string; refreshKey: unknown; messages: UIMessage[]; initialTab?: "activity" | "files" | "artifacts"; onClose: () => void }) {
   const [files, setFiles] = useState<WorkspaceFile[]>([]);
-  const [tab, setTab] = useState<"files" | "artifacts">("files");
+  const [tab, setTab] = useState<"activity" | "files" | "artifacts">(initialTab);
   const [sel, setSel] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const mine = sandboxDir(convId);
@@ -97,6 +99,7 @@ export function FilesPanel({ convId, refreshKey, onClose }: { convId: string; re
     return () => window.removeEventListener("erasmus:files-changed", h);
   }, [load]);
   useEffect(() => { setOpen(new Set(["sandbox", mine])); setSel(null); }, [mine]);
+  useEffect(() => setTab(initialTab), [initialTab]);
 
   const tree = useMemo(() => {
     const t = buildTree(files);
@@ -107,14 +110,15 @@ export function FilesPanel({ convId, refreshKey, onClose }: { convId: string; re
     return t;
   }, [files, mine]);
   const artifacts = useMemo(() => files.filter((f) => f.rel_path.startsWith("artifacts/")), [files]);
+  const activity = useMemo(() => allActivity(messages), [messages]);
   const toggle = (p: string) => setOpen((o) => { const n = new Set(o); if (n.has(p)) n.delete(p); else n.add(p); return n; });
 
   return (
     <aside className="fixed inset-0 z-40 flex flex-col border-l border-e-line bg-e-bg md:static md:inset-auto md:z-auto md:w-full md:min-w-0 md:flex-1" aria-label="Archivos">
       <div className="flex h-14 shrink-0 items-center gap-1 border-b border-e-line px-3">
-        {(["files", "artifacts"] as const).map((t) => (
+        {(["activity", "files", "artifacts"] as const).map((t) => (
           <button key={t} onClick={() => { setTab(t); setSel(null); }} className={cn("rounded-full px-3 py-1.5 text-[14px]", tab === t ? "bg-e-bg3 text-e-tx" : "text-e-dim hover:text-e-tx")}>
-            {t === "files" ? "Archivos" : `Artifacts (${artifacts.length})`}
+            {t === "activity" ? "Actividad" : t === "files" ? "Archivos" : `Resultados (${artifacts.length})`}
           </button>
         ))}
         <span className="flex-1" />
@@ -126,7 +130,15 @@ export function FilesPanel({ convId, refreshKey, onClose }: { convId: string; re
         <FilePreview path={sel} artifact={tab === "artifacts"} onBack={() => setSel(null)} />
       ) : (
         <div className="flex-1 overflow-y-auto p-2">
-          {tab === "files" ? (
+          {tab === "activity" ? (
+            activity.length ? activity.map((item) => (
+              <div key={item.id} className="flex items-start gap-2.5 border-b border-e-line px-2 py-3 last:border-0">
+                {item.status === "running" ? <Loader2 className="mt-0.5 size-4 shrink-0 animate-spin text-e-info" /> : <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-e-ok" />}
+                <div className="min-w-0 flex-1"><p className="text-[13px] font-medium">{item.label}</p>{item.target && <p className="mt-0.5 truncate font-mono text-[11.5px] text-e-dim">{item.target}</p>}</div>
+                {item.durationMs > 0 && <span className="shrink-0 text-[11px] tabular-nums text-e-dim">{(item.durationMs / 1000).toFixed(1)} s</span>}
+              </div>
+            )) : <div className="grid min-h-48 place-items-center px-6 text-center"><div><Activity className="mx-auto mb-3 size-5 text-e-dim" /><p className="text-[13px] text-e-dim">La actividad aparecerá aquí cuando Erasmus trabaje con archivos o tareas.</p></div></div>
+          ) : tab === "files" ? (
             tree.children.length ? tree.children.map((c) => <TreeRow key={c.path} n={c} depth={0} open={open} toggle={toggle} sel={sel} onSelect={setSel} highlight={mine} />) : <p className="p-3 text-[13px] text-e-dim">El workspace está vacío.</p>
           ) : artifacts.length ? (
             artifacts.map((f) => (

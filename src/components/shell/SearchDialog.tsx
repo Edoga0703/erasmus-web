@@ -1,15 +1,48 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { MessageCircle, Search, SquarePen, X } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { groupByDate, useChatManifest } from "./ChatList";
+import { api } from "@/lib/api/client";
+
+type Match = { snippet: string; date: number };
+const snippet = (text: string, query: string) => {
+  const clean = text.replace(/```[\s\S]*?```/g, " ").replace(/\s+/g, " ").trim();
+  const at = clean.toLowerCase().indexOf(query.toLowerCase());
+  if (at < 0) return "";
+  return `${at > 42 ? "…" : ""}${clean.slice(Math.max(0, at - 42), at + query.length + 72)}${at + query.length + 72 < clean.length ? "…" : ""}`;
+};
 
 /** ChatGPT-style centered search over conversation titles (manifest only; no full-text endpoint). */
 export function SearchDialog({ open, onClose, onOpen, onNew, version }: { open: boolean; onClose: () => void; onOpen: (id: string) => void; onNew: () => void; version: number }) {
   const { chats, err } = useChatManifest(version + (open ? 1 : 0));
   const [q, setQ] = useState("");
+  const [matches, setMatches] = useState<Record<string, Match>>({});
+  const [searchingContent, setSearchingContent] = useState(false);
   const groups = useMemo(() => {
-    const l = (chats ?? []).filter((c) => (c.title || "").toLowerCase().includes(q.trim().toLowerCase()));
+    const term = q.trim().toLowerCase();
+    const l = (chats ?? []).filter((c) => !term || (c.title || "").toLowerCase().includes(term) || !!matches[c.id]);
     return groupByDate(l);
+  }, [chats, matches, q]);
+
+  useEffect(() => {
+    const term = q.trim();
+    if (term.length < 3 || !chats?.length) { setMatches({}); setSearchingContent(false); return; }
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      setSearchingContent(true);
+      const found: Record<string, Match> = {};
+      for (const chat of chats.slice(0, 12)) {
+        try {
+          const { chat_data } = await api.getChat(chat.id);
+          const source = (chat_data.messages?.length ? chat_data.messages : chat_data.allMessages ?? []).map((message) => message.text ?? message.c ?? message.content ?? "").join(" ");
+          const part = snippet(source, term);
+          if (part) found[chat.id] = { snippet: part, date: chat.updated ?? chat.created ?? 0 };
+        } catch { /* Title search remains available. */ }
+        if (cancelled) return;
+      }
+      if (!cancelled) { setMatches(found); setSearchingContent(false); }
+    }, 350);
+    return () => { cancelled = true; window.clearTimeout(timer); };
   }, [chats, q]);
 
   return (
@@ -27,6 +60,7 @@ export function SearchDialog({ open, onClose, onOpen, onNew, version }: { open: 
             <button className="e-side-item" onClick={() => { onNew(); onClose(); }}><SquarePen className="size-4" /> Nueva conversación</button>
           )}
           {chats === null && !err && <p className="px-3 py-6 text-center text-[14px] text-e-dim">Buscando…</p>}
+          {searchingContent && <p className="px-3 py-2 text-[12px] text-e-dim">Buscando también dentro de las conversaciones…</p>}
           {err && <p className="px-3 py-6 text-center text-[14px] text-e-err">{err}</p>}
           {chats && groups.length === 0 && <p className="px-3 py-10 text-center text-[14px] text-e-dim">Sin resultados.</p>}
           {groups.map(([label, list]) => (
@@ -35,7 +69,8 @@ export function SearchDialog({ open, onClose, onOpen, onNew, version }: { open: 
               {list.map((c) => (
                 <button key={c.id} className="e-side-item" onClick={() => { onOpen(c.id); onClose(); setQ(""); }}>
                   <MessageCircle className="size-4 shrink-0 text-e-dim" />
-                  <span className="truncate">{c.title || "Sin título"}</span>
+                  <span className="min-w-0 flex-1"><span className="block truncate">{c.title || "Sin título"}</span>{matches[c.id] && <span className="mt-0.5 block truncate text-[12px] text-e-dim">{matches[c.id]?.snippet}</span>}</span>
+                  {(c.updated || c.created) && <time className="shrink-0 text-[11px] text-e-dim">{new Date((c.updated ?? c.created ?? 0) < 1e12 ? (c.updated ?? c.created ?? 0) * 1000 : (c.updated ?? c.created ?? 0)).toLocaleDateString("es-ES", { day: "numeric", month: "short" })}</time>}
                 </button>
               ))}
             </div>

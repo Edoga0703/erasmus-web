@@ -43,7 +43,7 @@ function Output({ text, tone }: { text: string; tone?: "err" }) {
   );
 }
 
-export function ToolCard({ block, state, streaming }: { block: ToolBlock; state?: ToolState | undefined; streaming?: boolean | undefined }) {
+export function ToolCard({ block, state, streaming, compact = false }: { block: ToolBlock; state?: ToolState | undefined; streaming?: boolean | undefined; compact?: boolean | undefined }) {
   const isCode = block.kind.startsWith("code:");
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -52,11 +52,11 @@ export function ToolCard({ block, state, streaming }: { block: ToolBlock; state?
   const { label, Icon } = META[block.kind];
   const key = state?.status ?? (streaming && !block.closed ? "pending" : "queued");
   const st = STATUS[key] ?? { text: "", cls: "" };
-  const codeHtml = useMemo(() => (isCode && open ? highlight(block.body, block.kind === "code:python" ? "python" : "bash") : ""), [isCode, open, block.body, block.kind]);
+  const codeHtml = useMemo(() => (isCode && open ? highlight(block.body, block.kind === "code:python" ? "python" : "bash").split("\n").map((line) => `<span>${line || " "}</span>`).join("\n") : ""), [isCode, open, block.body, block.kind]);
   const hasBody = isCode || !!(state?.diff?.length || state?.output || block.body);
 
   return (
-    <div className="my-3 overflow-hidden rounded-2xl border border-e-line bg-e-bg2">
+    <div className={cn("overflow-hidden border border-e-line bg-e-bg2", compact ? "mt-2 rounded-lg" : "my-3 rounded-xl")}>
       <button
         type="button"
         onClick={() => hasBody && setOpen((o) => !o)}
@@ -86,16 +86,19 @@ export function ToolCard({ block, state, streaming }: { block: ToolBlock; state?
               {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}<span>{copied ? "Copiado" : "Copiar"}</span>
             </button>
           </div>
-          <pre className="max-h-72 overflow-auto"><code dangerouslySetInnerHTML={{ __html: codeHtml }} /></pre>
+          <pre className="e-code-lines max-h-72 overflow-auto"><code dangerouslySetInnerHTML={{ __html: codeHtml }} /></pre>
         </div>
       )}
       {open && !isCode && hasBody && (
         <div className="max-h-80 overflow-auto border-t border-e-line font-mono text-[12px] leading-5">
           {state?.diff ? (
             state.diff.map((r, i) => (
-              <div key={i} className={cn("whitespace-pre px-3", r.kind === "add" && "e-diff-add", r.kind === "del" && "e-diff-del", r.kind === "same" && "text-e-dim")}>
+              <div key={i} className={cn("grid grid-cols-[3rem_minmax(0,1fr)] whitespace-pre", r.kind === "add" && "e-diff-add", r.kind === "del" && "e-diff-del", r.kind === "same" && "text-e-dim")}>
+                <span className="select-none border-r border-e-line px-2 text-right text-e-dim">{i + 1}</span>
+                <span className="px-3">
                 {r.kind === "add" ? "+ " : r.kind === "del" ? "- " : "  "}
                 {r.text}
+                </span>
               </div>
             ))
           ) : (

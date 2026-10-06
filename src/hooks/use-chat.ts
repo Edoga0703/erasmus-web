@@ -21,6 +21,7 @@ export interface UIMessage {
   /** finish_reason of the last stream; "length" means the answer was cut. */
   finish?: string;
   usage?: StreamUsage;
+  error?: { message: string; retryable: boolean };
   attachments?: Attachment[];
   /** "compaction" = visible separator line; when done it carries the summary that replaces messages before cutId. */
   kind?: "compaction";
@@ -101,7 +102,7 @@ function summaryBase(all: UIMessage[]): { summary?: string; start: number } {
 }
 function modelHistory(all: UIMessage[], excludeId?: string) {
   const { summary, start } = summaryBase(all);
-  const rest = all.slice(start).filter((m) => !m.kind && m.id !== excludeId).map((m) => ({ role: m.role as string, content: toModelContent(m) }));
+  const rest = all.slice(start).filter((m) => !m.kind && !m.error && m.id !== excludeId).map((m) => ({ role: m.role as string, content: toModelContent(m) }));
   return summary ? [{ role: "system", content: `[RESUMEN DE LA CONVERSACIÓN ANTERIOR]\n${summary}` }, ...rest] : rest;
 }
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -162,10 +163,12 @@ export function useChat(opts: { model: string }) {
   const [error, setError] = useState<string | null>(null);
   const [listVersion, setListVersion] = useState(0);
   const [localReady, setLocalReady] = useState(false);
+  const [temporary, setTemporary] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const msgsRef = useRef<UIMessage[]>([]);
   const created = useRef(Date.now());
   const titleRef = useRef(title);
+  const temporaryRef = useRef(false);
   titleRef.current = title;
 
   useEffect(() => {
@@ -183,6 +186,7 @@ export function useChat(opts: { model: string }) {
 
   useEffect(() => {
     if (!localReady) return;
+    if (temporary) return;
     const timer = window.setTimeout(() => {
       try {
         const snapshot: LocalChatSnapshot = {
@@ -198,7 +202,7 @@ export function useChat(opts: { model: string }) {
       }
     }, 250);
     return () => window.clearTimeout(timer);
-  }, [chatId, localReady, messages, title]);
+  }, [chatId, localReady, messages, temporary, title]);
 
   const commit = useCallback((fn: (m: UIMessage[]) => UIMessage[]) => {
     msgsRef.current = fn(msgsRef.current);
@@ -209,6 +213,7 @@ export function useChat(opts: { model: string }) {
   }, [commit]);
 
   const persist = useCallback(async (t: string) => {
+    if (temporaryRef.current) return;
     const data: ChatData = {
       id: chatId,
       title: t,
@@ -260,6 +265,7 @@ export function useChat(opts: { model: string }) {
     const ctrl = new AbortController();
     abortRef.current = ctrl;
     let executed = 0;
+    let activeAssistantId: string | null = null;
     try {
       for (let step = 0; step < MAX_AGENT_STEPS; step++) {
         const ctxLen = await getContextLength(opts.model);
@@ -273,6 +279,7 @@ export function useChat(opts: { model: string }) {
         for (;;) {
           aid = uid();
           const id = aid;
+          activeAssistantId = id;
           commit((ms) => [...ms, { id, role: "assistant", content: "", streaming: true, tools: {}, ts: Date.now() }]);
           const history = modelHistory(msgsRef.current, id);
           acc = "";
@@ -310,6 +317,7 @@ export function useChat(opts: { model: string }) {
             if (frame !== undefined) cancelAnimationFrame(frame);
           }
           patch(id, { content: acc, ...(reasoning ? { reasoning, thinkMs: Math.max(r1 - r0, 1) } : {}), ...meta, streaming: false });
+          activeAssistantId = null;
           break;
         }
         if (ctrl.signal.aborted) break;
@@ -345,11 +353,10 @@ export function useChat(opts: { model: string }) {
         setLimit(bigFile ? { message: FILE_TOO_BIG_MSG, file: true } : { message: LIMIT_MSG, file: false });
         return;
       }
-      // Drop the failed (streaming) assistant turn so a retry replays the very same request.
-      commit((ms) => ms.filter((m) => !m.streaming));
       const err = e instanceof ApiError ? e : null;
       const retryable = !err || err.status === 0 || err.status === 408 || err.status >= 500;
       const message = !err ? "Error inesperado en la conversación." : err.status === 0 ? "Sin conexión con el puente." : err.status === 504 || err.status === 408 ? "Tiempo de espera agotado." : err.message;
+      if (activeAssistantId) patch(activeAssistantId, { streaming: false, error: { message, retryable } });
       setFailure({ message, retryable, nonce: Date.now() });
     } finally {
       setBusy(false);
@@ -376,8 +383,9 @@ export function useChat(opts: { model: string }) {
 
   const retry = useCallback(() => {
     if (busy) return;
+    commit((ms) => ms.filter((m) => !m.error));
     void runLoop(titleRef.current);
-  }, [busy, runLoop]);
+  }, [busy, commit, runLoop]);
 
   /** The last answer was cut (finish_reason "length"): ask the model to continue where it stopped. */
   const continueLast = useCallback(() => {
@@ -398,7 +406,43 @@ export function useChat(opts: { model: string }) {
     setError(null);
     setFailure(null);
     setLimit(null);
+    setTemporary(false);
+    temporaryRef.current = false;
     created.current = Date.now();
+  }, []);
+
+  const startTemporary = useCallback(() => {
+    abortRef.current?.abort();
+    msgsRef.current = [];
+    setMessages([]);
+    setChatId(uid());
+    setTitle("Conversación temporal");
+    titleRef.current = "Conversación temporal";
+    setError(null);
+    setFailure(null);
+    setLimit(null);
+    setTemporary(true);
+    temporaryRef.current = true;
+    created.current = Date.now();
+  }, []);
+
+  const branchFrom = useCallback(async (messageId: string) => {
+    const index = msgsRef.current.findIndex((message) => message.id === messageId);
+    if (index < 0) return;
+    const branched = msgsRef.current.slice(0, index + 1).map(withoutTemporaryUrls);
+    const nextId = uid();
+    const nextTitle = `Rama de ${titleRef.current}`.slice(0, 120);
+    const now = Date.now();
+    msgsRef.current = branched;
+    setMessages(branched);
+    setChatId(nextId);
+    setTitle(nextTitle);
+    titleRef.current = nextTitle;
+    created.current = now;
+    setTemporary(false);
+    temporaryRef.current = false;
+    await api.syncChat({ id: nextId, title: nextTitle, created: now, updated: now, messages: branched.map<StoredMessage>((m) => m.role === "user" ? { id: m.id, role: "user", text: m.content, ts: m.ts, hidden: m.hidden } : { id: m.id, role: "assistant", c: m.content, ts: m.ts, tools: m.tools, reasoning: m.reasoning, thinkMs: m.thinkMs, finish: m.finish, usage: m.usage }) });
+    setListVersion((version) => version + 1);
   }, []);
 
   /** Restore a saved chat; tool blocks re-render as cards from the persisted tools state. */
@@ -439,6 +483,8 @@ export function useChat(opts: { model: string }) {
     setError(null);
     setFailure(null);
     setLimit(null);
+    setTemporary(false);
+    temporaryRef.current = false;
   }, []);
 
   /** Rename = re-send chat_data with the new title through sync_chat (agreed contract). */
@@ -456,5 +502,5 @@ export function useChat(opts: { model: string }) {
     setListVersion((v) => v + 1);
   }, [chatId, persist]);
 
-  return { open, rename, listVersion, chatId, title, messages, busy, error, send, stop, reset, continueLast, retry, failure, limit, dismissLimit: () => setLimit(null), dismissError: () => setError(null) };
+  return { open, rename, branchFrom, startTemporary, temporary, listVersion, chatId, title, messages, busy, error, send, stop, reset, continueLast, retry, failure, limit, dismissLimit: () => setLimit(null), dismissError: () => setError(null) };
 }
