@@ -60,22 +60,28 @@ export const isValidVpsKey = (k: string) => k.startsWith("ms-") && k.length > 10
 export function getModelConfig(): ModelConfig {
   if (typeof window === "undefined") return DEFAULT_MODEL_CFG;
   try {
+    // Migration: older builds could persist the key in localStorage ("recordar"). Move it to the tab session and wipe it.
+    const legacy = localStorage.getItem(KEY_KEY);
+    if (legacy) { if (!sessionStorage.getItem(KEY_KEY)) sessionStorage.setItem(KEY_KEY, legacy); localStorage.removeItem(KEY_KEY); }
     const raw = JSON.parse(localStorage.getItem(CFG_KEY) ?? "{}") as Partial<ModelConfig>;
-    const apiKey = (raw.remember ? localStorage.getItem(KEY_KEY) : sessionStorage.getItem(KEY_KEY)) ?? "";
-    return { ...DEFAULT_MODEL_CFG, ...raw, apiKey };
+    const apiKey = sessionStorage.getItem(KEY_KEY) ?? "";
+    return { ...DEFAULT_MODEL_CFG, ...raw, remember: false, apiKey };
   } catch { return DEFAULT_MODEL_CFG; }
 }
 
-/** Key lives in sessionStorage unless "remember" is on; it is never written into the non-secret config blob. */
+/** The key only ever lives in sessionStorage (gone when the tab closes); it is never written to localStorage or the config blob. */
 export function saveModelConfig(c: ModelConfig): void {
   try {
-    const { apiKey, ...rest } = c;
+    const { apiKey, remember: _r, ...rest } = c;
     localStorage.setItem(CFG_KEY, JSON.stringify(rest));
-    localStorage.removeItem(KEY_KEY); sessionStorage.removeItem(KEY_KEY);
-    if (apiKey) (c.remember ? localStorage : sessionStorage).setItem(KEY_KEY, apiKey);
+    localStorage.removeItem(KEY_KEY);
+    if (apiKey) sessionStorage.setItem(KEY_KEY, apiKey); else sessionStorage.removeItem(KEY_KEY);
     window.dispatchEvent(new Event("erasmus:model-config"));
   } catch { /* */ }
 }
+
+/** Masked form for display: never show the full key. */
+export const maskKey = (k: string) => (k ? `ms-…${k.slice(-4)}` : "");
 
 /** Display-only brand name: internal upstream ids are never shown to users (the value sent to the server is unchanged). */
 export function displayModel(id: string | undefined | null): string {
