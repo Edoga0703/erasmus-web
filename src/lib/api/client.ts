@@ -185,7 +185,10 @@ function toUsage(u: Record<string, unknown> | null | undefined): StreamUsage | u
 }
 
 function withSystem(msgs: StreamOptions["messages"]): StreamOptions["messages"] {
-  const sys = customSystemText();
+  const sys = [
+    "Eres Erasmus. No tienes ejecución de Python o bash en este servidor. No emitas bloques code:python ni code:bash; muestra el código solicitado como bloques Markdown normales. Puedes trabajar con archivos mediante file:list, file:read y file:write. file:append no está disponible: para actualizar un archivo, lee su contenido y reescríbelo completo con file:write.",
+    customSystemText(),
+  ].filter(Boolean).join("\n\n");
   return sys ? [{ role: "system", content: sys }, ...msgs] : msgs;
 }
 

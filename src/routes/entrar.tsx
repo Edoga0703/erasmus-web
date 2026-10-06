@@ -1,8 +1,8 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
-import { ArrowRight, KeyRound, Loader2 } from "lucide-react";
+import { ArrowRight, Check, Copy, KeyRound, Loader2, Ticket } from "lucide-react";
 import { CODE_RE, formatCode, getSession } from "@/lib/session";
-import { login } from "@/lib/auth";
+import { claimCoupon, login } from "@/lib/auth";
 import { PublicHeader } from "@/components/PublicHeader";
 import { useT } from "@/lib/i18n";
 
@@ -36,6 +36,11 @@ function LoginPage() {
   const [err, setErr] = useState("");
   const [wait, setWait] = useState(0);
   const [contactNotice, setContactNotice] = useState(false);
+  const [couponOpen, setCouponOpen] = useState(false);
+  const [coupon, setCoupon] = useState("");
+  const [couponBusy, setCouponBusy] = useState(false);
+  const [newAccessCode, setNewAccessCode] = useState("");
+  const [copied, setCopied] = useState(false);
   const fails = useRef(0);
 
   useEffect(() => { if (getSession()) void navigate({ to: "/chat", replace: true }); }, [navigate]);
@@ -58,6 +63,34 @@ function LoginPage() {
     if (r.reason === "rate") setWait(r.retryAfter ?? 30);
   };
 
+  const claim = async () => {
+    if (!coupon.trim() || couponBusy) return;
+    setCouponBusy(true); setErr("");
+    const result = await claimCoupon(coupon);
+    setCouponBusy(false);
+    if (!result.ok) { setErr(result.message); return; }
+    setNewAccessCode(result.claim.accessCode);
+  };
+
+  if (newAccessCode) return (
+    <main className="flex min-h-dvh flex-col bg-e-bg2 text-e-tx">
+      <PublicHeader />
+      <div className="flex flex-1 items-center justify-center px-5 pb-20">
+        <section className="w-full max-w-sm rounded-2xl border border-e-line p-6">
+          <div className="grid size-10 place-items-center rounded-full bg-e-ok/10"><Check className="size-5 text-e-ok" /></div>
+          <h1 className="mt-5 text-[25px] font-semibold tracking-tight">Tu acceso está listo</h1>
+          <p className="mt-2 text-[13.5px] leading-relaxed text-e-dim">Guarda esta llave ahora. Por seguridad, no volverá a mostrarse.</p>
+          <div className="mt-5 flex items-center gap-2 rounded-xl border border-e-line bg-e-bg3 px-3 py-3">
+            <code className="min-w-0 flex-1 select-all break-all text-[13px]">{newAccessCode}</code>
+            <button type="button" className="e-icon-btn shrink-0" aria-label="Copiar llave" onClick={() => { void navigator.clipboard.writeText(newAccessCode); setCopied(true); }}><Copy className="size-4" /></button>
+          </div>
+          {copied && <p className="mt-2 text-[12.5px] text-e-ok">Llave copiada.</p>}
+          <button type="button" onClick={() => void navigate({ to: "/chat", replace: true })} className="mt-6 flex h-11 w-full items-center justify-center gap-2 rounded-full bg-e-acc text-[14px] font-medium text-e-bg2">Continuar <ArrowRight className="size-4" /></button>
+        </section>
+      </div>
+    </main>
+  );
+
   return (
     <main className="flex min-h-dvh flex-col bg-e-bg2 text-e-tx">
       <PublicHeader />
@@ -77,6 +110,11 @@ function LoginPage() {
             className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-e-acc text-[15px] font-medium text-e-bg2 transition-opacity disabled:opacity-40">
             {busy ? <Loader2 className="size-4 animate-spin" /> : wait > 0 ? `${t("login_wait")} ${wait} s` : <>{t("login_action")} <ArrowRight className="size-4" /></>}
           </button>
+          <button type="button" onClick={() => { setCouponOpen(!couponOpen); setErr(""); }} className="mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-full border border-e-line text-[14px] font-medium hover:bg-e-bg3"><Ticket className="size-4" /> Tengo un cupón</button>
+          {couponOpen && <div className="mt-3 rounded-2xl border border-e-line bg-e-bg3/50 p-3">
+            <label htmlFor="new-coupon" className="text-[12.5px] font-medium">Cupón de alta</label>
+            <div className="mt-2 flex gap-2"><input id="new-coupon" value={coupon} onChange={(e) => { setCoupon(e.target.value.toUpperCase()); setErr(""); }} placeholder="Introduce el cupón" className="h-10 min-w-0 flex-1 rounded-xl border border-e-line bg-e-bg2 px-3 font-mono text-[13px] outline-none" /><button type="button" disabled={!coupon.trim() || couponBusy} onClick={() => void claim()} className="rounded-full bg-e-acc px-4 text-[13px] font-medium text-e-bg2 disabled:opacity-40">{couponBusy ? <Loader2 className="size-4 animate-spin" /> : "Canjear"}</button></div>
+          </div>}
           <div className="mt-6 border-t border-e-line pt-5 text-center text-[13.5px] text-e-dim">
             <span>{t("login_no_key")} </span>
             <button type="button" onClick={() => setContactNotice(true)} className="font-medium text-e-tx underline decoration-e-line underline-offset-4 hover:decoration-e-tx">{t("login_contact")}</button>
