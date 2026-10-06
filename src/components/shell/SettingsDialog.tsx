@@ -1,6 +1,6 @@
 import { CustomInstructions } from "./CustomInstructions";
 import { useCallback, useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight, Download, Moon, RefreshCw, ShieldCheck, Sun, Ticket, WifiOff, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Moon, RefreshCw, ShieldCheck, Sun, WifiOff, X } from "lucide-react";
 import { api, ApiError } from "@/lib/api/client";
 import { API_BASE, displayModel } from "@/lib/api/config";
 import type { StatusResponse } from "@/lib/api/types";
@@ -27,9 +27,6 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
   const [countErr, setCountErr] = useState("");
   const [zipping, setZipping] = useState(false);
   const [zipDone, setZipDone] = useState<{ name: string; size: number } | null>(null);
-  const [coupon, setCoupon] = useState("");
-  const [couponState, setCouponState] = useState<"idle" | "busy" | "ok" | "error">("idle");
-  const [couponMessage, setCouponMessage] = useState("");
 
   const verify = useCallback(async () => {
     setProbe({ kind: "checking" });
@@ -73,18 +70,6 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
       setCountErr(e instanceof ApiError && e.status !== 0 ? e.message : "No se pudo exportar el workspace.");
     } finally {
       setZipping(false);
-    }
-  };
-
-  const redeemCoupon = async () => {
-    if (!coupon.trim()) return;
-    setCouponState("busy"); setCouponMessage("");
-    try {
-      const r = await api.redeemCoupon(coupon);
-      setCouponState("ok"); setCouponMessage(r.message || "Cupón aplicado."); setCoupon("");
-      window.dispatchEvent(new Event("erasmus:turn-done"));
-    } catch (e) {
-      setCouponState("error"); setCouponMessage(e instanceof ApiError ? e.message : "No se pudo aplicar el cupón.");
     }
   };
 
@@ -169,15 +154,6 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
                   <Download className="size-3.5" /> {zipping ? "Exportando…" : "Exportar workspace (ZIP)"}
                 </button>
                 {zipDone && <p className="mt-2 text-[12.5px] text-e-ok" data-zip-done>Descargado {zipDone.name} ({(zipDone.size / 1024).toFixed(1)} KB).</p>}
-                </div>
-                <div className="mt-6 border-t border-e-line pt-5">
-                  <label htmlFor="coupon" className="text-[13px] font-medium">Canjear cupón</label>
-                  <p className="mt-1 text-[12.5px] text-e-dim">Aplica créditos o beneficios a esta cuenta.</p>
-                  <div className="mt-2 flex gap-2">
-                    <div className="flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-e-line px-3"><Ticket className="size-4 shrink-0 text-e-dim" /><input id="coupon" value={coupon} onChange={(e) => { setCoupon(e.target.value.toUpperCase()); setCouponState("idle"); }} className="h-10 min-w-0 flex-1 bg-transparent font-mono text-[13px] outline-none" placeholder="Código de cupón" /></div>
-                    <button className={btn} onClick={() => void redeemCoupon()} disabled={!coupon.trim() || couponState === "busy"}>{couponState === "busy" ? "Aplicando…" : "Aplicar"}</button>
-                  </div>
-                  {couponMessage && <p className={cn("mt-2 text-[12.5px]", couponState === "ok" ? "text-e-ok" : "text-e-err")} role="status">{couponMessage}</p>}
                 </div>
               </section>
             )}

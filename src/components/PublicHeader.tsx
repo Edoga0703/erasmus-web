@@ -33,6 +33,7 @@ export function PublicHeader() {
         <Link to="/" className="mr-auto text-[17px] font-semibold tracking-tight">Erasmus</Link>
         <Link to="/ayuda" className="hidden rounded-full px-3 py-1.5 text-[14px] text-e-dim hover:bg-e-bg3 hover:text-e-tx sm:block">{t("nav_help")}</Link>
         <Link to="/estado" className="hidden rounded-full px-3 py-1.5 text-[14px] text-e-dim hover:bg-e-bg3 hover:text-e-tx sm:block">{t("nav_status")}</Link>
+        <Link to="/comprar" className="hidden rounded-full px-3 py-1.5 text-[14px] text-e-dim hover:bg-e-bg3 hover:text-e-tx sm:block">{t("nav_buy")}</Link>
         <div ref={languageRef} className="relative w-[62px] shrink-0">
           <button
             className="flex h-9 w-[62px] items-center justify-center gap-1 rounded-full text-e-dim hover:bg-e-bg3 hover:text-e-tx"
@@ -64,6 +65,7 @@ export function PublicHeader() {
       <nav className="mx-auto flex h-10 max-w-6xl items-center gap-5 overflow-x-auto border-t border-e-line/60 px-4 text-[13px] text-e-dim sm:hidden" aria-label="Navegación pública">
         <Link to="/ayuda" className="hover:text-e-tx">{t("nav_help")}</Link>
         <Link to="/estado" className="hover:text-e-tx">{t("nav_status")}</Link>
+        <Link to="/comprar" className="hover:text-e-tx">{t("nav_buy")}</Link>
         <Link to="/privacidad" className="hover:text-e-tx">{t("nav_privacy")}</Link>
         <Link to="/entrar" className="hover:text-e-tx">{t("nav_login")}</Link>
       </nav>

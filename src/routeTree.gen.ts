@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthRouteRouteImport } from './routes/_auth/route'
 import { Route as AyudaRouteImport } from './routes/ayuda'
+import { Route as ComprarRouteImport } from './routes/comprar'
 import { Route as EntrarRouteImport } from './routes/entrar'
 import { Route as EstadoRouteImport } from './routes/estado'
 import { Route as PrivacidadRouteImport } from './routes/privacidad'
@@ -29,6 +30,11 @@ const AuthRouteRoute = AuthRouteRouteImport.update({
 const AyudaRoute = AyudaRouteImport.update({
   id: '/ayuda',
   path: '/ayuda',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ComprarRoute = ComprarRouteImport.update({
+  id: '/comprar',
+  path: '/comprar',
   getParentRoute: () => rootRouteImport,
 } as any)
 const EntrarRoute = EntrarRouteImport.update({
@@ -55,6 +61,7 @@ const AuthChatRoute = AuthChatRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/ayuda': typeof AyudaRoute
+  '/comprar': typeof ComprarRoute
   '/entrar': typeof EntrarRoute
   '/estado': typeof EstadoRoute
   '/privacidad': typeof PrivacidadRoute
@@ -63,6 +70,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/ayuda': typeof AyudaRoute
+  '/comprar': typeof ComprarRoute
   '/entrar': typeof EntrarRoute
   '/estado': typeof EstadoRoute
   '/privacidad': typeof PrivacidadRoute
@@ -73,6 +81,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_auth': typeof AuthRouteRouteWithChildren
   '/ayuda': typeof AyudaRoute
+  '/comprar': typeof ComprarRoute
   '/entrar': typeof EntrarRoute
   '/estado': typeof EstadoRoute
   '/privacidad': typeof PrivacidadRoute
@@ -80,14 +89,29 @@ export interface FileRoutesById {
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/ayuda' | '/entrar' | '/estado' | '/privacidad' | '/chat'
+  fullPaths:
+    | '/'
+    | '/ayuda'
+    | '/comprar'
+    | '/entrar'
+    | '/estado'
+    | '/privacidad'
+    | '/chat'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/ayuda' | '/entrar' | '/estado' | '/privacidad' | '/chat'
+  to:
+    | '/'
+    | '/ayuda'
+    | '/comprar'
+    | '/entrar'
+    | '/estado'
+    | '/privacidad'
+    | '/chat'
   id:
     | '__root__'
     | '/'
     | '/_auth'
     | '/ayuda'
+    | '/comprar'
     | '/entrar'
     | '/estado'
     | '/privacidad'
@@ -98,6 +122,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthRouteRoute: typeof AuthRouteRouteWithChildren
   AyudaRoute: typeof AyudaRoute
+  ComprarRoute: typeof ComprarRoute
   EntrarRoute: typeof EntrarRoute
   EstadoRoute: typeof EstadoRoute
   PrivacidadRoute: typeof PrivacidadRoute
@@ -124,6 +149,13 @@ declare module '@tanstack/react-router' {
       path: '/ayuda'
       fullPath: '/ayuda'
       preLoaderRoute: typeof AyudaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/comprar': {
+      id: '/comprar'
+      path: '/comprar'
+      fullPath: '/comprar'
+      preLoaderRoute: typeof ComprarRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/entrar': {
@@ -173,6 +205,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthRouteRoute: AuthRouteRouteWithChildren,
   AyudaRoute: AyudaRoute,
+  ComprarRoute: ComprarRoute,
   EntrarRoute: EntrarRoute,
   EstadoRoute: EstadoRoute,
   PrivacidadRoute: PrivacidadRoute,
