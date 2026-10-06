@@ -28,3 +28,4 @@
 - Routes: `/` public landing, `/entrar` login, protected pages under `src/routes/_auth/` (client-only gate) — session lives in sessionStorage, which SSR cannot read.
 - Dev builds only (`import.meta.env.DEV`) fall back to a local per-code session when /api/auth/login is missing; production fails closed.
 - Public status checks bypass `apiFetch` and carry no session, bridge, or model credentials; the production endpoint must return only a cached availability snapshot — prevents public routes from leaking private headers or infrastructure details.
+- Chat UI composes installed AI Elements message/tool foundations while preserving the audited Markdown renderer and domain-specific cards — shared accessibility without weakening sanitization or saved tool-state parity.

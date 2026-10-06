@@ -99,7 +99,7 @@ export const MessageView = memo(function MessageView({ m, isLast, busy, onRegene
   );
 });
 
-function ResponseMenu({ text, disabled, onRegenerate, onBranch }: { text: string; disabled?: boolean; onRegenerate?: (() => void) | undefined; onBranch?: (() => void) | undefined }) {
+function ResponseMenu({ text, disabled = false, onRegenerate, onBranch }: { text: string; disabled?: boolean | undefined; onRegenerate?: (() => void) | undefined; onBranch?: (() => void) | undefined }) {
   const [speaking, setSpeaking] = useState(false);
   const speak = () => {
     if (!("speechSynthesis" in window)) return;

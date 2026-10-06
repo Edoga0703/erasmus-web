@@ -59,7 +59,7 @@ export function AppShell() {
   const [imagesOpen, setImagesOpen] = useState(false);
   const [viewImg, setViewImg] = useState<ChatImage | null>(null);
   const [atBottom, setAtBottom] = useState(true);
-  const [draft, setDraft] = useState<{ text: string; n: number }>();
+  const [draft] = useState<{ text: string; n: number }>();
   const [openingChat, setOpeningChat] = useState(false);
   const scroller = useRef<HTMLElement>(null);
   const queryClient = useQueryClient();
@@ -87,17 +87,6 @@ export function AppShell() {
     window.addEventListener("keydown", k);
     return () => window.removeEventListener("keydown", k);
   }, []);
-
-  // Network / timeout / 5xx → toast with "Reintentar" that replays the same failed call.
-  useEffect(() => {
-    const f = chat.failure;
-    if (!f) return;
-    toast.error(f.message, {
-      id: "chat-failure",
-      duration: f.retryable ? Infinity : 6000,
-      action: f.retryable ? { label: "Reintentar", onClick: () => chat.retry() } : undefined,
-    });
-  }, [chat.failure]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const el = scroller.current;
