@@ -11,7 +11,9 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthRouteRouteImport } from './routes/_auth/route'
+import { Route as AyudaRouteImport } from './routes/ayuda'
 import { Route as EntrarRouteImport } from './routes/entrar'
+import { Route as EstadoRouteImport } from './routes/estado'
 import { Route as AuthChatRouteImport } from './routes/_auth/chat'
 
 const IndexRoute = IndexRouteImport.update({
@@ -23,9 +25,19 @@ const AuthRouteRoute = AuthRouteRouteImport.update({
   id: '/_auth',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AyudaRoute = AyudaRouteImport.update({
+  id: '/ayuda',
+  path: '/ayuda',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const EntrarRoute = EntrarRouteImport.update({
   id: '/entrar',
   path: '/entrar',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EstadoRoute = EstadoRouteImport.update({
+  id: '/estado',
+  path: '/estado',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthChatRoute = AuthChatRouteImport.update({
@@ -36,33 +48,48 @@ const AuthChatRoute = AuthChatRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/ayuda': typeof AyudaRoute
   '/entrar': typeof EntrarRoute
+  '/estado': typeof EstadoRoute
   '/chat': typeof AuthChatRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/ayuda': typeof AyudaRoute
   '/entrar': typeof EntrarRoute
+  '/estado': typeof EstadoRoute
   '/chat': typeof AuthChatRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_auth': typeof AuthRouteRouteWithChildren
+  '/ayuda': typeof AyudaRoute
   '/entrar': typeof EntrarRoute
+  '/estado': typeof EstadoRoute
   '/_auth/chat': typeof AuthChatRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/entrar' | '/chat'
+  fullPaths: '/' | '/ayuda' | '/entrar' | '/estado' | '/chat'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/entrar' | '/chat'
-  id: '__root__' | '/' | '/_auth' | '/entrar' | '/_auth/chat'
+  to: '/' | '/ayuda' | '/entrar' | '/estado' | '/chat'
+  id:
+    | '__root__'
+    | '/'
+    | '/_auth'
+    | '/ayuda'
+    | '/entrar'
+    | '/estado'
+    | '/_auth/chat'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthRouteRoute: typeof AuthRouteRouteWithChildren
+  AyudaRoute: typeof AyudaRoute
   EntrarRoute: typeof EntrarRoute
+  EstadoRoute: typeof EstadoRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -81,11 +108,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/ayuda': {
+      id: '/ayuda'
+      path: '/ayuda'
+      fullPath: '/ayuda'
+      preLoaderRoute: typeof AyudaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/entrar': {
       id: '/entrar'
       path: '/entrar'
       fullPath: '/entrar'
       preLoaderRoute: typeof EntrarRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/estado': {
+      id: '/estado'
+      path: '/estado'
+      fullPath: '/estado'
+      preLoaderRoute: typeof EstadoRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_auth/chat': {
@@ -113,7 +154,9 @@ const AuthRouteRouteWithChildren = AuthRouteRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthRouteRoute: AuthRouteRouteWithChildren,
+  AyudaRoute: AyudaRoute,
   EntrarRoute: EntrarRoute,
+  EstadoRoute: EstadoRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

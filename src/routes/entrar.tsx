@@ -1,8 +1,9 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { ArrowRight, KeyRound, Loader2 } from "lucide-react";
 import { CODE_RE, formatCode, getSession } from "@/lib/session";
 import { DEV_LOCAL_LOGIN, login } from "@/lib/auth";
+import { PublicHeader } from "@/components/PublicHeader";
 
 export const Route = createFileRoute("/entrar")({
   head: () => ({
@@ -56,7 +57,7 @@ function LoginPage() {
 
   return (
     <main className="flex min-h-dvh flex-col bg-e-bg2 text-e-tx">
-      <header className="flex h-14 items-center px-5"><Link to="/" className="text-[17px] font-semibold tracking-tight">Erasmus</Link></header>
+      <PublicHeader />
       <div className="flex flex-1 items-center justify-center px-5 pb-20">
         <form onSubmit={submit} className="w-full max-w-sm">
           <h1 className="text-[28px] font-semibold tracking-tight">Entrar</h1>

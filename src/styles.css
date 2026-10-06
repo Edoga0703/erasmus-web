@@ -203,3 +203,21 @@
 /* Artifact canvas: HTML documents render on a paper-white page in both themes, like a browser tab. */
 .e-frame { background: #ffffff; color-scheme: light; }
 .e-md img { cursor: zoom-in; border-radius: 12px; }
+
+/* Landing effects */
+.e-reveal { opacity: 0; transform: translateY(18px); transition: opacity .6s ease, transform .6s ease; }
+.e-reveal.e-in { opacity: 1; transform: none; }
+.e-card-lift { transition: transform .25s ease, box-shadow .25s ease; }
+.e-card-lift:hover { transform: translateY(-3px); box-shadow: var(--shadow); }
+.e-hero-glow::before {
+  content: ""; position: absolute; inset: -20% -10% auto; height: 480px; pointer-events: none;
+  background: radial-gradient(ellipse 60% 100% at 50% 0%, color-mix(in oklab, var(--acc) 7%, transparent), transparent 70%);
+}
+@keyframes e-marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+.e-marquee { animation: e-marquee 28s linear infinite; }
+.e-marquee-wrap:hover .e-marquee { animation-play-state: paused; }
+@media (prefers-reduced-motion: reduce) {
+  .e-reveal { opacity: 1; transform: none; transition: none; }
+  .e-marquee { animation: none; }
+  .e-card-lift, .e-card-lift:hover { transform: none; }
+}
