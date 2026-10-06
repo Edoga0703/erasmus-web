@@ -76,11 +76,30 @@ function ErrorComponent({ error, reset }: ErrorComponentProps) {
   );
 }
 
+const MODEL_ORIGIN = (() => { try { return import.meta.env["VITE_MODEL_BASE"] ? new URL(String(import.meta.env["VITE_MODEL_BASE"])).origin : ""; } catch { return ""; } })();
+/** Blocks third-party scripts, plugins, <base> hijacking and form exfiltration; network only to this site and the model server. */
+const CSP = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline'",
+  "style-src 'self' 'unsafe-inline'",
+  `img-src 'self' data: blob: ${MODEL_ORIGIN}`.trim(),
+  `connect-src 'self' ${MODEL_ORIGIN}`.trim(),
+  "frame-src 'self' blob: data:",
+  "font-src 'self' data:",
+  "worker-src 'self' blob:",
+  "object-src 'none'",
+  "base-uri 'none'",
+  "form-action 'none'",
+].join("; ");
+
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
   head: () => ({
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
+      // Production-only CSP (dev needs Vite's HMR). frame-ancestors must be set by nginx: it is ignored in <meta>.
+      ...(import.meta.env.PROD ? [{ httpEquiv: "Content-Security-Policy", content: CSP }] : []),
+      { name: "referrer", content: "no-referrer" },
       { title: "Erasmus Web" },
       { name: "description", content: "Cliente web de Erasmus Platform." },
     ],
