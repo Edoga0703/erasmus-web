@@ -84,6 +84,7 @@ const dict = {
     login_wait: "Espera",
     login_no_key: "¿No tienes una llave?",
     login_contact: "Contáctanos",
+    login_contact_pending: "El contacto por Telegram estará disponible pronto.",
     // ayuda
     help_title: "Ayuda",
     help_sub: "Respuestas a las dudas más habituales.",
@@ -158,6 +159,7 @@ const dict = {
     login_wait: "Wait",
     login_no_key: "Don't have a key?",
     login_contact: "Contact us",
+    login_contact_pending: "Telegram contact will be available soon.",
     help_title: "Help",
     help_sub: "Answers to the most common questions.",
     help_q1: "What is the access code?",
@@ -231,6 +233,7 @@ const dict = {
     login_wait: "Aguarde",
     login_no_key: "Não tem uma chave?",
     login_contact: "Fale conosco",
+    login_contact_pending: "O contato pelo Telegram estará disponível em breve.",
     help_title: "Ajuda",
     help_sub: "Respostas para as dúvidas mais comuns.",
     help_q1: "O que é o código de acesso?",
