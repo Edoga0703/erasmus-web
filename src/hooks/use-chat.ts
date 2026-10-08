@@ -397,7 +397,7 @@ export function useChat(opts: { model: string }) {
       const url = result.data?.[0]?.url;
       if (!url || !imageUrl(url)) throw new ApiError(502, "invalid_image_response", "Erasmus no devolvió una imagen válida.");
       // Escape model/user text used as Markdown, so prompts cannot inject links or HTML.
-      const alt = prompt.replace(/[\\\[\]<>\r\n]/g, " ").slice(0, 500);
+      const alt = prompt.replace(/[\\[\]<>\r\n]/g, " ").slice(0, 500);
       const safeUrl = imageUrl(url);
       if (!safeUrl) return;
       const label = IMAGE_SIZES.find((s) => s.value === size)?.label ?? "1:1 Cuadrado";
