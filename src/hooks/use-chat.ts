@@ -423,8 +423,8 @@ export function useChat(opts: { model: string }) {
 
   const retry = useCallback(() => {
     if (busy) return;
-    const image = [...msgsRef.current].reverse().find((m) => m.error && m.imageRequest);
-    if (image?.imageRequest) {
+    const image = [...msgsRef.current].reverse().find((m) => m.role === "assistant" && !m.hidden);
+    if (image?.error && image.imageRequest) {
       if (image.error?.retryable) void generateImage(image.imageRequest.prompt, image.imageRequest.size, image.id);
       return;
     }

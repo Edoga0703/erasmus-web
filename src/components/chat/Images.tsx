@@ -32,7 +32,7 @@ export async function downloadImage(src: string, name: string) {
     const res = src.startsWith(imagePrefix) ? await apiFetch(src.slice(API_BASE.length)) : await fetch(src, { credentials: "omit" });
     if (!res.ok) throw new Error();
     const blob = await res.blob();
-    const ext = (blob.type.split("/")[1] || "png").replace("jpeg", "jpg");
+    const ext = blob.type === "image/svg+xml" ? "svg" : (blob.type.split("/")[1] || "png").replace("jpeg", "jpg");
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     a.download = `${name.replace(/[^\w.-]+/g, "_").slice(0, 40) || "imagen"}.${ext}`;
