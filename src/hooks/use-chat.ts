@@ -497,5 +497,5 @@ export function useChat(opts: { model: string }) {
     setListVersion((v) => v + 1);
   }, [chatId, persist]);
 
-  return { open, rename, branchFrom, startTemporary, temporary, listVersion, chatId, title, messages, busy, error, send, stop, reset, continueLast, retry, failure, limit, dismissLimit: () => setLimit(null), dismissError: () => setError(null) };
+  return { ready: localReady, open, rename, branchFrom, startTemporary, temporary, listVersion, chatId, title, messages, busy, error, send, stop, reset, continueLast, retry, failure, limit, dismissLimit: () => setLimit(null), dismissError: () => setError(null) };
 }

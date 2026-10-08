@@ -43,7 +43,7 @@ export const MessageView = memo(function MessageView({ m, isLast, busy, onRegene
     return (
       <Message from="user" className="max-w-full">
         {!!m.attachments?.length && <div className="mb-2 flex max-w-[85%] flex-wrap justify-end gap-2">{m.attachments.map((a) => <AttachChip key={a.name} a={a} />)}</div>}
-        <MessageContent className="max-w-[85%] whitespace-pre-wrap break-words rounded-3xl bg-e-bg3 px-5 py-2.5 text-[16px] leading-7 text-e-tx sm:max-w-[70%]">{m.content}</MessageContent>
+        <MessageContent data-search-text className="max-w-[85%] whitespace-pre-wrap break-words rounded-3xl bg-e-bg3 px-5 py-2.5 text-[16px] leading-7 text-e-tx sm:max-w-[70%]">{m.content}</MessageContent>
         <MessageActions className="mt-1 gap-0.5 opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100">
           <CopyBtn text={m.content} />
         </MessageActions>
