@@ -75,7 +75,7 @@ async function parseError(res: Response): Promise<ApiError> {
 export async function apiJson<T>(path: string, body?: unknown, method?: "GET" | "POST" | "DELETE", signal?: AbortSignal): Promise<T> {
   let res: Response;
   try {
-    const init: RequestInit = { method: method ?? (body === undefined ? "GET" : "POST"), signal };
+    const init: RequestInit = { method: method ?? (body === undefined ? "GET" : "POST"), ...(signal ? { signal } : {}) };
     if (body !== undefined) init.body = JSON.stringify(body);
     res = await apiFetch(path, init);
   } catch (e) {

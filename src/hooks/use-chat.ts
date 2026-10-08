@@ -22,7 +22,7 @@ export interface UIMessage {
   /** finish_reason of the last stream; "length" means the answer was cut. */
   finish?: string;
   usage?: StreamUsage;
-  error?: { message: string; retryable: boolean };
+  error?: { message: string; retryable: boolean } | undefined;
   imageRequest?: { prompt: string; size: ImageSize };
   attachments?: Attachment[];
   /** "compaction" = visible separator line; when done it carries the summary that replaces messages before cutId. */
@@ -161,6 +161,7 @@ export function useChat(opts: { model: string }) {
   const titleRef = useRef(title);
   const temporaryRef = useRef(false);
   titleRef.current = title;
+  useEffect(() => () => { abortRef.current?.abort(); abortRef.current = null; }, []);
 
   useEffect(() => {
     const saved = recoverLocalChat();
