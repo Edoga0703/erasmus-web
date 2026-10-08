@@ -62,6 +62,12 @@ async function parseError(res: Response): Promise<ApiError> {
   if (res.status === 402) message = code === "weekly_allowance_reached" ? "Cupo de imágenes agotado para esta clave." : "Sin crédito suficiente. Contacta con el administrador para recargar.";
   if (res.status === 429) message = "Ya hay 4 respuestas en curso con esta clave. Espera a que termine alguna.";
   if (res.status === 502) message = "El modelo no respondió. Inténtalo de nuevo en unos segundos.";
+  if (res.status === 503) {
+    // Mantenimiento temporal del motor: si el servidor explica (p. ej. "Ajuste rápido"), se muestra tal cual; si no, mensaje claro sin expulsar la sesión.
+    message = message.trim() && message !== `Error ${res.status}`
+      ? message.trim()
+      : "El motor de inferencia está en ajuste temporal. Vuelve a intentarlo en unos minutos.";
+  }
   return new ApiError(res.status, code, message);
 }
 
