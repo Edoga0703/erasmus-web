@@ -71,7 +71,7 @@ async function parseError(res: Response): Promise<ApiError> {
   return new ApiError(res.status, code, message);
 }
 
-export async function apiJson<T>(path: string, body?: unknown, method?: "GET" | "POST"): Promise<T> {
+export async function apiJson<T>(path: string, body?: unknown, method?: "GET" | "POST" | "DELETE"): Promise<T> {
   let res: Response;
   try {
     const init: RequestInit = { method: method ?? (body === undefined ? "GET" : "POST") };
@@ -122,6 +122,7 @@ export const api = {
       return normalized;
     }) };
   },
+  deleteChat: (id: string) => apiJson<{ ok: boolean; id: string; deleted: boolean }>(`/api/workspace/chat?id=${encodeURIComponent(id)}`, undefined, "DELETE"),
   getChat: async (id: string): Promise<{ ok: boolean; chat_data: ChatData }> => {
     const r = await apiJson<{ ok: boolean; chat: ChatData & { created_at?: number; updated_at?: number } }>(`/api/workspace/chat?id=${encodeURIComponent(id)}`);
     const chat = r.chat;

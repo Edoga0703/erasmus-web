@@ -282,7 +282,7 @@ export function useChat(opts: { model: string }) {
           acc = "";
           let reasoning = "";
           let frame: number | undefined;
-          let r0 = 0, r1 = 0;
+          let r0 = 0, r1 = 0, frozen = 0;
           let meta: { finish?: string; usage?: StreamUsage } = {};
           const schedulePaint = () => {
             if (frame !== undefined) return;
@@ -297,7 +297,7 @@ export function useChat(opts: { model: string }) {
               messages: history,
               sessionId: chatId,
               signal: ctrl.signal,
-              onToken: (tok) => { acc += tok; schedulePaint(); },
+              onToken: (tok) => { if (r0 && !frozen) { frozen = Math.max(Date.now() - r0, 1000); patch(id, { thinkMs: frozen }); } acc += tok; schedulePaint(); },
               onReasoning: (tok) => { const n = Date.now(); if (!r0) r0 = n; r1 = n; reasoning += tok; schedulePaint(); },
               onMeta: (mm) => { meta = { ...meta, ...(mm.finishReason ? { finish: mm.finishReason } : {}), ...(mm.usage ? { usage: mm.usage } : {}) }; },
             });
@@ -313,7 +313,7 @@ export function useChat(opts: { model: string }) {
           } finally {
             if (frame !== undefined) cancelAnimationFrame(frame);
           }
-          patch(id, { content: acc, ...(reasoning ? { reasoning, thinkMs: Math.max(r1 - r0, 1) } : {}), ...meta, streaming: false });
+          patch(id, { content: acc, ...(reasoning ? { reasoning, thinkMs: frozen || Math.max(r1 - r0, 1) } : {}), ...meta, streaming: false });
           activeAssistantId = null;
           break;
         }
