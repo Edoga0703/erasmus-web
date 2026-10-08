@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
-import { ArrowUp, Brain, Check, Paperclip, Plus, Square } from "lucide-react";
+import { ArrowUp, Brain, Check, Palette, Paperclip, Plus, Square, X } from "lucide-react";
 import { getModelConfig, saveModelConfig, type ReasoningEffort } from "@/lib/api/config";
+import { cleanImagePrompt, IMAGE_SIZES, type ImageSize } from "@/lib/images";
 
 const EFFORTS: [ReasoningEffort, string, string][] = [["none", "Sin razonamiento", "Respuesta inmediata"], ["low", "Bajo", "Rápido, piensa poco"], ["medium", "Medio", "Equilibrado (predeterminado)"], ["high", "Alto", "Piensa más a fondo"]];
 
@@ -38,11 +39,17 @@ import { AttachChip } from "./AttachChip";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 /** ChatGPT-style pill composer. "+" queues photos/files shown as tiles; the shell uploads them on send. */
-export function Composer({ busy, disabled, onSend, onStop, draft, centered }: {
+export function Composer({ busy, disabled, onSend, onStop, onGenerateImage, draft, centered }: {
   busy: boolean; disabled?: boolean; onSend: (t: string, files: File[]) => void; onStop: () => void;
+  onGenerateImage?: (prompt: string, size: ImageSize) => void;
   draft?: { text: string; n: number } | undefined; centered?: boolean;
 }) {
   const [text, setText] = useState("");
+  const [imageMode, setImageMode] = useState(false);
+  const [imageSize, setImageSize] = useState<ImageSize>("1024x1024");
+  const imageCommand = /^\/(?:imagen|image)(?:\s|$)/i.test(text.trim());
+  const generating = Boolean(onGenerateImage && (imageMode || imageCommand));
+  const validText = generating ? Boolean(cleanImagePrompt(text).trim()) && files.length === 0 : Boolean(text.trim());
   const [files, setFiles] = useState<{ f: File; url?: string | undefined }[]>([]);
   const queuedFiles = useRef<typeof files>([]);
   const [fileNotice, setFileNotice] = useState("");
