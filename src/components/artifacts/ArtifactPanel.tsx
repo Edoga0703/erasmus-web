@@ -65,7 +65,7 @@ export function ArtifactPanel({ artifact, onClose }: { artifact: Artifact; onClo
       <span className="sr-only" role="status">{copied ? "Copiado" : ""}</span>
       {error && <p role="alert" className="px-3 py-2 text-xs text-e-err">{error}</p>}
       <div id="artifact-preview" role="tabpanel" aria-labelledby="artifact-tab-preview" hidden={tab !== "preview"} className="min-h-0 flex-1">
-        <iframe title="Vista previa del artefacto" sandbox={ARTIFACT_SANDBOX} referrerPolicy="no-referrer" srcDoc={doc} className="e-frame h-full w-full border-0" />
+        <iframe key={doc} title="Vista previa del artefacto" sandbox={ARTIFACT_SANDBOX} referrerPolicy="no-referrer" src="/artifact-preview.html" onLoad={(event) => event.currentTarget.contentWindow?.postMessage({ type: "erasmus:artifact-document", document: doc }, "*")} className="e-frame h-full w-full border-0" />
       </div>
       <div id="artifact-code" role="tabpanel" aria-labelledby="artifact-tab-code" hidden={tab !== "code"} className="min-h-0 flex-1 overflow-auto bg-e-bg">
         <pre className="m-0 min-w-full w-max py-4 font-mono text-xs leading-6"><code>{artifact.code.split("\n").map((line, i) => <span key={i} className="flex min-h-6"><span aria-hidden="true" className="sticky left-0 w-12 shrink-0 select-none bg-e-bg pr-3 text-right text-e-dim">{i + 1}</span><span className="pr-4">{line || "\u200b"}</span>{"\n"}</span>)}</code></pre>

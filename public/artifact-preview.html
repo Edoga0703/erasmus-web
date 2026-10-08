@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>Vista previa · Erasmus</title>
+  <style>html,body,iframe{margin:0;width:100%;height:100%;border:0;display:block}</style>
+</head>
+<body>
+  <iframe title="Contenido del artefacto" sandbox="allow-scripts allow-modals allow-forms" referrerpolicy="no-referrer"></iframe>
+  <script>
+    window.addEventListener("message", function (event) {
+      if (event.source !== window.parent || !event.data || event.data.type !== "erasmus:artifact-document" || typeof event.data.document !== "string") return;
+      document.querySelector("iframe").srcdoc = event.data.document;
+    });
+  </script>
+</body>
+</html>
