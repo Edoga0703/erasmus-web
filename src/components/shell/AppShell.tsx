@@ -8,6 +8,8 @@ import { api, ApiError } from "@/lib/api/client";
 import { setTheme, useTheme } from "@/lib/theme";
 import { MessageView } from "@/components/chat/MessageView";
 import { Composer } from "@/components/chat/Composer";
+import { ArtifactPanel } from "@/components/artifacts/ArtifactPanel";
+import { ARTIFACT_EVENT, isArtifact, type Artifact } from "@/lib/artifacts";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -55,6 +57,7 @@ export function AppShell() {
   const [sideW, setSideW] = useState(260);
   const [panelW, setPanelW] = useState(460);
   const [filesOpen, setFilesOpen] = useState(false);
+  const [artifact, setArtifact] = useState<Artifact | null>(null);
   const [panelTab, setPanelTab] = useState<"activity" | "files" | "artifacts">("files");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<"general" | "model" | "about">("general");
@@ -94,6 +97,7 @@ export function AppShell() {
 
   useEffect(() => {
     const openPanel = (event: Event) => {
+      setArtifact(null);
       const detail = (event as CustomEvent<"activity" | "files" | "artifacts">).detail;
       setPanelTab(detail || "activity");
       setFilesOpen(true);
@@ -101,6 +105,17 @@ export function AppShell() {
     window.addEventListener("erasmus:open-panel", openPanel);
     return () => window.removeEventListener("erasmus:open-panel", openPanel);
   }, []);
+
+  useEffect(() => {
+    const open = (event: Event) => {
+      const detail: unknown = (event as CustomEvent<unknown>).detail;
+      if (!isArtifact(detail)) return;
+      setArtifact(detail); setFilesOpen(false); setSideOpen(false);
+    };
+    window.addEventListener(ARTIFACT_EVENT, open);
+    return () => window.removeEventListener(ARTIFACT_EVENT, open);
+  }, []);
+  useEffect(() => { setArtifact(null); }, [chat.chatId]);
 
   useEffect(() => {
     const el = scroller.current;
@@ -238,7 +253,8 @@ export function AppShell() {
         </aside>
       )}
 
-      <main className="relative flex min-w-0 flex-1 flex-col">
+      <div className="flex min-w-0 flex-1">
+      <main className={cn("relative flex min-w-0 flex-1 flex-col", artifact && "hidden md:flex")}>
         <header className="flex h-14 shrink-0 items-center gap-1 px-2 sm:px-3">
           {mobile && <button className="e-icon-btn text-e-tx" aria-label="Abrir barra lateral" onClick={() => setSideOpen(true)}><PanelLeft className="size-5" /></button>}
           <DropdownMenu>
@@ -270,7 +286,7 @@ export function AppShell() {
               </DropdownMenuContent>
             </DropdownMenu>
           )}
-          <button className={cn("e-icon-btn text-e-tx", filesOpen && "bg-e-bg3")} aria-label="Archivos y actividad" aria-pressed={filesOpen} onClick={() => { setPanelTab("files"); setFilesOpen((o) => !o); }}><FolderOpen className="size-5" /></button>
+          <button className={cn("e-icon-btn text-e-tx", filesOpen && "bg-e-bg3")} aria-label="Archivos y actividad" aria-pressed={filesOpen} onClick={() => { setArtifact(null); setPanelTab("files"); setFilesOpen((o) => !o); }}><FolderOpen className="size-5" /></button>
           {mobile && <button className="e-icon-btn text-e-tx" aria-label="Nueva conversación" onClick={newChat}><SquarePen className="size-5" /></button>}
         </header>
 
@@ -325,6 +341,8 @@ export function AppShell() {
           </>
         )}
       </main>
+      {artifact && <aside aria-label="Vista previa lateral" className="fixed inset-0 z-50 min-w-0 bg-e-bg2 md:relative md:inset-auto md:z-auto md:w-1/2 md:shrink-0 md:border-l md:border-e-line"><ArtifactPanel artifact={artifact} onClose={() => setArtifact(null)} /></aside>}
+      </div>
       {filesOpen && (
         mobile ? (
           <FilesPanel convId={chat.chatId} refreshKey={`${chat.busy}-${chat.messages.length}`} messages={chat.messages} initialTab={panelTab} onClose={() => setFilesOpen(false)} />
