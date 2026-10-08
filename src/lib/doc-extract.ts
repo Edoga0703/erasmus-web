@@ -18,7 +18,6 @@ export async function extractPdf(f: File): Promise<string> {
     out += `\n--- Página ${i} ---\n${text}`;
     if (out.length > MAX_DOC_CHARS) break;
   }
-  await doc.destroy();
   return capText(out);
 }
 

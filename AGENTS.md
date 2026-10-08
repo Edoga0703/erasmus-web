@@ -12,3 +12,4 @@
 - See `INTEGRATION_NOTES.md` for the active v5.4 contract and known server-side gaps.
 - Unsupported execution fences render as ordinary Markdown, never tool tasks — the documented gateway has no execution endpoint.
 - Account deletion stays informational until an authenticated deletion contract exists — clearing browser data is not server-side account deletion.
+- Chat deletion uses DELETE /api/workspace/chat?id= (server-confirmed); PDF/Excel text is extracted client-side (lazy-loaded pdfjs-dist/xlsx) and capped at 150k chars — the server has no binary ingest.
