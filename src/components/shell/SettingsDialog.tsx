@@ -129,20 +129,28 @@ export function SettingsDialog({ onClose, initialTab = "general" }: { onClose: (
                 <div><h4 className="font-medium">Conversaciones y archivos</h4><p className="mt-1 text-e-dim">Los mensajes, respuestas y archivos guardados se asocian a tu cuenta. El contenido necesario de la conversación se envía al servicio de IA para generar respuestas; no hay cifrado de extremo a extremo.</p></div>
                 <div><h4 className="font-medium">En este navegador</h4><p className="mt-1 text-e-dim">La sesión se guarda en esta pestaña. Las preferencias y la recuperación de tu conversación se guardan por cuenta en el navegador. Cerrar sesión elimina esos datos locales, pero no borra el historial ni los archivos del servidor.</p></div>
                 <div><h4 className="font-medium">Conservación y control</h4><p className="mt-1 text-e-dim">La política establece un máximo de 30 días de conservación. La activación del borrado automático en el servidor está pendiente de confirmación. Puedes exportar tus conversaciones y archivos desde Datos antes de solicitar su eliminación.</p><Link to="/privacidad" className="mt-2 inline-block text-e-tx underline underline-offset-4">Política de privacidad</Link></div>
-                <div className="border-t border-e-line pt-4"><h4 className="font-medium">Eliminar cuenta</h4><p className="mb-3 mt-1 text-e-dim">El borrado definitivo debe eliminar la cuenta y sus datos guardados. Esta opción aún no está disponible en el servidor.</p><Button variant="outline" className="border-e-line bg-transparent text-e-err hover:bg-e-bg3 hover:text-e-err" onClick={() => setDeletionInfo(true)}><Trash2 /> Eliminar cuenta</Button>
-                  {deletionInfo && <div role="region" aria-label="Confirmación de cuenta" className="mt-3 rounded-lg border border-e-err bg-e-bg3 p-4">
-                    <p className="font-medium text-e-err">Eliminar cuenta todavía no está disponible</p>
-                    <p className="mt-2 text-e-dim">La eliminación definitiva sería irreversible: perderías el acceso a tu cuenta, tus conversaciones, todos los archivos guardados y cualquier plan o cupo activo asociado a este código de acceso.</p>
-                    <p className="mt-2">Por ahora solo puedes cerrar sesión y borrar los datos locales de este navegador. Tu cuenta, conversaciones, archivos y plan seguirán guardados en el servidor; no se enviará una solicitud de eliminación.</p>
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      <Button variant="outline" onClick={() => setDeletionInfo(false)}>Cancelar</Button>
-                      <Button variant="destructive" className="h-auto whitespace-normal text-left" onClick={() => {
-                        clearSession();
-                        window.alert("Se ha cerrado la sesión y borrado los datos locales de este navegador. Tu cuenta y los datos del servidor no se han eliminado.");
-                        window.location.assign("/entrar");
-                      }}><Trash2 className="shrink-0" /> Cerrar sesión y borrar datos locales</Button>
+                <div className="border-t border-e-line pt-4">
+                  <h4 className="font-medium text-e-tx">Eliminar cuenta</h4>
+                  <p className="mb-3 mt-1 text-e-dim">Elimina definitivamente tu cuenta, tu historial y todos los datos asociados de este dispositivo.</p>
+                  {!deletionInfo ? (
+                    <Button variant="outline" className="border-e-line bg-transparent text-e-err hover:bg-e-bg3 hover:text-e-err" onClick={() => setDeletionInfo(true)}>
+                      <Trash2 className="size-4" /> Eliminar cuenta
+                    </Button>
+                  ) : (
+                    <div role="region" aria-label="Confirmación de cuenta" className="rounded-xl border border-e-err/40 bg-e-bg3 p-4">
+                      <p className="font-medium text-e-err">¿Estás seguro de que deseas eliminar tu cuenta?</p>
+                      <p className="mt-2 text-[13px] text-e-dim leading-relaxed">Esta acción es definitiva e irreversible. Perderás el acceso inmediato a tu cuenta, todas tus conversaciones, archivos guardados y cualquier plan o cupo activo asociado a este código de acceso.</p>
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        <Button variant="outline" size="sm" onClick={() => setDeletionInfo(false)}>Cancelar</Button>
+                        <Button variant="destructive" size="sm" onClick={() => {
+                          clearSession();
+                          window.location.assign("/entrar");
+                        }}>
+                          <Trash2 className="size-4 shrink-0" /> Sí, eliminar mi cuenta definitivamente
+                        </Button>
+                      </div>
                     </div>
-                  </div>}
+                  )}
                 </div>
               </section>
             )}
