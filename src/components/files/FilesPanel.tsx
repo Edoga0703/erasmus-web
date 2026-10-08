@@ -49,8 +49,8 @@ function FileCard({ file, onPreview }: { file: GalleryFile; onPreview: (file: Ga
     }).catch(() => { if (alive) setFailed(true); });
     return () => { alive = false; if (url) URL.revokeObjectURL(url); };
   }, [file.rel_path, file.localSrc, file.name, image]);
-  return <article className="min-w-0 overflow-hidden rounded-lg border border-e-line bg-e-bg2">
-    <Button variant="ghost" className="relative flex aspect-[4/3] h-auto w-full rounded-none bg-e-bg3 p-0" aria-label={`Previsualizar ${file.name}`} onClick={() => onPreview(file, src)}>
+  return <article className="min-w-0 overflow-hidden rounded-[8px] border border-e-line bg-e-bg2">
+    <Button variant="ghost" className="relative flex aspect-[4/3] h-auto w-full rounded-none bg-e-bg3 p-0 [&_svg]:size-9" aria-label={`Previsualizar ${file.name}`} onClick={() => onPreview(file, src)}>
       {image && src && !failed ? <img src={src} alt={file.name} loading="lazy" className="size-full object-contain p-2" onError={() => setFailed(true)} /> : <TypeIcon name={file.name} large />}
       <span className="absolute bottom-2 right-2 rounded bg-e-bg2/90 px-1.5 py-0.5 text-[10px] uppercase text-e-dim">{extension(file.name) || "Archivo"}</span>
     </Button>
@@ -111,7 +111,13 @@ export function FilesPanel({ convId, refreshKey, messages, initialTab = "files",
     const ext = extension(file.name);
     if (["html", "htm", "svg"].includes(ext)) {
       setOpening(true);
-      try { const r = await api.fsRead(file.rel_path); openArtifact(r.content, ext === "svg" ? "svg" : "html"); }
+      try {
+        // Unsaved image attachments exist only as browser-owned blob/data URLs.
+        const content = !file.rel_path && file.localSrc && /^(blob:|data:image\/)/.test(file.localSrc)
+          ? await (await fetch(file.localSrc)).text()
+          : (await api.fsRead(file.rel_path)).content;
+        openArtifact(content, ext === "svg" ? "svg" : "html");
+      }
       catch (e) { toast.error(e instanceof ApiError ? e.message : "No se pudo abrir el archivo."); }
       finally { setOpening(false); }
     } else if (fileCategory(file.name) === "images" && src) setView({ src, alt: file.name, fromUser: file.uploaded });

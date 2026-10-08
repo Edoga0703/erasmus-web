@@ -17,3 +17,4 @@
 - The artifact canvas loads a static, sandboxed preview wrapper and sends only document content via postMessage; this keeps Tailwind CDN inside the preview without relaxing the app's production CSP.
 - In-chat search uses browser CSS Highlight ranges rather than rewriting React-owned text; streaming and sanitized markup stay intact.
 - Initial splash waits for local chat recovery and the initial connection check to settle, including failure, so connection errors remain accessible.
+- File gallery reads workspace data through the authenticated API client and merges current local image attachments; scope follows conversation paths, attachment paths, and referenced artifact paths because the gateway has no ownership metadata per conversation.
