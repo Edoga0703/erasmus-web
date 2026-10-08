@@ -20,6 +20,7 @@
 - Chat: `POST /v1/chat/completions`, SSE, modelo de marca `erasmus-v2` y `reasoning_effort` (`none`, `low`, `medium`, `high`).
 - Cuenta/uso: `GET /api/account/me`.
 - Imágenes generadas: `/api/images/*`.
+- Generación nativa: `POST /v1/images/generations {prompt, size, n}` con `X-Erasmus-Session`, respuesta `{created, data: [{url, revised_prompt?}]}`. Tamaños: 1024x1024, 1792x1024, 1024x1792. La web usa n=1; no cambia de proveedor ni reintenta automáticamente errores de cuota/permisos.
 - La interfaz no muestra nombres internos del motor.
 
 ## Conversaciones y archivos

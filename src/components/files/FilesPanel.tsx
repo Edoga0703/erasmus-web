@@ -7,7 +7,7 @@ import { conversationDir, type UIMessage } from "@/hooks/use-chat";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { FilePreview } from "./FilePreview";
-import { ImageViewer, type ChatImage } from "@/components/chat/Images";
+import { collectImages, downloadImage, ImageViewer, type ChatImage } from "@/components/chat/Images";
 import { openArtifact } from "@/lib/artifacts";
 
 type Category = "documents" | "tables" | "images" | "code";
@@ -61,6 +61,7 @@ function FileCard({ file, onPreview }: { file: GalleryFile; onPreview: (file: Ga
       <div className="mt-2 flex justify-end gap-1 border-t border-e-line pt-1.5">
         <Button variant="ghost" size="icon-sm" aria-label={`Abrir ${file.name}`} title="Previsualizar" onClick={() => onPreview(file, src)}><Eye /></Button>
         <Button variant="ghost" size="icon-sm" aria-label={`Descargar ${file.name}`} title="Descargar" onClick={() => {
+          if (file.localSrc && !file.uploaded) { void downloadImage(file.localSrc, file.name); return; }
           if (!file.localSrc || file.rel_path) { void downloadFile(file.rel_path); return; }
           const a = document.createElement("a"); a.href = file.localSrc; a.download = file.name; a.click();
         }}><Download /></Button>
@@ -101,6 +102,12 @@ export function FilesPanel({ convId, refreshKey, messages, initialTab = "files",
       const existing = rows.find((f) => f.rel_path === a.path || f.rel_path === `${mine}/${a.name}`);
       if (existing) { existing.uploaded = true; if (localSrc) existing.localSrc = localSrc; }
       else if (localSrc) rows.push({ name: a.name, rel_path: a.path ?? "", size: a.size, modified: 0, localSrc, uploaded: true, current: true });
+    }
+    for (const img of collectImages(messages).filter((im) => !im.fromUser)) {
+      const name = img.src.split("/").pop()?.split("?")[0] || "imagen.png";
+      const existing = rows.find((f) => img.src.endsWith(f.rel_path) && Boolean(f.rel_path));
+      if (existing) { existing.current = true; existing.localSrc = img.src; }
+      else rows.push({ name: /\.(png|jpe?g|gif|webp|svg)$/i.test(name) ? name : `${name}.png`, rel_path: img.src, size: 0, modified: 0, localSrc: img.src, uploaded: false, current: true });
     }
     return rows;
   }, [files, messages, mine]);

@@ -18,3 +18,6 @@
 - In-chat search uses browser CSS Highlight ranges rather than rewriting React-owned text; streaming and sanitized markup stay intact.
 - Initial splash waits for local chat recovery and the initial connection check to settle, including failure, so connection errors remain accessible.
 - File gallery reads workspace data through the authenticated API client and merges current local image attachments; scope follows conversation paths, attachment paths, and referenced artifact paths because the gateway has no ownership metadata per conversation.
+- Native image generation uses the existing Fastify contract through the private API client and useChat's activity/persistence lifecycle, so image retries never invoke text completions or cross conversations.
+- GFM alerts are transformed from sanitized DOM and sanitized again; image-view events and returned image URLs are validated before rendering to keep generated content untrusted.
+- Keep the existing Markdown and composer adapters for Erasmus: the installed AI Elements response renderer does not expose the sanitized DOM hooks needed by code decoration, artifact portals and CSS Highlight search; avoid replacing those adapters during scoped presentation changes.

@@ -2,10 +2,13 @@ import { useEffect, useState } from "react";
 import { Download, ExternalLink, ImageIcon, X } from "lucide-react";
 import { API_BASE } from "@/lib/api/config";
 import type { UIMessage } from "@/hooks/use-chat";
+import { imageUrl } from "@/lib/images";
+import { apiFetch } from "@/lib/api/client";
+import { Button } from "@/components/ui/button";
 
 export interface ChatImage { src: string; alt: string; fromUser: boolean }
 
-const abs = (u: string) => (API_BASE.startsWith("http") && u.startsWith("/api/images/") ? API_BASE + u : u);
+const abs = (u: string) => imageUrl(u);
 
 /** Every image in the conversation: model-generated (Markdown/HTML img) and user photo attachments. */
 export function collectImages(messages: UIMessage[]): ChatImage[] {
@@ -16,16 +19,17 @@ export function collectImages(messages: UIMessage[]): ChatImage[] {
     if (m.hidden) continue;
     if (m.role === "user") m.attachments?.forEach((a) => a.url && add(a.url, a.name, true));
     else {
-      for (const r of m.content.matchAll(/!\[([^\]]*)\]\(([^)\s]+)[^)]*\)/g)) add(abs(r[2]!), r[1] || "Imagen", false);
-      for (const r of m.content.matchAll(/<img[^>]+src=["']([^"']+)["'][^>]*>/gi)) add(abs(r[1]!), "Imagen", false);
+      for (const r of m.content.matchAll(/!\[([^\]]*)\]\(([^)\s]+)[^)]*\)/g)) { const src = r[2] ? abs(r[2]) : null; if (src) add(src, r[1] || "Imagen", false); }
+      for (const r of m.content.matchAll(/<img[^>]+src=["']([^"']+)["'][^>]*>/gi)) { const src = r[1] ? abs(r[1]) : null; if (src) add(src, "Imagen", false); }
     }
   }
   return out;
 }
 
-async function download(src: string, name: string) {
+export async function downloadImage(src: string, name: string) {
   try {
-    const res = await fetch(src);
+    const imagePrefix = `${API_BASE}/api/images/`;
+    const res = src.startsWith(imagePrefix) ? await apiFetch(src.slice(API_BASE.length)) : await fetch(src, { credentials: "omit" });
     if (!res.ok) throw new Error();
     const blob = await res.blob();
     const ext = (blob.type.split("/")[1] || "png").replace("jpeg", "jpg");
@@ -49,9 +53,9 @@ export function ImageViewer({ img, onClose }: { img: ChatImage; onClose: () => v
   return (
     <div className="e-overlay fixed inset-0 z-[60] flex flex-col" role="dialog" aria-modal="true" aria-label="Vista de imagen" onClick={onClose}>
       <div className="flex shrink-0 items-center justify-end gap-1 p-3" onClick={(e) => e.stopPropagation()}>
-        <button className="e-icon-btn bg-e-bg2 text-e-tx" aria-label="Descargar imagen" onClick={() => void download(img.src, img.alt)}><Download className="size-5" /></button>
-        <button className="e-icon-btn bg-e-bg2 text-e-tx" aria-label="Abrir en pestaña nueva" onClick={() => window.open(img.src, "_blank", "noopener")}><ExternalLink className="size-5" /></button>
-        <button className="e-icon-btn bg-e-bg2 text-e-tx" aria-label="Cerrar" onClick={onClose}><X className="size-5" /></button>
+        <Button variant="ghost" className="e-icon-btn bg-e-bg2 text-e-tx" aria-label="Descargar imagen" onClick={() => void downloadImage(img.src, img.alt)}><Download className="size-5" /></Button>
+        <Button variant="ghost" className="e-icon-btn bg-e-bg2 text-e-tx" aria-label="Abrir en pestaña nueva" onClick={() => window.open(img.src, "_blank", "noopener,noreferrer")}><ExternalLink className="size-5" /></Button>
+        <Button variant="ghost" className="e-icon-btn bg-e-bg2 text-e-tx" aria-label="Cerrar" onClick={onClose}><X className="size-5" /></Button>
       </div>
       <div className="flex min-h-0 flex-1 items-center justify-center p-4 pt-0">
         <img src={img.src} alt={img.alt} className="max-h-full max-w-full rounded-xl object-contain" onClick={(e) => e.stopPropagation()} />
