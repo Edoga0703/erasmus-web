@@ -60,8 +60,8 @@ async function parseError(res: Response): Promise<ApiError> {
   }
   if (res.status === 403) message = "No tienes permiso para realizar esta acción.";
   if (res.status === 401) message = "Tu sesión ya no es válida. Vuelve a entrar.";
-  if (res.status === 402) message = code === "weekly_allowance_reached" ? "Cupo de imágenes agotado para esta clave." : "Sin crédito suficiente. Contacta con el administrador para recargar.";
-  if (res.status === 429) message = "Ya hay 4 respuestas en curso con esta clave. Espera a que termine alguna.";
+  if (res.status === 402) message = "Has alcanzado el límite de imágenes de tu plan.";
+  if (res.status === 429) message = "Procesos en cola: esperando a desocuparse un cupo para continuar.";
   if (res.status === 502) message = "El modelo no respondió. Inténtalo de nuevo en unos segundos.";
   if (res.status === 503) {
     // Mantenimiento temporal del motor: si el servidor explica (p. ej. "Ajuste rápido"), se muestra tal cual; si no, mensaje claro sin expulsar la sesión.
@@ -110,11 +110,11 @@ export const api = {
     }
   },
   fsWrite: async (path: string, content: string, append = false): Promise<FsWriteResponse> => {
-    if (append) throw new ApiError(501, "append_unavailable", "Añadir a un archivo no está disponible en el servidor v5.4.");
+    if (append) throw new ApiError(501, "append_unavailable", "Añadir a un archivo no está disponible en este momento.");
     const r = await apiJson<{ ok: boolean; path: string; bytes_written: number }>("/api/fs/write", { path, content });
     return { ok: r.ok, name: r.path, mode: "write", bytes_written: r.bytes_written };
   },
-  exec: (_req: ExecRequest): Promise<ExecResponse> => Promise.reject(new ApiError(501, "exec_unavailable", "La ejecución de código no está disponible en el servidor v5.4.")),
+  exec: (_req: ExecRequest): Promise<ExecResponse> => Promise.reject(new ApiError(501, "exec_unavailable", "La ejecución de código no está disponible.")),
   chats: async (): Promise<ChatListResponse> => {
     const r = await apiJson<{ ok: boolean; chats: ChatMeta[] }>("/api/workspace/chats");
     return { ok: r.ok, workspace_name: "Mi espacio", chats: (r.chats ?? []).map((chat) => {

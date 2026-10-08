@@ -32,7 +32,7 @@ const COPY: Record<"es" | "en" | "pt", Copy> = {
     label: "Privacidad",
     title: "Tus datos, explicados sin rodeos",
     intro: "Esta política describe qué información necesita Erasmus para funcionar, cómo se utiliza y qué control tienes sobre ella.",
-    updated: "Última actualización: 6 de octubre de 2026",
+    updated: "Última actualización: 8 de octubre de 2026",
     summary: [
       { title: "No vendemos datos", text: "Tus datos no se venden ni se usan para publicidad o perfiles comerciales.", icon: EyeOff },
       { title: "Conservación limitada", text: "Conversaciones y archivos se conservan durante un máximo de 30 días.", icon: Database },
@@ -57,7 +57,7 @@ const COPY: Record<"es" | "en" | "pt", Copy> = {
     label: "Privacy",
     title: "Your data, explained clearly",
     intro: "This policy explains what Erasmus needs to operate, how information is used, and the control you have over it.",
-    updated: "Last updated: October 6, 2026",
+    updated: "Last updated: October 8, 2026",
     summary: [
       { title: "We do not sell data", text: "Your data is not sold or used for advertising or commercial profiling.", icon: EyeOff },
       { title: "Limited retention", text: "Conversations and files are retained for no more than 30 days.", icon: Database },
@@ -82,7 +82,7 @@ const COPY: Record<"es" | "en" | "pt", Copy> = {
     label: "Privacidade",
     title: "Seus dados, explicados com clareza",
     intro: "Esta política explica quais informações o Erasmus precisa para funcionar, como são utilizadas e qual controle você tem sobre elas.",
-    updated: "Última atualização: 6 de outubro de 2026",
+    updated: "Última atualização: 8 de outubro de 2026",
     summary: [
       { title: "Não vendemos dados", text: "Seus dados não são vendidos nem usados para publicidade ou perfis comerciais.", icon: EyeOff },
       { title: "Retenção limitada", text: "Conversas e arquivos são mantidos por no máximo 30 dias.", icon: Database },

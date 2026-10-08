@@ -133,7 +133,7 @@ export function FilesPanel({ convId, refreshKey, messages, initialTab = "files",
   return <aside className="fixed inset-0 z-40 flex flex-col border-l border-e-line bg-e-bg md:static md:inset-auto md:z-auto md:w-full md:min-w-0 md:flex-1" aria-label="Archivos">
     <div className="flex h-14 shrink-0 items-center gap-1 border-b border-e-line px-3">
       <div role="tablist" aria-label="Archivos del espacio" className="flex min-w-0 gap-1">
-        {(["files", "artifacts"] as const).map((t) => <Button key={t} role="tab" aria-selected={tab === t} variant="ghost" size="sm" onClick={() => { setTab(t); setSel(null); }} className={cn("rounded-full", tab === t && "bg-e-bg3 text-e-tx")}>{t === "files" ? "Archivos" : `Resultados (${artifacts.length})`}</Button>)}
+        {(["files", "artifacts"] as const).map((t) => <Button key={t} role="tab" aria-selected={tab === t} variant="ghost" size="sm" onClick={() => { setTab(t); setSel(null); }} className={cn("rounded-full", tab === t && "bg-e-bg3 text-e-tx")}>{t === "files" ? "Archivos" : `Artefactos (${artifacts.length})`}</Button>)}
       </div>
       <span className="flex-1" />
       <Button variant="ghost" size="icon-sm" aria-label="Actualizar archivos" title="Actualizar" onClick={() => void load()}><RefreshCw className={loading ? "animate-spin" : ""} /></Button>

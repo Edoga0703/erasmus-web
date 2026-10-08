@@ -1,11 +1,10 @@
 import { AttachChip } from "./AttachChip";
 import { memo, useMemo, useState } from "react";
-import { Check, Copy, Ellipsis, GitBranch, RefreshCw, ThumbsDown, ThumbsUp, ChevronsDown, Volume2, VolumeX } from "lucide-react";
+import { Check, Copy, Ellipsis, GitBranch, RefreshCw, ChevronsDown, Volume2, VolumeX } from "lucide-react";
 import { parseSegments } from "@/lib/blocks";
 import type { UIMessage } from "@/hooks/use-chat";
 import { cn } from "@/lib/utils";
 import { Markdown } from "./Markdown";
-import { ToolCard } from "./ToolCard";
 import { ThinkingChip } from "./Thinking";
 import { CompactionLine } from "./Compaction";
 import { ActivitySummary } from "./ActivitySummary";
@@ -35,7 +34,6 @@ export const MessageView = memo(function MessageView({ m, isLast, busy, onRegene
   m: UIMessage; isLast?: boolean | undefined; busy?: boolean | undefined; onRegenerate?: (() => void) | undefined; onBranch?: (() => void) | undefined; onRetry?: (() => void) | undefined; onContinue?: (() => void) | undefined;
 }) {
   const segs = useMemo(() => (m.role === "assistant" ? parseSegments(m.content) : []), [m.content, m.role]);
-  const [vote, setVote] = useState<0 | 1 | -1>(0);
   if (m.hidden) return null;
   if (m.kind === "compaction") return m.compaction ? <CompactionLine c={m.compaction} /> : null;
 
@@ -84,8 +82,6 @@ export const MessageView = memo(function MessageView({ m, isLast, busy, onRegene
       {!m.streaming && !empty && (
         <MessageActions className={cn("-ml-1.5 mt-1 gap-0.5", !isLast && "md:opacity-0 md:group-hover:opacity-100")}>
           <CopyBtn text={plain} />
-          <ActBtn label="Buena respuesta" active={vote === 1} onClick={() => setVote(vote === 1 ? 0 : 1)}><ThumbsUp className="size-4" fill={vote === 1 ? "currentColor" : "none"} /></ActBtn>
-          <ActBtn label="Mala respuesta" active={vote === -1} onClick={() => setVote(vote === -1 ? 0 : -1)}><ThumbsDown className="size-4" fill={vote === -1 ? "currentColor" : "none"} /></ActBtn>
           <ResponseMenu text={plain} disabled={!!busy} onRegenerate={isLast ? onRegenerate : undefined} onBranch={onBranch} />
           {m.usage && (
             <span className="ml-2 text-[12px] tabular-nums text-e-dim" data-usage

@@ -8,9 +8,9 @@ import { useT } from "@/lib/i18n";
 export const Route = createFileRoute("/comprar")({
   head: () => ({
     meta: [
-      { title: "Comprar acceso — Erasmus" },
+      { title: "Canjear acceso — Erasmus" },
       { name: "description", content: "Activa tu acceso a Erasmus con un cupón." },
-      { property: "og:title", content: "Comprar acceso — Erasmus" },
+      { property: "og:title", content: "Canjear acceso — Erasmus" },
       { property: "og:description", content: "Activa tu acceso a Erasmus con un cupón." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
