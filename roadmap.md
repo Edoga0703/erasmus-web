@@ -1,5 +1,6 @@
 # Roadmap Erasmus Web
-- [ ] Markdown enriquecido, visor por evento y generación nativa de imágenes mediante Fastify; pruebas e integración en las galerías.
+- [x] Markdown enriquecido, visor por evento y generación nativa de imágenes mediante Fastify; 33 pruebas y comprobación visual con respuestas de prueba.
+- [ ] Verificar generación de imágenes con Fastify real (bloqueo: sin sesión Erasmus disponible); revisión global de formato pendiente por errores de lint existentes.
 - [x] Inicio animado, búsqueda dentro del chat y galería de archivos con filtros, ámbito y vistas previas; pruebas automatizadas y visuales con datos de prueba.
 - [ ] Verificar búsqueda y galería con archivos reales en una sesión Erasmus (bloqueo: sin sesión disponible).
 - [x] Vista previa lateral interactiva: tarjetas HTML/SVG, herramientas y aislamiento; 15 pruebas y comprobación visual de componentes en escritorio/móvil.

@@ -26,5 +26,9 @@ export interface FilesResponse { ok: boolean; workspace_name: string; files: Wor
 export interface StoredToolState { status: string; detail?: string | undefined; output?: string | undefined; diff?: { kind: string; text: string }[] | undefined; exitCode?: number | undefined; durationMs?: number | undefined; stdout?: string | undefined; stderr?: string | undefined }
 export interface StoredMessage { role: "user" | "assistant"; text?: string | undefined; c?: string | undefined; content?: string | undefined; ts?: number | undefined; hidden?: boolean | undefined; tools?: Record<number, StoredToolState> | undefined; reasoning?: string | undefined; thinkMs?: number | undefined; finish?: string | undefined; usage?: { prompt: number; completion: number; reasoning: number; total: number } | undefined; kind?: "compaction" | undefined; compaction?: { status: "running" | "done" | "error"; startedAt: number; ms?: number | undefined } | undefined; summary?: string | undefined; cutId?: string | undefined; id?: string | undefined }
 export interface ChatData { id: string; title: string; created: number; updated: number; messages: StoredMessage[]; allMessages?: StoredMessage[] | undefined }
+export interface StoredMessage {
+  imageRequest?: { prompt: string; size: "1024x1024" | "1792x1024" | "1024x1792" } | undefined;
+  error?: { message: string; retryable: boolean } | undefined;
+}
 export interface AccountResponse { tokens_balance: number; tokens_used: number; images_used: number; images_quota: number; plan: string; label?: string; inflight: number }
 export interface SessionProfile { ok: boolean; user_id: string; plan: string; status: string; expires_at?: string | null; has_dedicated_motor?: boolean; motor_in_cooldown?: boolean; cooldown_until?: string | null }

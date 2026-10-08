@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError, streamChat, type StreamUsage } from "@/lib/api/client";
 import { extractBlocks, lineDiff, type DiffRow, type ToolBlock } from "@/lib/blocks";
 import type { ChatData, StoredMessage } from "@/lib/api/types";
+import { cleanImagePrompt, imageUrl, IMAGE_SIZES, type ImageSize } from "@/lib/images";
 import type { CompactionState } from "@/components/chat/Compaction";
 import { ANSWER_RESERVE, COMPACT_AT, COMPACT_PROMPT, FILE_MAX_FRACTION, FILE_TOO_BIG_MSG, KEEP_RECENT, LIMIT_MSG, estimateTokens, getContextLength, historyTokens, isContextOverflow } from "@/lib/context";
 
@@ -21,7 +22,8 @@ export interface UIMessage {
   /** finish_reason of the last stream; "length" means the answer was cut. */
   finish?: string;
   usage?: StreamUsage;
-  error?: { message: string; retryable: boolean };
+  error?: { message: string; retryable: boolean } | undefined;
+  imageRequest?: { prompt: string; size: ImageSize };
   attachments?: Attachment[];
   /** "compaction" = visible separator line; when done it carries the summary that replaces messages before cutId. */
   kind?: "compaction";
@@ -159,6 +161,7 @@ export function useChat(opts: { model: string }) {
   const titleRef = useRef(title);
   const temporaryRef = useRef(false);
   titleRef.current = title;
+  useEffect(() => () => { abortRef.current?.abort(); abortRef.current = null; }, []);
 
   useEffect(() => {
     const saved = recoverLocalChat();
@@ -208,7 +211,7 @@ export function useChat(opts: { model: string }) {
       title: t,
       created: created.current,
       updated: Date.now(),
-      messages: msgsRef.current.map<StoredMessage>((m) => (m.role === "user" ? { id: m.id, role: "user", text: m.content, ts: m.ts, hidden: m.hidden } : { id: m.id, role: "assistant", c: m.content, ts: m.ts, tools: m.tools, ...(m.kind ? { kind: m.kind, compaction: m.compaction?.status === "running" ? { ...m.compaction, status: "error" as const } : m.compaction, summary: m.summary, cutId: m.cutId } : {}), ...(m.reasoning ? { reasoning: m.reasoning, thinkMs: m.thinkMs } : {}), ...(m.usage ? { usage: m.usage } : {}), ...(m.finish ? { finish: m.finish } : {}) })),
+      messages: msgsRef.current.map<StoredMessage>((m) => (m.role === "user" ? { id: m.id, role: "user", text: m.content, ts: m.ts, hidden: m.hidden } : { id: m.id, role: "assistant", c: m.content, ts: m.ts, tools: m.tools, ...(m.imageRequest ? { imageRequest: m.imageRequest, error: m.error } : {}), ...(m.kind ? { kind: m.kind, compaction: m.compaction?.status === "running" ? { ...m.compaction, status: "error" as const } : m.compaction, summary: m.summary, cutId: m.cutId } : {}), ...(m.reasoning ? { reasoning: m.reasoning, thinkMs: m.thinkMs } : {}), ...(m.usage ? { usage: m.usage } : {}), ...(m.finish ? { finish: m.finish } : {}) })),
     };
     try { await api.syncChat(data); setListVersion((v) => v + 1); } catch { /* best effort */ }
   }, [chatId]);
@@ -376,11 +379,58 @@ export function useChat(opts: { model: string }) {
     await runLoop(t);
   }, [busy, commit, opts.model, runLoop]);
 
+  const generateImage = useCallback(async (raw: string, size: ImageSize, retryId?: string) => {
+    const prompt = cleanImagePrompt(raw);
+    if (!prompt || busy || abortRef.current) return;
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+    setBusy(true); setError(null); setFailure(null); setLimit(null);
+    let t = titleRef.current;
+    if (!msgsRef.current.length) { t = prompt.slice(0, 60); setTitle(t); titleRef.current = t; }
+    const aid = retryId ?? uid();
+    const pending: UIMessage = { id: aid, role: "assistant", content: "Generando imagen con Erasmus…", streaming: true, imageRequest: { prompt, size }, ts: Date.now() };
+    if (retryId) patch(aid, { ...pending, error: undefined });
+    else commit((ms) => [...ms, { id: uid(), role: "user", content: `🎨 Generar imagen: ${prompt}`, ts: Date.now() }, pending]);
+    try {
+      const result = await api.generateImage(prompt, size, 1, ctrl.signal);
+      if (ctrl.signal.aborted || abortRef.current !== ctrl) return;
+      const url = result.data?.[0]?.url;
+      if (!url || !imageUrl(url)) throw new ApiError(502, "invalid_image_response", "Erasmus no devolvió una imagen válida.");
+      // Escape model/user text used as Markdown, so prompts cannot inject links or HTML.
+      const alt = prompt.replace(/[\\[\]<>\r\n]/g, " ").slice(0, 500);
+      const safeUrl = imageUrl(url);
+      if (!safeUrl) return;
+      const label = IMAGE_SIZES.find((s) => s.value === size)?.label ?? "1:1 Cuadrado";
+      patch(aid, { content: `![${alt}](${safeUrl.replace(/\(/g, "%28").replace(/\)/g, "%29")})\n\n> [!TIP]\n> **Imagen generada con éxito**\n> Formato: ${label}`, streaming: false });
+      window.dispatchEvent(new Event("erasmus:files-changed"));
+    } catch (e) {
+      if (abortRef.current !== ctrl) return;
+      if (ctrl.signal.aborted) patch(aid, { content: "Generación de imagen detenida.", streaming: false });
+      else {
+        const err = e instanceof ApiError ? e : null;
+        const message = err?.message ?? "No se pudo generar la imagen. Comprueba la conexión.";
+        const retryable = !err || err.status === 0 || err.status === 429 || err.status >= 500;
+        patch(aid, { content: "", streaming: false, error: { message, retryable } });
+      }
+    } finally {
+      if (abortRef.current === ctrl) {
+        abortRef.current = null; setBusy(false);
+        window.dispatchEvent(new Event("erasmus:turn-done"));
+        void persist(t);
+      }
+    }
+  }, [busy, commit, patch, persist]);
+
   const retry = useCallback(() => {
     if (busy) return;
+    const image = [...msgsRef.current].reverse().find((m) => m.role === "assistant" && !m.hidden);
+    if (image?.error && image.imageRequest) {
+      if (image.error?.retryable) void generateImage(image.imageRequest.prompt, image.imageRequest.size, image.id);
+      return;
+    }
     commit((ms) => ms.filter((m) => !m.error));
     void runLoop(titleRef.current);
-  }, [busy, commit, runLoop]);
+  }, [busy, commit, generateImage, runLoop]);
 
   /** The last answer was cut (finish_reason "length"): ask the model to continue where it stopped. */
   const continueLast = useCallback(() => {
@@ -393,6 +443,7 @@ export function useChat(opts: { model: string }) {
 
   const reset = useCallback(() => {
     abortRef.current?.abort();
+    abortRef.current = null; setBusy(false);
     msgsRef.current = [];
     setMessages([]);
     setChatId(uid());
@@ -408,6 +459,7 @@ export function useChat(opts: { model: string }) {
 
   const startTemporary = useCallback(() => {
     abortRef.current?.abort();
+    abortRef.current = null; setBusy(false);
     msgsRef.current = [];
     setMessages([]);
     setChatId(uid());
@@ -443,6 +495,7 @@ export function useChat(opts: { model: string }) {
   /** Restore a saved chat; tool blocks re-render as cards from the persisted tools state. */
   const open = useCallback(async (id: string) => {
     abortRef.current?.abort();
+    abortRef.current = null; setBusy(false);
     const { chat_data: cd } = await api.getChat(id);
     const src = cd.messages?.length ? cd.messages : cd.allMessages ?? [];
     const restored: UIMessage[] = src.map((sm) => {
@@ -456,6 +509,8 @@ export function useChat(opts: { model: string }) {
         return base;
       }
       if (sm.hidden) base.hidden = true;
+      if (sm.imageRequest) base.imageRequest = sm.imageRequest;
+      if (sm.imageRequest && sm.error) base.error = sm.error;
       if (sm.reasoning) { base.reasoning = sm.reasoning; if (sm.thinkMs) base.thinkMs = sm.thinkMs; }
       if (sm.usage) base.usage = sm.usage;
       if (sm.finish) base.finish = sm.finish;
@@ -497,5 +552,5 @@ export function useChat(opts: { model: string }) {
     setListVersion((v) => v + 1);
   }, [chatId, persist]);
 
-  return { ready: localReady, open, rename, branchFrom, startTemporary, temporary, listVersion, chatId, title, messages, busy, error, send, stop, reset, continueLast, retry, failure, limit, dismissLimit: () => setLimit(null), dismissError: () => setError(null) };
+  return { ready: localReady, open, rename, branchFrom, startTemporary, temporary, listVersion, chatId, title, messages, busy, error, send, generateImage, stop, reset, continueLast, retry, failure, limit, dismissLimit: () => setLimit(null), dismissError: () => setError(null) };
 }

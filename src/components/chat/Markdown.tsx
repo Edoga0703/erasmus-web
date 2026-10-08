@@ -4,6 +4,7 @@ import { ArrowUpRight, Code2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { openArtifact } from "@/lib/artifacts";
 import { highlightWithin, renderMarkdown } from "@/lib/markdown";
+import { IMAGE_VIEW_EVENT } from "@/lib/images";
 import { splitRich } from "@/lib/charts";
 import { Chart } from "./Chart";
 import { Mermaid } from "./Mermaid";
@@ -60,7 +61,11 @@ function decorate(root: HTMLElement, onPreview: (code: string, lang: string) => 
 }
 
 const MarkdownHtml = memo(function MarkdownHtml({ html, divRef }: { html: string; divRef: RefObject<HTMLDivElement | null> }) {
-  return <div ref={divRef} className="e-md min-w-0 max-w-full" dangerouslySetInnerHTML={{ __html: html }} />;
+  return <div ref={divRef} className="e-md min-w-0 max-w-full" onClick={(event) => {
+    if (!(event.target instanceof HTMLImageElement)) return;
+    const img = event.target;
+    window.dispatchEvent(new CustomEvent(IMAGE_VIEW_EVENT, { detail: { src: img.currentSrc || img.src, alt: img.alt || "Imagen", fromUser: false } }));
+  }} dangerouslySetInnerHTML={{ __html: html }} />;
 });
 
 function Html({ source, streaming }: { source: string; streaming?: boolean | undefined }) {
