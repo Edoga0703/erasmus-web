@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { memo, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { ArrowUpRight, Code2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -59,6 +59,10 @@ function decorate(root: HTMLElement, onPreview: (code: string, lang: string) => 
   return cards;
 }
 
+const MarkdownHtml = memo(function MarkdownHtml({ html, divRef }: { html: string; divRef: RefObject<HTMLDivElement | null> }) {
+  return <div ref={divRef} className="e-md" dangerouslySetInnerHTML={{ __html: html }} />;
+});
+
 function Html({ source, streaming }: { source: string; streaming?: boolean | undefined }) {
   const ref = useRef<HTMLDivElement>(null);
   const [cards, setCards] = useState<ArtifactCard[]>([]);
@@ -86,7 +90,7 @@ function Html({ source, streaming }: { source: string; streaming?: boolean | und
   }, [source, streaming]);
   return (
     <>
-      <div ref={ref} className="e-md" dangerouslySetInnerHTML={{ __html: html }} />
+      <MarkdownHtml html={html} divRef={ref} />
       {cards.map((card, i) => createPortal(
         <div className="flex flex-wrap items-center gap-3 rounded-lg border border-e-line bg-e-bg px-4 py-3">
           <Code2 className="size-7 shrink-0 text-e-dim" />
