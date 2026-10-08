@@ -26,7 +26,10 @@ export function SettingsDialog({ onClose, initialTab = "general" }: { onClose: (
   const [deletionInfo, setDeletionInfo] = useState(false);
   const deletionCard = useRef<HTMLDivElement>(null);
   /** The card sits at the bottom of a scrollable panel: bring it into view so both buttons are reachable. */
-  useEffect(() => { if (deletionInfo) deletionCard.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }); }, [deletionInfo]);
+  useEffect(() => {
+    const el = deletionCard.current;
+    if (deletionInfo && typeof el?.scrollIntoView === "function") el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [deletionInfo]);
   const [counts, setCounts] = useState<Counts>(null);
   const [countErr, setCountErr] = useState("");
   const [zipping, setZipping] = useState(false);
