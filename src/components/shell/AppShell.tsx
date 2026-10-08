@@ -45,7 +45,7 @@ function Resizer({ onDrag, dir, label }: { onDrag: (dx: number) => void; dir: 1 
 
 export function AppShell() {
   const conn = useConnection();
-  const model = conn.status?.brand_model ?? "erasmus-v1";
+  const model = conn.status?.brand_model ?? "erasmus-v2";
   const chat = useChat({ model });
   const mobile = useIsMobile();
   const theme = useTheme();

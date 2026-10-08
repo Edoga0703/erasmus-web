@@ -17,7 +17,7 @@
 ## Modelo
 
 - Catálogo: `GET /v1/models`.
-- Chat: `POST /v1/chat/completions`, SSE, modelo de marca `erasmus-v1` y `reasoning_effort` (`none`, `low`, `medium`, `high`).
+- Chat: `POST /v1/chat/completions`, SSE, modelo de marca `erasmus-v2` y `reasoning_effort` (`none`, `low`, `medium`, `high`).
 - Cuenta/uso: `GET /api/account/me`.
 - Imágenes generadas: `/api/images/*`.
 - La interfaz no muestra nombres internos del motor.
