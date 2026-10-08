@@ -1,5 +1,5 @@
 import { CustomInstructions } from "./CustomInstructions";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Download, Moon, RefreshCw, ShieldCheck, Sun, Trash2, X } from "lucide-react";
 import { api, ApiError } from "@/lib/api/client";
 import { displayModel, getModelConfig } from "@/lib/api/config";
@@ -24,6 +24,9 @@ export function SettingsDialog({ onClose, initialTab = "general" }: { onClose: (
   const [mobileDetail, setMobileDetail] = useState(initialTab !== "general");
   const theme = useTheme();
   const [deletionInfo, setDeletionInfo] = useState(false);
+  const deletionCard = useRef<HTMLDivElement>(null);
+  /** The card sits at the bottom of a scrollable panel: bring it into view so both buttons are reachable. */
+  useEffect(() => { if (deletionInfo) deletionCard.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }); }, [deletionInfo]);
   const [counts, setCounts] = useState<Counts>(null);
   const [countErr, setCountErr] = useState("");
   const [zipping, setZipping] = useState(false);
@@ -137,7 +140,7 @@ export function SettingsDialog({ onClose, initialTab = "general" }: { onClose: (
                       <Trash2 className="size-4" /> Eliminar cuenta
                     </Button>
                   ) : (
-                    <div role="region" aria-label="Confirmación de cuenta" className="rounded-xl border border-e-err/40 bg-e-bg3 p-4">
+                    <div ref={deletionCard} role="region" aria-label="Confirmación de cuenta" className="rounded-xl border border-e-err/40 bg-e-bg3 p-4">
                       <p className="font-medium text-e-err">¿Estás seguro de que deseas eliminar tu cuenta?</p>
                       <p className="mt-2 text-[13px] text-e-dim leading-relaxed">Esta acción es definitiva e irreversible. Perderás el acceso inmediato a tu cuenta, todas tus conversaciones, archivos guardados y cualquier plan o cupo activo asociado a este código de acceso.</p>
                       <div className="mt-4 flex flex-wrap gap-2">
