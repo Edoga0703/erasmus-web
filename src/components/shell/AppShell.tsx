@@ -5,6 +5,7 @@ import { useConnection } from "@/hooks/use-connection";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { displayModel } from "@/lib/api/config";
 import { api, ApiError } from "@/lib/api/client";
+import { IMAGE_VIEW_EVENT, isImageDetail, type ImageSize } from "@/lib/images";
 import { setTheme, useTheme } from "@/lib/theme";
 import { MessageView } from "@/components/chat/MessageView";
 import { Composer } from "@/components/chat/Composer";
@@ -122,7 +123,15 @@ export function AppShell() {
     window.addEventListener(ARTIFACT_EVENT, open);
     return () => window.removeEventListener(ARTIFACT_EVENT, open);
   }, []);
-  useEffect(() => { setArtifact(null); setInChatSearchOpen(false); }, [chat.chatId]);
+  useEffect(() => {
+    const view = (event: Event) => {
+      const detail: unknown = (event as CustomEvent<unknown>).detail;
+      if (isImageDetail(detail)) setViewImg(detail);
+    };
+    window.addEventListener(IMAGE_VIEW_EVENT, view);
+    return () => window.removeEventListener(IMAGE_VIEW_EVENT, view);
+  }, []);
+  useEffect(() => { setArtifact(null); setViewImg(null); setImagesOpen(false); setInChatSearchOpen(false); }, [chat.chatId]);
 
   useEffect(() => {
     const el = scroller.current;
@@ -136,7 +145,12 @@ export function AppShell() {
   const lastAssistant = [...visible].reverse().find((m) => m.role === "assistant" && !m.kind)?.id;
   const lastUser = [...visible].reverse().find((m) => m.role === "user");
 
-  const regenerate = useCallback(() => { if (lastUser && !preparingFiles) void chat.send(lastUser.content, lastUser.attachments); }, [lastUser, chat, preparingFiles]);
+  const regenerate = useCallback(() => {
+    if (preparingFiles) return;
+    const image = visible.find((m) => m.id === lastAssistant)?.imageRequest;
+    if (image) void chat.generateImage(image.prompt, image.size);
+    else if (lastUser) void chat.send(lastUser.content, lastUser.attachments);
+  }, [lastUser, lastAssistant, visible, chat, preparingFiles]);
   const canLeave = () => !chat.temporary || chat.messages.length === 0 || window.confirm("Esta conversación temporal desaparecerá al salir. ¿Continuar?");
   const newChat = () => { if (!canLeave()) return; chat.reset(); setSideOpen(false); };
   const openChat = (id: string) => { if (!canLeave()) return; setSideOpen(false); setOpeningChat(true); chat.open(id).catch(() => toast.error("No se pudo abrir la conversación.")).finally(() => setOpeningChat(false)); };
@@ -240,8 +254,11 @@ export function AppShell() {
   );
 
   const empty = visible.length === 0;
+  const handleGenerateImage = (prompt: string, size: ImageSize) => {
+    if (!chat.busy && !preparingFiles && !down) void chat.generateImage(prompt, size);
+  };
   const composer = (
-    <Composer busy={chat.busy} disabled={down || preparingFiles} onSend={(t, f) => void sendWithFiles(t, f)} onStop={chat.stop} draft={draft} centered={empty} />
+    <Composer busy={chat.busy} disabled={down || preparingFiles} onSend={(t, f) => void sendWithFiles(t, f)} onGenerateImage={handleGenerateImage} onStop={chat.stop} draft={draft} centered={empty} />
   );
 
   return (
@@ -316,10 +333,7 @@ export function AppShell() {
         ) : (
           <>
             <div className="relative flex min-h-0 flex-1">
-            <section ref={scroller} onScroll={onScroll} className="min-w-0 flex-1 overflow-y-auto" onClick={(e) => {
-              const t = e.target as HTMLElement;
-              if (t.tagName === "IMG" && t.closest(".e-md")) { const im = t as HTMLImageElement; setViewImg({ src: im.currentSrc || im.src, alt: im.alt || "Imagen", fromUser: false }); }
-            }}>
+            <section ref={scroller} onScroll={onScroll} className="min-w-0 flex-1 overflow-y-auto">
               <div className="mx-auto flex min-h-full max-w-3xl flex-col gap-8 px-4 pb-10 pt-4 sm:px-6">
                 {openingChat && <div className="space-y-5 py-6" role="status" aria-label="Abriendo conversación"><div className="h-4 w-2/3 animate-pulse rounded bg-e-bg3" /><div className="h-4 w-full animate-pulse rounded bg-e-bg3" /><div className="h-4 w-4/5 animate-pulse rounded bg-e-bg3" /></div>}
                 {visible.map((m) => (

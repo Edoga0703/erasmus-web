@@ -49,13 +49,14 @@ export function Composer({ busy, disabled, onSend, onStop, onGenerateImage, draf
   const [imageSize, setImageSize] = useState<ImageSize>("1024x1024");
   const imageCommand = /^\/(?:imagen|image)(?:\s|$)/i.test(text.trim());
   const generating = Boolean(onGenerateImage && (imageMode || imageCommand));
-  const validText = generating ? Boolean(cleanImagePrompt(text).trim()) && files.length === 0 : Boolean(text.trim());
   const [files, setFiles] = useState<{ f: File; url?: string | undefined }[]>([]);
+  const validText = generating ? Boolean(cleanImagePrompt(text)) && files.length === 0 : Boolean(text.trim());
   const queuedFiles = useRef<typeof files>([]);
   const [fileNotice, setFileNotice] = useState("");
   useEffect(() => () => queuedFiles.current.forEach((x) => { if (x.url) URL.revokeObjectURL(x.url); }), []);
   const addFiles = (list: FileList | null) => {
     if (!list || disabled || busy) return;
+    if (generating) { setFileNotice("Vuelve al chat para añadir archivos; los adjuntos actuales se mantienen."); return; }
     const incoming = Array.from(list);
     const available = Math.max(0, 20 - queuedFiles.current.length);
     const accepted = incoming.slice(0, available).map((f) => ({ f, url: f.type.startsWith("image/") ? URL.createObjectURL(f) : undefined }));
@@ -82,8 +83,9 @@ export function Composer({ busy, disabled, onSend, onStop, onGenerateImage, draf
   }, [draft]);
 
   const submit = () => {
-    if ((!text.trim() && !files.length) || busy || disabled) return;
-    onSend(text, files.map((x) => x.f));
+    if ((generating ? !validText : !validText && !files.length) || busy || disabled) return;
+    if (generating && onGenerateImage) onGenerateImage(cleanImagePrompt(text), imageSize);
+    else onSend(text, files.map((x) => x.f));
     setText("");
     queuedFiles.current.forEach((x) => { if (x.url) URL.revokeObjectURL(x.url); });
     queuedFiles.current = [];
@@ -103,6 +105,15 @@ export function Composer({ busy, disabled, onSend, onStop, onGenerateImage, draf
       <div className={"e-row mx-auto max-w-3xl flex-wrap items-end" + (files.length ? " pt-3" : "")}
         onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); addFiles(e.dataTransfer.files); }}
         onPaste={(e) => { if (e.clipboardData.files.length) { e.preventDefault(); addFiles(e.clipboardData.files); } }}>
+        {generating && <div className="flex w-full flex-wrap items-center gap-1 px-1 pb-2">
+          <span className="flex items-center gap-1.5 text-[13px] text-e-info"><Palette className="size-4" /> Modo Imagen</span>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild><Button variant="ghost" size="sm" disabled={busy || disabled} aria-label="Formato de imagen" className="h-8 rounded-full text-[12px]">{IMAGE_SIZES.find((s) => s.value === imageSize)?.label}</Button></DropdownMenuTrigger>
+            <DropdownMenuContent className="e-pop" side="top">{IMAGE_SIZES.map((s) => <DropdownMenuItem key={s.value} onSelect={() => setImageSize(s.value)}>{s.label}{imageSize === s.value && <Check className="ml-auto size-4" />}</DropdownMenuItem>)}</DropdownMenuContent>
+          </DropdownMenu>
+          <Button variant="ghost" size="icon-sm" aria-label="Salir del modo imagen" title="Volver al chat" onClick={() => { setImageMode(false); if (imageCommand) setText(cleanImagePrompt(text)); setFileNotice(""); }}><X /></Button>
+          {files.length > 0 && <p role="status" className="w-full text-[12px] text-e-dim">Los adjuntos se mantienen. Vuelve al chat para enviarlos.</p>}
+        </div>}
         {files.length > 0 && (
           <div className="flex w-full flex-wrap gap-2 px-1 pb-2">
             {files.map((x, i) => <AttachChip key={i + x.f.name} a={{ name: x.f.name, size: x.f.size, url: x.url }} onRemove={() => removeFile(i)} />)}
@@ -111,31 +122,32 @@ export function Composer({ busy, disabled, onSend, onStop, onGenerateImage, draf
         <input ref={fileRef} type="file" hidden multiple accept="image/*,.txt,.csv,.md,.json,.py,.sh,.html,.xml,.yaml,.yml,.tsv,.log,.pdf,.xlsx,.xls" onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }} />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" type="button" aria-label="Añadir archivos" className="e-icon-btn shrink-0 text-e-tx" disabled={disabled}><Plus className="size-5" /></Button>
+            <Button variant="ghost" type="button" aria-label="Añadir archivos" className="e-icon-btn shrink-0 text-e-tx" disabled={disabled || busy}><Plus className="size-5" /></Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" side="top" className="e-pop min-w-56 p-1.5">
-            <DropdownMenuItem className="gap-2 rounded-lg px-3 py-2 text-[14px]" onSelect={() => fileRef.current?.click()}>
+            <DropdownMenuItem disabled={generating} className="gap-2 rounded-lg px-3 py-2 text-[14px]" onSelect={() => fileRef.current?.click()}>
               <Paperclip className="size-4" /> Añadir fotos y archivos
             </DropdownMenuItem>
+            {onGenerateImage && <DropdownMenuItem className="gap-2 rounded-lg px-3 py-2 text-[14px]" onSelect={() => { setImageMode(true); requestAnimationFrame(() => ref.current?.focus()); }}><Palette className="size-4" /> Crear imagen con IA</DropdownMenuItem>}
           </DropdownMenuContent>
         </DropdownMenu>
-        <ReasoningPicker disabled={disabled} />
+        {!generating && <ReasoningPicker disabled={disabled || busy} />}
         <textarea
           ref={ref}
           rows={1}
           value={text}
-          placeholder={disabled ? "Sin conexión con Erasmus" : "Pregunta lo que quieras"}
+          placeholder={disabled ? "Sin conexión con Erasmus" : generating ? "Describe la imagen que deseas que Erasmus genere..." : "Pregunta lo que quieras"}
           aria-label="Mensaje"
           onChange={(e) => { setText(e.target.value); grow(e.target); }}
           onKeyDown={onKey}
-          className="max-h-[220px] min-h-[36px] flex-1 resize-none self-center bg-transparent py-1.5 text-[16px] leading-6 text-e-tx outline-none placeholder:text-e-dim"
+          className="max-h-[220px] min-h-[36px] min-w-0 flex-1 resize-none self-center bg-transparent py-1.5 text-[16px] leading-6 text-e-tx outline-none placeholder:text-e-dim"
         />
         {busy ? (
           <Button variant="ghost" type="button" onClick={onStop} aria-label="Detener" className="inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-e-acc text-e-bg2">
             <Square className="size-3.5" fill="currentColor" />
           </Button>
         ) : (
-          <Button variant="ghost" type="button" onClick={submit} disabled={(!text.trim() && !files.length) || disabled} aria-label="Enviar" className="inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-e-acc text-e-bg2 disabled:opacity-30">
+          <Button variant="ghost" type="button" onClick={submit} disabled={(generating ? !validText : !validText && !files.length) || disabled} aria-label="Enviar" className="inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-e-acc text-e-bg2 disabled:opacity-30">
             <ArrowUp className="size-5" strokeWidth={2.4} />
           </Button>
         )}
