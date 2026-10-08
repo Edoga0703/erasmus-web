@@ -1,161 +1,146 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Activity, CheckCircle2, ChevronDown, ChevronRight, Download, FileCode2, FileImage, FileSpreadsheet, FileText, Folder, Loader2, RefreshCw, X } from "lucide-react";
-
-/** Colored type icon (ChatGPT sources style). */
-export function TypeIcon({ name }: { name: string }) {
-  const ext = name.split(".").pop()?.toLowerCase() ?? "";
-  const [Icon, color] = ext === "pdf" ? [FileText, "text-e-err"] : ["csv", "xlsx", "tsv"].includes(ext) ? [FileSpreadsheet, "text-e-ok"] : ["png", "jpg", "jpeg", "gif", "svg", "webp"].includes(ext) ? [FileImage, "text-e-info"] : ["py", "sh", "js", "ts", "html", "json", "css"].includes(ext) ? [FileCode2, "text-e-info"] : [FileText, "text-e-dim"];
-  return <Icon className={"size-4 shrink-0 " + color} />;
-}
+import { Download, Eye, FileCode2, FileImage, FileSpreadsheet, FileText, Loader2, RefreshCw, X } from "lucide-react";
 import { toast } from "sonner";
 import { api, ApiError } from "@/lib/api/client";
 import type { WorkspaceFile } from "@/lib/api/types";
-import { conversationDir } from "@/hooks/use-chat";
+import { conversationDir, type UIMessage } from "@/hooks/use-chat";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { FilePreview } from "./FilePreview";
-import type { UIMessage } from "@/hooks/use-chat";
-import { allActivity } from "@/lib/activity";
+import { ImageViewer, type ChatImage } from "@/components/chat/Images";
+import { openArtifact } from "@/lib/artifacts";
 
-interface Node { name: string; path: string; dir: boolean; size: number; children: Node[] }
-
-function buildTree(files: WorkspaceFile[]): Node {
-  const root: Node = { name: "", path: "", dir: true, size: 0, children: [] };
-  for (const f of files) {
-    const parts = f.rel_path.split("/").filter(Boolean);
-    let cur = root;
-    parts.forEach((part, i) => {
-      const path = parts.slice(0, i + 1).join("/");
-      const leaf = i === parts.length - 1;
-      let n = cur.children.find((c) => c.name === part);
-      if (!n) { n = { name: part, path, dir: !leaf, size: leaf ? f.size : 0, children: [] }; cur.children.push(n); }
-      cur = n;
-    });
-  }
-  const sort = (n: Node) => { n.children.sort((a, b) => Number(b.dir) - Number(a.dir) || a.name.localeCompare(b.name)); n.children.forEach(sort); };
-  sort(root);
-  return root;
+type Category = "documents" | "tables" | "images" | "code";
+const extension = (name: string) => name.split(".").pop()?.toLowerCase() ?? "";
+export function fileCategory(name: string): Category {
+  const ext = extension(name);
+  return ["png", "jpg", "jpeg", "gif", "webp", "svg"].includes(ext) ? "images" : ["csv", "xlsx", "xls", "tsv"].includes(ext) ? "tables" : ["html", "htm", "js", "jsx", "ts", "tsx", "py", "json", "css", "sh", "sql", "yaml", "yml"].includes(ext) ? "code" : "documents";
 }
-
+export function TypeIcon({ name, large = false }: { name: string; large?: boolean }) {
+  const category = fileCategory(name);
+  const Icon = category === "images" ? FileImage : category === "tables" ? FileSpreadsheet : category === "code" ? FileCode2 : FileText;
+  return <Icon className={cn("shrink-0", large ? "size-9" : "size-4", extension(name) === "pdf" ? "text-e-err" : category === "tables" ? "text-e-ok" : category === "code" || category === "images" ? "text-e-info" : "text-e-dim")} />;
+}
 export async function downloadFile(path: string) {
   try {
     const blob = await api.download(path);
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url;
-    a.download = path.split("/").pop() || "archivo";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
+    a.href = url; a.download = path.split("/").pop() || "archivo";
+    document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 5000);
-  } catch (e) {
-    toast.error(e instanceof ApiError ? e.message : "No se pudo descargar el archivo.");
-  }
+  } catch (e) { toast.error(e instanceof ApiError ? e.message : "No se pudo descargar el archivo."); }
 }
+const fmtSize = (b: number) => b < 1024 ? `${b} B` : b < 1048576 ? `${(b / 1024).toFixed(1)} KB` : `${(b / 1048576).toFixed(1)} MB`;
+const mime: Record<string, string> = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", svg: "image/svg+xml" };
+type GalleryFile = WorkspaceFile & { localSrc?: string; uploaded: boolean; current: boolean };
 
-const fmtSize = (b: number) => (b < 1024 ? `${b} B` : b < 1048576 ? `${(b / 1024).toFixed(1)} KB` : `${(b / 1048576).toFixed(1)} MB`);
-
-function TreeRow({ n, depth, open, toggle, sel, onSelect, highlight }: { n: Node; depth: number; open: Set<string>; toggle: (p: string) => void; sel: string | null; onSelect: (p: string) => void; highlight: string }) {
-  const isOpen = open.has(n.path);
-  const mine = n.path === highlight;
-  return (
-    <>
-      <div
-        className={cn("group flex items-center gap-1.5 rounded-md py-1 pr-1 text-[13px] hover:bg-e-bg3", sel === n.path && "bg-e-bg3")}
-        style={{ paddingLeft: 6 + depth * 14 }}
-      >
-        <button className="flex min-w-0 flex-1 items-center gap-1.5 text-left" onClick={() => (n.dir ? toggle(n.path) : onSelect(n.path))}>
-          {n.dir ? (isOpen ? <ChevronDown className="size-3.5 shrink-0 text-e-dim" /> : <ChevronRight className="size-3.5 shrink-0 text-e-dim" />) : <span className="w-3.5 shrink-0" />}
-          {n.dir ? <Folder className="size-3.5 shrink-0 text-e-dim" /> : <TypeIcon name={n.name} />}
-          <span className="truncate">{n.name}</span>
-          {mine && <span className="shrink-0 rounded bg-e-bg4 px-1.5 text-[10px] text-e-dim">esta conversación</span>}
-          {!n.dir && <span className="ml-auto shrink-0 pl-2 text-[11px] text-e-dim">{fmtSize(n.size)}</span>}
-        </button>
-        {!n.dir && (
-          <button className="e-icon-btn shrink-0" aria-label={`Descargar ${n.name}`} onClick={() => void downloadFile(n.path)}>
-            <Download className="size-3.5" />
-          </button>
-        )}
+function FileCard({ file, onPreview }: { file: GalleryFile; onPreview: (file: GalleryFile, src?: string) => void }) {
+  const image = fileCategory(file.name) === "images";
+  const [src, setSrc] = useState(file.localSrc);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let alive = true; let url: string | undefined;
+    setSrc(file.localSrc); setFailed(false);
+    if (image && !file.localSrc) void api.download(file.rel_path).then((raw) => {
+      if (!alive) return;
+      url = URL.createObjectURL(new Blob([raw], { type: mime[extension(file.name)] ?? raw.type }));
+      setSrc(url);
+    }).catch(() => { if (alive) setFailed(true); });
+    return () => { alive = false; if (url) URL.revokeObjectURL(url); };
+  }, [file.rel_path, file.localSrc, file.name, image]);
+  return <article className="min-w-0 overflow-hidden rounded-lg border border-e-line bg-e-bg2">
+    <Button variant="ghost" className="relative flex aspect-[4/3] h-auto w-full rounded-none bg-e-bg3 p-0" aria-label={`Previsualizar ${file.name}`} onClick={() => onPreview(file, src)}>
+      {image && src && !failed ? <img src={src} alt={file.name} loading="lazy" className="size-full object-contain p-2" onError={() => setFailed(true)} /> : <TypeIcon name={file.name} large />}
+      <span className="absolute bottom-2 right-2 rounded bg-e-bg2/90 px-1.5 py-0.5 text-[10px] uppercase text-e-dim">{extension(file.name) || "Archivo"}</span>
+    </Button>
+    <div className="p-2.5">
+      <p className="truncate text-[13px] font-medium" title={file.name}>{file.name}</p>
+      <p className="mt-1 text-[11px] tabular-nums text-e-dim">{fmtSize(file.size)}</p>
+      <p className="mt-1 truncate text-[10.5px] text-e-dim" title={file.uploaded ? "Subido por ti" : "Generado por Erasmus"}>{file.uploaded ? "Subido por ti" : "Generado por Erasmus"}</p>
+      <div className="mt-2 flex justify-end gap-1 border-t border-e-line pt-1.5">
+        <Button variant="ghost" size="icon-sm" aria-label={`Abrir ${file.name}`} title="Previsualizar" onClick={() => onPreview(file, src)}><Eye /></Button>
+        <Button variant="ghost" size="icon-sm" aria-label={`Descargar ${file.name}`} title="Descargar" onClick={() => {
+          if (!file.localSrc || file.rel_path) { void downloadFile(file.rel_path); return; }
+          const a = document.createElement("a"); a.href = file.localSrc; a.download = file.name; a.click();
+        }}><Download /></Button>
       </div>
-      {n.dir && isOpen && n.children.map((c) => <TreeRow key={c.path} n={c} depth={depth + 1} open={open} toggle={toggle} sel={sel} onSelect={onSelect} highlight={highlight} />)}
-    </>
-  );
+    </div>
+  </article>;
 }
 
-export function FilesPanel({ convId, refreshKey, messages, initialTab = "files", onClose }: { convId: string; refreshKey: unknown; messages: UIMessage[]; initialTab?: "activity" | "files" | "artifacts"; onClose: () => void }) {
+export function FilesPanel({ convId, refreshKey, messages, initialTab = "files", onClose }: { convId: string; refreshKey: unknown; messages: UIMessage[]; initialTab?: "files" | "artifacts"; onClose: () => void }) {
   const [files, setFiles] = useState<WorkspaceFile[]>([]);
-  const [tab, setTab] = useState<"activity" | "files" | "artifacts">(initialTab);
+  const [tab, setTab] = useState(initialTab);
   const [sel, setSel] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState<Category | "all">("all");
+  const [scope, setScope] = useState<"current" | "all">("current");
+  const [view, setView] = useState<ChatImage | null>(null);
+  const [opening, setOpening] = useState(false);
   const mine = conversationDir(convId);
-  const [open, setOpen] = useState<Set<string>>(() => new Set(["conversations", mine]));
-
   const load = useCallback(async () => {
-    try { setFiles((await api.files()).files); setErr(null); } catch (e) { setErr(e instanceof ApiError ? e.message : "No se pudo cargar el workspace."); }
+    setLoading(true);
+    try { setFiles((await api.files()).files); setErr(null); } catch (e) { setErr(e instanceof ApiError ? e.message : "No se pudieron cargar los archivos."); }
+    finally { setLoading(false); }
   }, []);
   useEffect(() => { void load(); }, [load, refreshKey]);
-  useEffect(() => {
-    const h = () => void load();
-    window.addEventListener("erasmus:files-changed", h);
-    return () => window.removeEventListener("erasmus:files-changed", h);
-  }, [load]);
-  useEffect(() => { setOpen(new Set(["conversations", mine])); setSel(null); }, [mine]);
-  useEffect(() => setTab(initialTab), [initialTab]);
-
-  const tree = useMemo(() => {
-    const t = buildTree(files);
-    // A new chat gets a visible, empty workspace folder before its first file is created.
-    let conversations = t.children.find((c) => c.name === "conversations");
-    if (!conversations) { conversations = { name: "conversations", path: "conversations", dir: true, size: 0, children: [] }; t.children.push(conversations); t.children.sort((a, b) => Number(b.dir) - Number(a.dir) || a.name.localeCompare(b.name)); }
-    if (!conversations.children.some((c) => c.path === mine)) conversations.children.unshift({ name: mine.split("/").pop() ?? "", path: mine, dir: true, size: 0, children: [] });
-    return t;
-  }, [files, mine]);
-  const artifacts = useMemo(() => files.filter((f) => f.rel_path.startsWith("artifacts/")), [files]);
-  const activity = useMemo(() => allActivity(messages), [messages]);
-  const toggle = (p: string) => setOpen((o) => { const n = new Set(o); if (n.has(p)) n.delete(p); else n.add(p); return n; });
-
-  return (
-    <aside className="fixed inset-0 z-40 flex flex-col border-l border-e-line bg-e-bg md:static md:inset-auto md:z-auto md:w-full md:min-w-0 md:flex-1" aria-label="Archivos">
-      <div className="flex h-14 shrink-0 items-center gap-1 border-b border-e-line px-3">
-        {(["activity", "files", "artifacts"] as const).map((t) => (
-          <button key={t} onClick={() => { setTab(t); setSel(null); }} className={cn("rounded-full px-3 py-1.5 text-[14px]", tab === t ? "bg-e-bg3 text-e-tx" : "text-e-dim hover:text-e-tx")}>
-            {t === "activity" ? "Actividad" : t === "files" ? "Archivos" : `Resultados (${artifacts.length})`}
-          </button>
-        ))}
-        <span className="flex-1" />
-        <button className="e-icon-btn" aria-label="Actualizar" onClick={() => void load()}><RefreshCw className="size-3.5" /></button>
-        <button className="e-icon-btn" aria-label="Cerrar panel" onClick={onClose}><X className="size-3.5" /></button>
+  useEffect(() => { const h = () => void load(); window.addEventListener("erasmus:files-changed", h); return () => window.removeEventListener("erasmus:files-changed", h); }, [load]);
+  useEffect(() => { setSel(null); setView(null); }, [convId]);
+  useEffect(() => { setTab(initialTab); setSel(null); }, [initialTab]);
+  const gallery = useMemo(() => {
+    const attachments = messages.filter((m) => m.role === "user" && !m.hidden).flatMap((m) => m.attachments ?? []);
+    const content = messages.filter((m) => !m.hidden).map((m) => m.content).join("\n");
+    const rows: GalleryFile[] = files.filter((f) => !/^(?:chats|history)\//.test(f.rel_path)).map((f) => ({ ...f,
+      uploaded: f.rel_path.startsWith("conversations/"),
+      current: f.rel_path.startsWith(`${mine}/`) || attachments.some((a) => a.path === f.rel_path) || content.includes(f.rel_path),
+    }));
+    for (const a of attachments) {
+      const localSrc = a.image || a.url;
+      const existing = rows.find((f) => f.rel_path === a.path || f.rel_path === `${mine}/${a.name}`);
+      if (existing) { existing.uploaded = true; if (localSrc) existing.localSrc = localSrc; }
+      else if (localSrc) rows.push({ name: a.name, rel_path: a.path ?? "", size: a.size, modified: 0, localSrc, uploaded: true, current: true });
+    }
+    return rows;
+  }, [files, messages, mine]);
+  const artifacts = gallery.filter((f) => f.rel_path.startsWith("artifacts/"));
+  const rows = (tab === "artifacts" ? artifacts : gallery).filter((f) => (scope === "all" || f.current) && (filter === "all" || fileCategory(f.name) === filter));
+  const preview = async (file: GalleryFile, src?: string) => {
+    if (opening) return;
+    const ext = extension(file.name);
+    if (["html", "htm", "svg"].includes(ext)) {
+      setOpening(true);
+      try { const r = await api.fsRead(file.rel_path); openArtifact(r.content, ext === "svg" ? "svg" : "html"); }
+      catch (e) { toast.error(e instanceof ApiError ? e.message : "No se pudo abrir el archivo."); }
+      finally { setOpening(false); }
+    } else if (fileCategory(file.name) === "images" && src) setView({ src, alt: file.name, fromUser: file.uploaded });
+    else setSel(file.rel_path);
+  };
+  return <aside className="fixed inset-0 z-40 flex flex-col border-l border-e-line bg-e-bg md:static md:inset-auto md:z-auto md:w-full md:min-w-0 md:flex-1" aria-label="Archivos">
+    <div className="flex h-14 shrink-0 items-center gap-1 border-b border-e-line px-3">
+      <div role="tablist" aria-label="Archivos del espacio" className="flex min-w-0 gap-1">
+        {(["files", "artifacts"] as const).map((t) => <Button key={t} role="tab" aria-selected={tab === t} variant="ghost" size="sm" onClick={() => { setTab(t); setSel(null); }} className={cn("rounded-full", tab === t && "bg-e-bg3 text-e-tx")}>{t === "files" ? "Archivos" : `Resultados (${artifacts.length})`}</Button>)}
       </div>
-      {err && <div className="e-err-banner m-3 px-3 py-2 text-[12.5px]">{err}</div>}
-      {sel ? (
-        <FilePreview path={sel} artifact={tab === "artifacts"} onBack={() => setSel(null)} />
-      ) : (
-        <div className="flex-1 overflow-y-auto p-2">
-          {tab === "activity" ? (
-            activity.length ? activity.map((item) => (
-              <div key={item.id} className="flex items-start gap-2.5 border-b border-e-line px-2 py-3 last:border-0">
-                {item.status === "running" ? <Loader2 className="mt-0.5 size-4 shrink-0 animate-spin text-e-info" /> : <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-e-ok" />}
-                <div className="min-w-0 flex-1"><p className="text-[13px] font-medium">{item.label}</p>{item.target && <p className="mt-0.5 truncate font-mono text-[11.5px] text-e-dim">{item.target}</p>}</div>
-                {item.durationMs > 0 && <span className="shrink-0 text-[11px] tabular-nums text-e-dim">{(item.durationMs / 1000).toFixed(1)} s</span>}
-              </div>
-            )) : <div className="grid min-h-48 place-items-center px-6 text-center"><div><Activity className="mx-auto mb-3 size-5 text-e-dim" /><p className="text-[13px] text-e-dim">La actividad aparecerá aquí cuando Erasmus trabaje con archivos o tareas.</p></div></div>
-          ) : tab === "files" ? (
-            tree.children.length ? tree.children.map((c) => <TreeRow key={c.path} n={c} depth={0} open={open} toggle={toggle} sel={sel} onSelect={setSel} highlight={mine} />) : <p className="p-3 text-[13px] text-e-dim">El workspace está vacío.</p>
-          ) : artifacts.length ? (
-            artifacts.map((f) => (
-              <div key={f.rel_path} className="flex items-center gap-1.5 rounded-md px-2 py-1.5 text-[13px] hover:bg-e-bg3">
-                <button className="flex min-w-0 flex-1 items-center gap-2 text-left" onClick={() => setSel(f.rel_path)}>
-                  <TypeIcon name={f.name} />
-                  <span className="truncate">{f.rel_path.slice("artifacts/".length)}</span>
-                  <span className="ml-auto shrink-0 text-[11px] text-e-dim">{fmtSize(f.size)}</span>
-                </button>
-                <button className="e-icon-btn shrink-0" aria-label={`Descargar ${f.name}`} onClick={() => void downloadFile(f.rel_path)}><Download className="size-3.5" /></button>
-              </div>
-            ))
-          ) : (
-            <p className="p-3 text-[13px] text-e-dim">Aún no hay artifacts.</p>
-          )}
+      <span className="flex-1" />
+      <Button variant="ghost" size="icon-sm" aria-label="Actualizar archivos" title="Actualizar" onClick={() => void load()}><RefreshCw className={loading ? "animate-spin" : ""} /></Button>
+      <Button variant="ghost" size="icon-sm" aria-label="Cerrar panel" title="Cerrar panel" onClick={onClose}><X /></Button>
+    </div>
+    {err && <div role="alert" className="e-err-banner m-3 px-3 py-2 text-[12.5px]">{err}</div>}
+    {sel ? <FilePreview path={sel} artifact={tab === "artifacts"} onBack={() => setSel(null)} /> : <>
+      <div className="space-y-3 border-b border-e-line p-3">
+        <div className="flex rounded-lg bg-e-bg3 p-0.5" role="group" aria-label="Ámbito de archivos">
+          {(["current", "all"] as const).map((s) => <Button key={s} variant="ghost" size="sm" aria-pressed={scope === s} className={cn("min-w-0 flex-1 px-2 text-[12px]", scope === s && "bg-e-bg2 shadow-row")} onClick={() => setScope(s)}>{s === "current" ? "Esta conversación" : "Todo el espacio"}</Button>)}
         </div>
-      )}
-    </aside>
-  );
+        <div className="flex flex-wrap gap-1" role="group" aria-label="Tipo de archivo">
+          {([["all", "Todos"], ["documents", "Documentos"], ["tables", "Tablas"], ["images", "Imágenes"], ["code", "Código"]] as const).map(([f, label]) => <Button key={f} variant="ghost" size="sm" aria-pressed={filter === f} className={cn("h-7 rounded-full px-2 text-[11px]", filter === f ? "bg-e-acc text-e-bg2 hover:bg-e-acc hover:text-e-bg2" : "text-e-dim")} onClick={() => setFilter(f)}>{label}</Button>)}
+        </div>
+      </div>
+      {opening && <p role="status" className="flex items-center gap-2 px-3 py-2 text-[12px] text-e-dim"><Loader2 className="size-3 animate-spin" /> Abriendo vista previa…</p>}
+      <div className="min-h-0 flex-1 overflow-y-auto p-3">
+        {loading && !gallery.length ? <p role="status" className="py-8 text-center text-[13px] text-e-dim">Cargando archivos…</p> : rows.length ? <div className="grid grid-cols-2 gap-2.5">{rows.map((file) => <FileCard key={file.rel_path || file.name} file={file} onPreview={(f, src) => void preview(f, src)} />)}</div> : <p className="py-10 text-center text-[13px] text-e-dim">No hay archivos en esta selección.</p>}
+      </div>
+    </>}
+    {view && <ImageViewer img={view} onClose={() => setView(null)} />}
+  </aside>;
 }
