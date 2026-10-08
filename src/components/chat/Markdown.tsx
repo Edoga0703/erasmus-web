@@ -60,7 +60,7 @@ function decorate(root: HTMLElement, onPreview: (code: string, lang: string) => 
 }
 
 const MarkdownHtml = memo(function MarkdownHtml({ html, divRef }: { html: string; divRef: RefObject<HTMLDivElement | null> }) {
-  return <div ref={divRef} className="e-md" dangerouslySetInnerHTML={{ __html: html }} />;
+  return <div ref={divRef} className="e-md min-w-0 max-w-full" dangerouslySetInnerHTML={{ __html: html }} />;
 });
 
 function Html({ source, streaming }: { source: string; streaming?: boolean | undefined }) {

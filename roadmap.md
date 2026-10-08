@@ -1,5 +1,6 @@
 # Roadmap Erasmus Web
-- [ ] Vista previa lateral interactiva: tarjetas HTML/SVG, herramientas, aislamiento y verificación en escritorio/móvil.
+- [x] Vista previa lateral interactiva: tarjetas HTML/SVG, herramientas y aislamiento; 15 pruebas y comprobación visual de componentes en escritorio/móvil.
+- [ ] Verificar artefactos desde una conversación autenticada real (bloqueo: sin sesión Erasmus disponible para la comprobación).
 - [x] Pulir chat y adjuntos según auditoría; conservar límite de tamaño desactivado y actividad ilustrativa (4 pruebas específicas correctas).
 - [x] Ajustes 1.0 beta: retirar Estado/Diagnóstico, ampliar Seguridad y simplificar Acerca de.
 - [ ] Eliminar cuenta desde la web (bloqueo: contrato v5.4 no incluye endpoint de eliminación).

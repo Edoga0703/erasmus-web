@@ -194,7 +194,7 @@ export function AppShell() {
           { label: "Nueva conversación", Icon: SquarePen, on: newChat, kbd: "" },
           { label: "Buscar conversaciones", Icon: Search, on: () => { setSearchOpen(true); setSideOpen(false); }, kbd: "Ctrl K" },
           { label: "Imágenes", Icon: ImageIcon, on: () => { setImagesOpen(true); setSideOpen(false); }, kbd: "" },
-          { label: "Archivos", Icon: FolderOpen, on: () => { setPanelTab("files"); setFilesOpen(true); setSideOpen(false); }, kbd: "" },
+          { label: "Archivos", Icon: FolderOpen, on: () => { setArtifact(null); setPanelTab("files"); setFilesOpen(true); setSideOpen(false); }, kbd: "" },
         ].map(({ label, Icon, on, kbd }) =>
           rail ? (
             <button key={label} className="e-icon-btn text-e-tx" aria-label={label} title={label} onClick={on}><Icon className="size-5" /></button>
