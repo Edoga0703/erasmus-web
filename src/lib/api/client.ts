@@ -14,6 +14,7 @@ import type {
   SessionProfile,
 } from "./types";
 import { clearSession, getSession } from "@/lib/session";
+import type { ImageSize } from "@/lib/images";
 
 /** Server says the session is no longer valid → wipe it locally and go to the login page. */
 function onSessionRejected() {
@@ -71,13 +72,14 @@ async function parseError(res: Response): Promise<ApiError> {
   return new ApiError(res.status, code, message);
 }
 
-export async function apiJson<T>(path: string, body?: unknown, method?: "GET" | "POST" | "DELETE"): Promise<T> {
+export async function apiJson<T>(path: string, body?: unknown, method?: "GET" | "POST" | "DELETE", signal?: AbortSignal): Promise<T> {
   let res: Response;
   try {
-    const init: RequestInit = { method: method ?? (body === undefined ? "GET" : "POST") };
+    const init: RequestInit = { method: method ?? (body === undefined ? "GET" : "POST"), signal };
     if (body !== undefined) init.body = JSON.stringify(body);
     res = await apiFetch(path, init);
-  } catch {
+  } catch (e) {
+    if (signal?.aborted) throw e;
     throw new ApiError(0, "network", "No se pudo conectar con Erasmus.");
   }
   if (!res.ok) throw await parseError(res);
@@ -85,6 +87,8 @@ export async function apiJson<T>(path: string, body?: unknown, method?: "GET" | 
 }
 
 export const api = {
+  generateImage: (prompt: string, size: ImageSize = "1024x1024", n = 1, signal?: AbortSignal) =>
+    apiJson<{ created: number; data: { url: string; revised_prompt?: string }[] }>("/v1/images/generations", { prompt, size, n }, "POST", signal),
   status: () => apiJson<StatusResponse>("/health"),
   session: () => apiJson<SessionProfile>("/api/auth/me"),
   fsList: async (path: string): Promise<FsListResponse> => {
