@@ -20,35 +20,37 @@ describe("Erasmus Web beta settings", () => {
     expect(screen.queryByText(/Licencias/)).toBeNull();
   });
 
-  it("allows cancellation without claiming server deletion", () => {
+  it("asks for confirmation and explains exactly what will be lost", () => {
     render(<SettingsDialog onClose={vi.fn()} />);
     fireEvent.click(screen.getByRole("tab", { name: "Seguridad" }));
     fireEvent.click(screen.getByRole("button", { name: "Eliminar cuenta" }));
-    expect(screen.getByRole("region", { name: "Confirmación de cuenta" }).textContent).toContain("no se enviará una solicitud de eliminación");
-    expect(screen.queryByRole("button", { name: "Sí, eliminar mi cuenta definitivamente" })).toBeNull();
+    const region = screen.getByRole("region", { name: "Confirmación de cuenta" });
+    expect(region.textContent).toContain("¿Estás seguro de que deseas eliminar tu cuenta?");
+    expect(region.textContent).toContain("Esta acción es definitiva e irreversible");
+    expect(region.textContent).toContain("todas tus conversaciones");
+    expect(region.textContent).toContain("plan o cupo activo asociado a este código de acceso");
+    expect(screen.getByRole("button", { name: "Sí, eliminar mi cuenta definitivamente" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
     expect(screen.queryByRole("region", { name: "Confirmación de cuenta" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Eliminar cuenta" })).toBeTruthy();
   });
 
-  it("clears the actual local session, explains the limitation and redirects", () => {
+  it("clears the session and redirects when deletion is confirmed", () => {
     setSession({ token: "test-session", userId: "test-user", plan: "test", expires: Date.now() + 60000 });
     const key = userKey("chat:regression");
     localStorage.setItem(key, "local history");
     const location = Object.getOwnPropertyDescriptor(window, "location");
     const assign = vi.fn();
-    const alert = vi.spyOn(window, "alert").mockImplementation(() => {});
     Object.defineProperty(window, "location", { configurable: true, value: { assign } });
     try {
       render(<SettingsDialog onClose={vi.fn()} initialTab="security" />);
       fireEvent.click(screen.getByRole("button", { name: "Eliminar cuenta" }));
-      fireEvent.click(screen.getByRole("button", { name: "Cerrar sesión y borrar datos locales" }));
+      fireEvent.click(screen.getByRole("button", { name: "Sí, eliminar mi cuenta definitivamente" }));
       expect(getSession()).toBeNull();
       expect(localStorage.getItem(key)).toBeNull();
-      expect(alert).toHaveBeenCalledWith(expect.stringContaining("no se han eliminado"));
       expect(assign).toHaveBeenCalledWith("/entrar");
     } finally {
       if (location) Object.defineProperty(window, "location", location);
-      alert.mockRestore();
       clearSession();
     }
   });
