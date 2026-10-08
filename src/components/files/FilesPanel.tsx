@@ -56,7 +56,7 @@ function FileCard({ file, onPreview }: { file: GalleryFile; onPreview: (file: Ga
     </Button>
     <div className="p-2.5">
       <p className="truncate text-[13px] font-medium" title={file.name}>{file.name}</p>
-      <p className="mt-1 text-[11px] tabular-nums text-e-dim">{fmtSize(file.size)}</p>
+      <p className="mt-1 text-[11px] tabular-nums text-e-dim">{file.size ? fmtSize(file.size) : "—"}</p>
       <p className="mt-1 truncate text-[10.5px] text-e-dim" title={file.uploaded ? "Subido por ti" : "Generado por Erasmus"}>{file.uploaded ? "Subido por ti" : "Generado por Erasmus"}</p>
       <div className="mt-2 flex justify-end gap-1 border-t border-e-line pt-1.5">
         <Button variant="ghost" size="icon-sm" aria-label={`Abrir ${file.name}`} title="Previsualizar" onClick={() => onPreview(file, src)}><Eye /></Button>

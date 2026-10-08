@@ -10,6 +10,7 @@ export const IMAGE_VIEW_EVENT = "erasmus:view-image";
 export interface ImageDetail { src: string; alt: string; fromUser: boolean }
 export function imageUrl(src: string): string | null {
   if (/^\/api\/images\/[\w./%?=&-]+$/.test(src)) return API_BASE + src;
+  if (src.startsWith(`${API_BASE}/api/images/`) && /^[\w./:%?=&-]+$/.test(src)) return src;
   try {
     const url = new URL(src);
     if (url.protocol === "https:" || (url.protocol === "http:" && ["localhost", "127.0.0.1"].includes(url.hostname))) return url.href;
