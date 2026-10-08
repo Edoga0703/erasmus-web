@@ -1,4 +1,6 @@
 # Roadmap Erasmus Web
+- [x] Inicio animado, búsqueda dentro del chat y galería de archivos con filtros, ámbito y vistas previas; pruebas automatizadas y visuales con datos de prueba.
+- [ ] Verificar búsqueda y galería con archivos reales en una sesión Erasmus (bloqueo: sin sesión disponible).
 - [x] Vista previa lateral interactiva: tarjetas HTML/SVG, herramientas y aislamiento; 15 pruebas y comprobación visual de componentes en escritorio/móvil.
 - [ ] Verificar artefactos desde una conversación autenticada real (bloqueo: sin sesión Erasmus disponible para la comprobación).
 - [x] Pulir chat y adjuntos según auditoría; conservar límite de tamaño desactivado y actividad ilustrativa (4 pruebas específicas correctas).

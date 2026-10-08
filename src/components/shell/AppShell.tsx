@@ -20,6 +20,8 @@ import { SearchDialog } from "./SearchDialog";
 import { FilesPanel } from "@/components/files/FilesPanel";
 import { SettingsDialog } from "./SettingsDialog";
 import { UsageMeter } from "./UsageMeter";
+import { AppSplash } from "./AppSplash";
+import { InChatSearch } from "@/components/chat/InChatSearch";
 import { ImagesDialog, ImageViewer, collectImages, type ChatImage } from "@/components/chat/Images";
 import { downloadMarkdown, printAsPdf } from "@/lib/export-chat";
 import { logout } from "@/lib/auth";
@@ -58,11 +60,12 @@ export function AppShell() {
   const [panelW, setPanelW] = useState(460);
   const [filesOpen, setFilesOpen] = useState(false);
   const [artifact, setArtifact] = useState<Artifact | null>(null);
-  const [panelTab, setPanelTab] = useState<"activity" | "files" | "artifacts">("files");
+  const [panelTab, setPanelTab] = useState<"files" | "artifacts">("files");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<"general" | "model" | "about">("general");
   const [preparingFiles, setPreparingFiles] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [inChatSearchOpen, setInChatSearchOpen] = useState(false);
   const [imagesOpen, setImagesOpen] = useState(false);
   const [viewImg, setViewImg] = useState<ChatImage | null>(null);
   const [atBottom, setAtBottom] = useState(true);
@@ -90,16 +93,20 @@ export function AppShell() {
   useEffect(() => persist(LS.collapsed, collapsed ? "1" : "0"), [collapsed]);
 
   useEffect(() => {
-    const k = (e: KeyboardEvent) => { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); setSearchOpen(true); } };
+    const k = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey)) return;
+      if (e.key.toLowerCase() === "k") { e.preventDefault(); setSearchOpen(true); }
+      if (e.key.toLowerCase() === "f" && !settingsOpen && !searchOpen && !filesOpen && !artifact && !imagesOpen && !viewImg) { e.preventDefault(); setInChatSearchOpen(true); }
+    };
     window.addEventListener("keydown", k);
     return () => window.removeEventListener("keydown", k);
-  }, []);
+  }, [settingsOpen, searchOpen, filesOpen, artifact, imagesOpen, viewImg]);
 
   useEffect(() => {
     const openPanel = (event: Event) => {
       setArtifact(null);
       const detail = (event as CustomEvent<"activity" | "files" | "artifacts">).detail;
-      setPanelTab(detail || "activity");
+      setPanelTab(detail === "artifacts" ? "artifacts" : "files");
       setFilesOpen(true);
     };
     window.addEventListener("erasmus:open-panel", openPanel);
@@ -115,12 +122,12 @@ export function AppShell() {
     window.addEventListener(ARTIFACT_EVENT, open);
     return () => window.removeEventListener(ARTIFACT_EVENT, open);
   }, []);
-  useEffect(() => { setArtifact(null); }, [chat.chatId]);
+  useEffect(() => { setArtifact(null); setInChatSearchOpen(false); }, [chat.chatId]);
 
   useEffect(() => {
     const el = scroller.current;
-    if (el && el.scrollHeight - el.scrollTop - el.clientHeight < 160) el.scrollTop = el.scrollHeight;
-  }, [chat.messages]);
+    if (!inChatSearchOpen && el && el.scrollHeight - el.scrollTop - el.clientHeight < 160) el.scrollTop = el.scrollHeight;
+  }, [chat.messages, inChatSearchOpen]);
   const onScroll = () => { const el = scroller.current; if (el) setAtBottom(el.scrollHeight - el.scrollTop - el.clientHeight < 80); };
   const toBottom = () => scroller.current?.scrollTo({ top: scroller.current.scrollHeight, behavior: "smooth" });
 
@@ -239,6 +246,7 @@ export function AppShell() {
 
   return (
     <div className="flex h-dvh overflow-hidden bg-e-bg2 text-e-tx">
+      <AppSplash ready={conn.state !== "checking" && chat.ready} />
       {mobile ? (
         <>
           {sideOpen && <div className="e-overlay fixed inset-0 z-30" onClick={() => setSideOpen(false)} />}
@@ -275,6 +283,7 @@ export function AppShell() {
           <span className="flex-1" />
           <h1 className="sr-only">{chat.title}</h1>
           <UsageMeter />
+          <Button variant="ghost" size="icon" className="shrink-0 rounded-full text-e-dim" aria-label="Buscar en esta conversación" title="Buscar en esta conversación" aria-pressed={inChatSearchOpen} onClick={() => setInChatSearchOpen((v) => !v)}><Search /></Button>
           {!empty && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -286,9 +295,10 @@ export function AppShell() {
               </DropdownMenuContent>
             </DropdownMenu>
           )}
-          <button className={cn("e-icon-btn text-e-tx", filesOpen && "bg-e-bg3")} aria-label="Archivos y actividad" aria-pressed={filesOpen} onClick={() => { setArtifact(null); setPanelTab("files"); setFilesOpen((o) => !o); }}><FolderOpen className="size-5" /></button>
+          <button className={cn("e-icon-btn text-e-tx", filesOpen && "bg-e-bg3")} aria-label="Archivos" aria-pressed={filesOpen} onClick={() => { setArtifact(null); setPanelTab("files"); setFilesOpen((o) => !o); }}><FolderOpen className="size-5" /></button>
           {mobile && <button className="e-icon-btn text-e-tx" aria-label="Nueva conversación" onClick={newChat}><SquarePen className="size-5" /></button>}
         </header>
+        {inChatSearchOpen && <InChatSearch key={empty ? "empty" : "messages"} rootRef={scroller} onClose={() => setInChatSearchOpen(false)} />}
 
         {down && (
           <div className="e-err-banner mx-4 mt-1 flex items-center gap-3 px-3 py-2 text-[13px]" role="alert">

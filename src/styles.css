@@ -32,6 +32,8 @@
   --color-e-ok: var(--ok);
   --color-e-err: var(--err);
   --color-e-info: var(--info);
+  --color-e-search: var(--search-bg);
+  --color-e-search-tx: var(--search-tx);
 
   --spacing-side: var(--side);
   --spacing-art: var(--art);
@@ -87,6 +89,7 @@
   --overlay: rgba(0, 0, 0, 0.4);
   --code-bg: #f9f9f9; --code-head: #f3f3f3;
   --composer: #ffffff;
+  --search-bg: #fde68a; --search-tx: #78350f; --search-active: #fbbf24; --search-active-tx: #0d0d0d;
 }
 
 [data-theme="dark"] {
@@ -102,6 +105,7 @@
   --overlay: rgba(0, 0, 0, 0.6);
   --code-bg: #171717; --code-head: #2a2a2a;
   --composer: #303030;
+  --search-bg: #665325; --search-tx: #fde68a; --search-active: #fbbf24; --search-active-tx: #0d0d0d;
 }
 
 @layer base {
@@ -196,6 +200,10 @@
 [data-theme="dark"] .hljs-comment, [data-theme="dark"] .hljs-quote { color: #8b949e; }
 
 @keyframes e-blink { 50% { opacity: 0; } }
+::highlight(erasmus-search) { background: var(--search-bg); color: var(--search-tx); }
+::highlight(erasmus-search-active) { background: var(--search-active); color: var(--search-active-tx); }
+@keyframes e-splash-pulse { 0%,100% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--acc) 5%, transparent); } 50% { box-shadow: 0 0 20px 8px color-mix(in srgb, var(--acc) 12%, transparent); } }
+.e-splash-logo { animation: e-splash-pulse 2s ease-in-out infinite; }
 .e-caret::after { content: "▍"; animation: e-blink 1s steps(1) infinite; color: var(--dim); margin-left: 1px; }
 
 /* ✦ thinking chip */
@@ -220,6 +228,7 @@
 .e-marquee { animation: e-marquee 28s linear infinite; }
 .e-marquee-wrap:hover .e-marquee { animation-play-state: paused; }
 @media (prefers-reduced-motion: reduce) {
+  .e-splash-logo { animation: none; }
   .e-reveal { opacity: 1; transform: none; transition: none; }
   .e-marquee { animation: none; }
   .e-card-lift, .e-card-lift:hover { transform: none; }
