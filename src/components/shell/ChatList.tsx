@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { MoreHorizontal, Pencil } from "lucide-react";
+import { MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { userKey } from "@/lib/session";
 import { toast } from "sonner";
 import { api, ApiError } from "@/lib/api/client";
 import type { ChatMeta } from "@/lib/api/types";
@@ -38,17 +40,35 @@ export function useChatManifest(version: number) {
 }
 
 /** History from GET /api/workspace/chats, updated desc. Deletion is omitted until the server supports it. */
-export function ChatList({ activeId, activeTitle, version, onOpen, onRename }: {
+export function ChatList({ activeId, activeTitle, version, onOpen, onRename, onDeleted }: {
   activeId: string;
   activeTitle: string;
   version: number;
   onOpen: (id: string) => void;
   onRename: (id: string, title: string) => Promise<void>;
+  onDeleted?: (id: string) => void;
 }) {
   const { chats, setChats, err } = useChatManifest(version);
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+  const [toDelete, setToDelete] = useState<ChatMeta | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const remove = async () => {
+    const c = toDelete;
+    if (!c) return;
+    setDeleting(true);
+    try {
+      await api.deleteChat(c.id);
+      setChats((cs) => cs?.filter((x) => x.id !== c.id) ?? cs);
+      try { localStorage.removeItem(userKey(`chat:${c.id}`)); } catch { /* ignore */ }
+      onDeleted?.(c.id);
+      toast.success("Conversación eliminada.");
+      setToDelete(null);
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "No se pudo eliminar la conversación.");
+    } finally { setDeleting(false); }
+  };
   const groups = useMemo(() => groupByDate(chats ?? []), [chats]);
 
   const save = async () => {
@@ -111,6 +131,9 @@ export function ChatList({ activeId, activeTitle, version, onOpen, onRename }: {
                       <DropdownMenuItem className="gap-2.5 rounded-lg px-3 py-2 text-[14px]" onSelect={() => { setDraft(c.title); setEditing(c.id); }}>
                         <Pencil className="size-4" /> Cambiar nombre
                       </DropdownMenuItem>
+                      <DropdownMenuItem className="gap-2.5 rounded-lg px-3 py-2 text-[14px] text-destructive focus:text-destructive" onSelect={() => setToDelete(c)}>
+                        <Trash2 className="size-4" /> Eliminar conversación
+                      </DropdownMenuItem>
 
                     </DropdownMenuContent>
                   </DropdownMenu>
@@ -120,6 +143,20 @@ export function ChatList({ activeId, activeTitle, version, onOpen, onRename }: {
           ))}
         </div>
       ))}
+      <AlertDialog open={!!toDelete} onOpenChange={(o) => { if (!o && !deleting) setToDelete(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar conversación?</AlertDialogTitle>
+            <AlertDialogDescription>Se eliminará «{toDelete?.title || "Sin título"}» de forma permanente. Esta acción no se puede deshacer.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction disabled={deleting} onClick={(e) => { e.preventDefault(); void remove(); }} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              {deleting ? "Eliminando…" : "Eliminar"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

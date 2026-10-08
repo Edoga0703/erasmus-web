@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ChatList } from "./ChatList";
+import { extractPdf, extractSheet } from "@/lib/doc-extract";
 import { SearchDialog } from "./SearchDialog";
 import { FilesPanel } from "@/components/files/FilesPanel";
 import { SettingsDialog } from "./SettingsDialog";
@@ -141,10 +142,11 @@ export function AppShell() {
       const isImg = f.type.startsWith("image/");
       const att: Attachment = { name: f.name, size: f.size, url: isImg ? URL.createObjectURL(f) : undefined };
       if (isImg) { try { att.image = await imageToDataUrl(f); } catch { toast.error(`No se pudo leer ${f.name}.`); } }
-      const textual = !isImg && f.type !== "application/pdf";
-      if (textual) {
+      const isPdf = f.type === "application/pdf" || /\.pdf$/i.test(f.name);
+      const isSheet = /\.xlsx?$/i.test(f.name) || f.type.includes("spreadsheet") || f.type === "application/vnd.ms-excel";
+      if (!isImg) {
         try {
-          att.text = await f.text();
+          att.text = isPdf ? await extractPdf(f) : isSheet ? await extractSheet(f) : await f.text();
           const path = `${conversationDir(chat.chatId)}/${f.name}`;
           await api.fsWrite(path, att.text);
           att.path = path;
@@ -190,7 +192,7 @@ export function AppShell() {
         )}
       </div>
       <nav className={cn("mt-4 flex-1 overflow-y-auto px-2", rail && "invisible")}>
-        {!rail && <ChatList activeId={chat.chatId} activeTitle={chat.title} version={chat.listVersion} onOpen={openChat} onRename={chat.rename} />}
+        {!rail && <ChatList activeId={chat.chatId} activeTitle={chat.title} version={chat.listVersion} onOpen={openChat} onRename={chat.rename} onDeleted={(id) => { if (id === chat.chatId) { chat.reset(); setSideOpen(false); } }} />}
       </nav>
       <div className={cn("shrink-0 p-2", rail && "flex justify-center")}>
         <DropdownMenu>
