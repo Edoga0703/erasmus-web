@@ -229,8 +229,8 @@
 @keyframes e-shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
 /* Artifact canvas: HTML documents render on a paper-white page in both themes, like a browser tab. */
 .e-frame { background: #ffffff; color-scheme: light; }
-.e-md img { display: inline-block; max-width: 100%; height: auto; cursor: zoom-in; border-radius: 14px; border: 1px solid var(--line); box-shadow: var(--image-shadow); transition: opacity .2s, box-shadow .2s; }
-.e-md img:hover { opacity: .95; box-shadow: var(--shadow); }
+.e-md img { display: inline-block; max-width: 100%; height: auto; cursor: zoom-in; border-radius: 14px; border: 1px solid var(--line); box-shadow: var(--image-shadow); transition: opacity .2s, box-shadow .2s, transform .2s; }
+.e-md img:hover { opacity: .95; box-shadow: var(--shadow); transform: scale(1.01); }
 
 /* Landing effects */
 .e-reveal { opacity: 0; transform: translateY(18px); transition: opacity .6s ease, transform .6s ease; }
@@ -246,6 +246,7 @@
 .e-marquee-wrap:hover .e-marquee { animation-play-state: paused; }
 @media (prefers-reduced-motion: reduce) {
   .e-md img, .e-md tbody tr { transition: none; }
+  .e-md img:hover { transform: none; }
   .e-splash-logo { animation: none; }
   .e-reveal { opacity: 1; transform: none; transition: none; }
   .e-marquee { animation: none; }
