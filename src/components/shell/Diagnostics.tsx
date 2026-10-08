@@ -15,14 +15,14 @@ const CHECKS: Check[] = [
   { id: "chats", method: "GET", path: "/api/workspace/chats", required: ["ok", "chats"] },
   { id: "list", method: "GET", path: "/api/workspace/list?path=", required: ["ok", "entries"] },
   { id: "models", method: "GET", path: "/v1/models", required: ["data"] },
-  { id: "ping", method: "POST", path: "/v1/chat/completions", body: { model: "erasmus-v1", messages: [{ role: "user", content: "ping" }], stream: false }, required: ["choices", "usage"] },
+  { id: "ping", method: "POST", path: "/v1/chat/completions", body: { model: "erasmus-v2", messages: [{ role: "user", content: "ping" }], stream: false }, required: ["choices", "usage"] },
 ];
 
 const SECRET = /^(session|token|access_code|api_key|key|password|motor_key)$/i;
 function redact(v: unknown): unknown {
   if (Array.isArray(v)) return v.map(redact);
   if (v && typeof v === "object") return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, SECRET.test(k) ? "•••" : redact(x)]));
-  return typeof v === "string" ? v.replace(/drael[-\w]*/gi, "erasmus-v1") : v;
+  return typeof v === "string" ? v.replace(/drael[-\w]*/gi, "erasmus-v2") : v;
 }
 
 export function Diagnostics() {

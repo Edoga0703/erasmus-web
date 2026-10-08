@@ -6,19 +6,19 @@ export const API_BASE: string = String(import.meta.env['VITE_API_BASE'] ?? "/era
 export type ReasoningEffort = "none" | "low" | "medium" | "high";
 export interface ModelConfig { model: string; reasoning: ReasoningEffort }
 const CFG_KEY = () => userKey("model.cfg");
-export const DEFAULT_MODEL_CFG: ModelConfig = { model: "erasmus-v1", reasoning: "medium" };
+export const DEFAULT_MODEL_CFG: ModelConfig = { model: "erasmus-v2", reasoning: "medium" };
 
 export function getModelConfig(): ModelConfig {
   if (typeof window === "undefined") return DEFAULT_MODEL_CFG;
   try {
     const raw = JSON.parse(localStorage.getItem(CFG_KEY()) ?? "{}") as Partial<ModelConfig>;
-    return { ...DEFAULT_MODEL_CFG, model: "erasmus-v1", reasoning: raw.reasoning ?? DEFAULT_MODEL_CFG.reasoning };
+    return { ...DEFAULT_MODEL_CFG, model: "erasmus-v2", reasoning: raw.reasoning ?? DEFAULT_MODEL_CFG.reasoning };
   } catch { return DEFAULT_MODEL_CFG; }
 }
 
 export function saveModelConfig(c: ModelConfig): void {
   try {
-    localStorage.setItem(CFG_KEY(), JSON.stringify({ model: "erasmus-v1", reasoning: c.reasoning }));
+    localStorage.setItem(CFG_KEY(), JSON.stringify({ model: "erasmus-v2", reasoning: c.reasoning }));
     window.dispatchEvent(new Event("erasmus:model-config"));
   } catch { /* */ }
 }

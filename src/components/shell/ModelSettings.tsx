@@ -53,7 +53,7 @@ export function ModelSettings() {
       </Field>
 
       <Field label="Modelo" hint="Modelos disponibles para tu clave.">
-        <Select value="erasmus-v1" disabled>
+        <Select value="erasmus-v2" disabled>
           <SelectTrigger aria-label="Modelo" className="h-10 rounded-xl"><SelectValue /></SelectTrigger>
           <SelectContent>
             {models.map((m) => <SelectItem key={m} value={m}>{displayModel(m)}</SelectItem>)}
