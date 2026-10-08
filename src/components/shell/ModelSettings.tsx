@@ -52,7 +52,7 @@ export function ModelSettings() {
         </div>
       </Field>
 
-      <Field label="Modelo" hint="Modelos disponibles para tu clave.">
+      <Field label="Modelo" hint="Modelo asignado a tu cuenta.">
         <Select value="erasmus-v2" disabled>
           <SelectTrigger aria-label="Modelo" className="h-10 rounded-xl"><SelectValue /></SelectTrigger>
           <SelectContent>

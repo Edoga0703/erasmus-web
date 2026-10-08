@@ -58,7 +58,7 @@ export function FilePreview({ path, artifact, onBack }: { path: string; artifact
           // Dual pattern (no reliable "can show PDF" API): inline attempt ALWAYS + action bar ALWAYS visible.
           <div className="flex h-full min-h-[70vh] flex-col">
             <div className="flex shrink-0 items-center gap-2 border-b border-e-line px-3 py-2 text-[12.5px]" data-pdf-actions="">
-              <span className="flex-1 truncate text-e-dim">¿No se ve? Ábrelo o descárgalo.</span>
+              <span className="min-w-0 flex-1 text-e-dim">Si el documento no se visualiza correctamente, puedes abrirlo en una pestaña nueva o descargarlo.</span>
               <a href={view.url} target="_blank" rel="noopener noreferrer" className="rounded-md border border-e-line px-2.5 py-1 text-e-tx hover:bg-e-bg3">Abrir PDF</a>
               <button className="rounded-md border border-e-line px-2.5 py-1 text-e-tx hover:bg-e-bg3" onClick={() => void downloadFile(path)}>Descargar</button>
             </div>
