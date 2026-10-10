@@ -16,7 +16,18 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ChatList } from "./ChatList";
-import { extractPdf, extractSheet } from "@/lib/doc-extract";
+import { capText, extractPdf, extractSheet, extractZip } from "@/lib/doc-extract";
+
+/** Chunked ArrayBuffer → base64 (avoids call-stack overflow on large files). */
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  let binary = "";
+  const bytes = new Uint8Array(buffer);
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.byteLength; i += chunk) {
+    binary += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + chunk)));
+  }
+  return window.btoa(binary);
+}
 import { SearchDialog } from "./SearchDialog";
 import { FilesPanel } from "@/components/files/FilesPanel";
 import { SettingsDialog } from "./SettingsDialog";
@@ -180,12 +191,20 @@ export function AppShell() {
       if (isImg) { try { att.image = await imageToDataUrl(f); } catch { toast.error(`No se pudo leer ${f.name}.`); } }
       const isPdf = f.type === "application/pdf" || /\.pdf$/i.test(f.name);
       const isSheet = /\.xlsx?$/i.test(f.name) || f.type.includes("spreadsheet") || f.type === "application/vnd.ms-excel";
+      const isZip = /\.zip$/i.test(f.name) || f.type === "application/zip" || f.type === "application/x-zip-compressed";
+      const isText = f.type.startsWith("text/") || /\.(txt|md|markdown|json|csv|tsv|html|htm|css|scss|sass|less|js|jsx|ts|tsx|mjs|cjs|py|java|c|cpp|h|hpp|cs|go|rs|php|rb|sh|bash|zsh|bat|cmd|ps1|sql|yaml|yml|xml|env|ini|toml|cfg|conf|properties|log|tex|svg|vue|svelte|astro|graphql|gql|prisma|proto)$/i.test(f.name);
       if (!isImg) {
         try {
-          att.text = isPdf ? await extractPdf(f) : isSheet ? await extractSheet(f) : await f.text();
+          // Never read unrecognized binaries as text: it injects corrupt characters into the prompt.
+          att.text = isPdf ? await extractPdf(f) : isSheet ? await extractSheet(f) : isZip ? await extractZip(f) : isText ? capText(await f.text()) : undefined;
           const path = `${conversationDir(chat.chatId)}/${f.name}`;
-          await api.fsWrite(path, att.text);
-          att.path = path;
+          if (att.text !== undefined && !isZip) {
+            await api.fsWrite(path, att.text);
+            att.path = path;
+          } else if (f.size <= 30 * 1024 * 1024) {
+            await api.fsWrite(path, arrayBufferToBase64(await f.arrayBuffer()), false, "base64");
+            att.path = path;
+          }
         } catch (e) { toast.error(e instanceof ApiError ? e.message : `No se pudo subir ${f.name}.`); }
       }
       atts.push(att);

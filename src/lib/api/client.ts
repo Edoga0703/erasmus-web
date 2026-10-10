@@ -109,9 +109,9 @@ export const api = {
       return { ok: true, name: path.split("/").pop() ?? path, content, total_lines: totalLines, truncated: false };
     }
   },
-  fsWrite: async (path: string, content: string, append = false): Promise<FsWriteResponse> => {
+  fsWrite: async (path: string, content: string, append = false, encoding: "utf8" | "base64" = "utf8"): Promise<FsWriteResponse> => {
     if (append) throw new ApiError(501, "append_unavailable", "Añadir a un archivo no está disponible en este momento.");
-    const r = await apiJson<{ ok: boolean; path: string; bytes_written: number }>("/api/fs/write", { path, content });
+    const r = await apiJson<{ ok: boolean; path: string; bytes_written: number }>("/api/fs/write", { path, content, encoding });
     return { ok: r.ok, name: r.path, mode: "write", bytes_written: r.bytes_written };
   },
   exec: (_req: ExecRequest): Promise<ExecResponse> => Promise.reject(new ApiError(501, "exec_unavailable", "La ejecución de código no está disponible.")),
