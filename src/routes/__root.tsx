@@ -38,10 +38,16 @@ function NotFoundComponent() {
   );
 }
 
+/** After a new publish, old chunk names vanish; reload once to pick up the fresh build. */
+const CHUNK_RECOVERY = `(function(){var K="erasmus.chunk-reload";function stale(m){return /Failed to fetch dynamically imported module|Importing a module script failed|error loading dynamically imported module/i.test(String(m||""))}function go(){try{var t=Number(sessionStorage.getItem(K)||0);if(Date.now()-t<10000)return;sessionStorage.setItem(K,String(Date.now()))}catch(e){}location.reload()}window.addEventListener("vite:preloadError",function(e){e.preventDefault();go()});window.addEventListener("unhandledrejection",function(e){var r=e.reason;if(stale(r&&r.message||r))go()});window.__erasmusChunkReload=function(m){if(stale(m)){go();return true}return false}})();`;
+
 function ErrorComponent({ error, reset }: ErrorComponentProps) {
   console.error(error);
   const router = useRouter();
   useEffect(() => {
+    const msg = error instanceof Error ? error.message : String(error);
+    const w = window as unknown as { __erasmusChunkReload?: (m: string) => boolean };
+    if (w.__erasmusChunkReload?.(msg)) return;
     reportLovableError(error, { boundary: "tanstack_root_error_component" });
   }, [error]);
 
@@ -122,6 +128,7 @@ function RootShell({ children }: { children: ReactNode }) {
     <html lang="es" data-theme="light" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOT }} />
+        <script dangerouslySetInnerHTML={{ __html: CHUNK_RECOVERY }} />
         <HeadContent />
       </head>
       <body>
