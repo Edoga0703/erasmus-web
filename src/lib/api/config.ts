@@ -1,6 +1,6 @@
 import { userKey } from "@/lib/session";
 /** Single source of truth for the Erasmus v5.4 API. */
-export const API_BASE: string = String(import.meta.env['VITE_API_BASE'] ?? "/erasmus-api").replace(/\/+$/, "");
+export const API_BASE: string = String(import.meta.env['VITE_API_BASE'] || "https://crm.cuentastupana.com").replace(/\/+$/, "");
 
 /* ---- User-facing model preferences; access is assigned by the server session. ---- */
 export type ReasoningEffort = "none" | "low" | "medium" | "high";
