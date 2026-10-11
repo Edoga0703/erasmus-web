@@ -10,10 +10,19 @@ export function isArtifact(value: unknown): value is Artifact {
   return typeof a.title === "string" && typeof a.code === "string" && (a.lang === "html" || a.lang === "svg");
 }
 
-export function openArtifact(code: string, lang: string) {
+export function extractArtifactTitle(code: string, lang: string): string {
+  if (lang === "svg") return "Gráfico vectorial";
+  const m = code.match(/<title[^>]*>([^<]+)<\/title>/i);
+  if (m && m[1]?.trim()) return m[1].trim();
+  const h1 = code.match(/<h1[^>]*>([^<]+)<\/h1>/i);
+  if (h1 && h1[1]?.trim()) return h1[1].trim().slice(0, 40);
+  return "Aplicación web";
+}
+
+export function openArtifact(code: string, lang: string, customTitle?: string) {
   if (lang !== "html" && lang !== "svg") return;
   window.dispatchEvent(new CustomEvent<Artifact>(ARTIFACT_EVENT, {
-    detail: { title: lang === "svg" ? "Gráfico vectorial" : "Aplicación web", code, lang },
+    detail: { title: customTitle || extractArtifactTitle(code, lang), code, lang },
   }));
 }
 

@@ -15,6 +15,7 @@
 - Chat deletion uses DELETE /api/workspace/chat?id= (server-confirmed); PDF/Excel text is extracted client-side (lazy-loaded pdfjs-dist/xlsx) and capped at 150k chars — the server has no binary ingest.
 - Artifact previews use a shared browser-safe event contract and opaque-origin sandboxed iframes, including blob-tab wrappers, so model-authored scripts cannot access the app's session or storage.
 - The artifact canvas loads a static, sandboxed preview wrapper and sends only document content via postMessage; this keeps Tailwind CDN inside the preview without relaxing the app's production CSP.
+- Inline artifact tabs reuse the static sandboxed preview wrapper and restore decorated code visibility on unmount; this preserves production CSP and streaming recovery.
 - In-chat search uses browser CSS Highlight ranges rather than rewriting React-owned text; streaming and sanitized markup stay intact.
 - Initial splash waits for local chat recovery and the initial connection check to settle, including failure, so connection errors remain accessible.
 - File gallery reads workspace data through the authenticated API client and merges current local image attachments; scope follows conversation paths, attachment paths, and referenced artifact paths because the gateway has no ownership metadata per conversation.

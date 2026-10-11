@@ -1,4 +1,5 @@
 # Roadmap Erasmus Web
+- [ ] Proteger Markdown suelto y añadir títulos automáticos y vistas previas HTML/SVG con pestañas; comprobar todas las pruebas.
 - [x] Aplicar correcciones aprobadas de textos, acciones y fechas; confirmación de cierre de sesión sin simular borrado de cuenta; pruebas y compilación automática correctas.
 - [x] Markdown enriquecido, visor por evento y generación nativa de imágenes mediante Fastify; 33 pruebas y comprobación visual con respuestas de prueba.
 - [ ] Verificar generación de imágenes con Fastify real (bloqueo: sin sesión Erasmus disponible); revisión global de formato pendiente por errores de lint existentes.
