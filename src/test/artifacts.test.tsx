@@ -81,7 +81,7 @@ describe("Artifact canvas", () => {
     expect(wrap?.style.display).toBe('');
     fireEvent.click(screen.getByRole('tab', { name: 'Vista previa' }));
     expect(wrap?.style.display).toBe('none');
-    fireEvent.click(screen.getByRole('button', { name: 'Copiar', exact: true }));
+    fireEvent.click(screen.getByRole('button', { name: /^Copiar$/ }));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(code + '\n'));
     fireEvent.click(screen.getByRole('button', { name: 'Nueva pestaña' }));
     expect(open).toHaveBeenCalledWith('blob:inline', '_blank', 'noopener,noreferrer');
