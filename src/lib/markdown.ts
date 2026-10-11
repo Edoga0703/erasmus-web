@@ -5,7 +5,11 @@ import { API_BASE } from "@/lib/api/config";
 
 /** Same sanitizer rules as the desktop reference (index.html:1768). */
 export const PURIFY_CONFIG = {
-  FORBID_TAGS: ["iframe", "object", "embed", "script", "form", "noscript"],
+  FORBID_TAGS: [
+    "iframe", "object", "embed", "script", "form", "noscript",
+    "style", "header", "nav", "section", "article", "footer", "aside",
+    "button", "input", "textarea", "select", "option", "dialog", "canvas",
+  ],
   FORBID_ATTR: ["srcdoc"],
   ADD_ATTR: ["role", "aria-hidden"],
 };
@@ -50,8 +54,9 @@ export function sanitize(html: string): string {
 }
 
 export function renderMarkdown(md: string): string {
+  const normalized = md.replace(/([^\n])(```(?:[a-zA-Z0-9_-]+)?)/g, "$1\n\n$2");
   // Generated image paths belong to the same Erasmus API origin.
-  const src = API_BASE.startsWith("http") ? md.replace(/(\]\(|src=["'])\/api\/images\//g, `$1${API_BASE}/api/images/`) : md;
+  const src = API_BASE.startsWith("http") ? normalized.replace(/(\]\(|src=["'])\/api\/images\//g, `$1${API_BASE}/api/images/`) : normalized;
   const html = marked.parse(src, { async: false, gfm: true, breaks: true }) as string;
   return sanitize(callouts(html));
 }

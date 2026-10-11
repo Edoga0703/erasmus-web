@@ -2,12 +2,33 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ArtifactPanel } from "@/components/artifacts/ArtifactPanel";
 import { Markdown } from "@/components/chat/Markdown";
-import { ARTIFACT_EVENT, ARTIFACT_SANDBOX, artifactDocument, artifactTabDocument, isArtifact } from "@/lib/artifacts";
+import { ARTIFACT_EVENT, ARTIFACT_SANDBOX, artifactDocument, artifactTabDocument, extractArtifactTitle, isArtifact, openArtifact } from "@/lib/artifacts";
+import { renderMarkdown } from "@/lib/markdown";
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 const artifact = { title: "Aplicación web", code: '<button class="p-4">Hola</button>', lang: "html" };
 
 describe("Artifact canvas", () => {
+  it("extracts titles with fallbacks and supports custom titles", () => {
+    expect(extractArtifactTitle('<title> Mi página </title><h1>Otro</h1>', 'html')).toBe('Mi página');
+    expect(extractArtifactTitle('<h1>' + 'a'.repeat(50) + '</h1>', 'html')).toHaveLength(40);
+    expect(extractArtifactTitle('<p>Hola</p>', 'html')).toBe('Aplicación web');
+    expect(extractArtifactTitle('<title>Otro</title>', 'svg')).toBe('Gráfico vectorial');
+    const listener = vi.fn();
+    window.addEventListener(ARTIFACT_EVENT, listener);
+    openArtifact('<title>Original</title>', 'html', 'Personalizado');
+    expect(listener.mock.calls[0]?.[0].detail.title).toBe('Personalizado');
+    window.removeEventListener(ARTIFACT_EVENT, listener);
+  });
+  it("normalizes glued fences and strips loose layout, styles and controls", () => {
+    const root = document.createElement('div');
+    root.innerHTML = renderMarkdown('Texto```html\n<h1>Hola</h1>\n```');
+    expect(root.querySelector('pre code')?.textContent).toContain('<h1>Hola</h1>');
+    root.innerHTML = renderMarkdown('<style>body{display:none}</style><header>Cabecera</header><nav>Menú</nav><section><article>Texto</article></section><footer>Pie</footer><aside>Más</aside><button>Botón</button><input><textarea>Entrada</textarea><select><option>A</option></select><dialog>Diálogo</dialog><canvas></canvas>');
+    expect(root.querySelector('style,header,nav,section,article,footer,aside,button,input,textarea,select,option,dialog,canvas')).toBeNull();
+    expect(root.textContent).not.toContain('display:none');
+    expect(root.textContent).toContain('Texto');
+  });
   it("injects Tailwind once and preserves interactive HTML", () => {
     expect(artifactDocument(artifact)).toContain("https://cdn.tailwindcss.com");
     const code = '<html><head><script src="https://cdn.tailwindcss.com"></script></head><body><button onclick="alert(1)">Hola</button></body></html>';
@@ -29,15 +50,44 @@ describe("Artifact canvas", () => {
     const open = vi.fn(); window.addEventListener(ARTIFACT_EVENT, open);
     const source = '```html\n' + Array.from({ length: 11 }, () => '<p>Hola</p>').join('\n') + '\n```';
     const { rerender } = render(<Markdown source={source} streaming />);
-    expect(screen.queryByRole("button", { name: /Abrir vista previa/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Abrir en panel lateral" })).toBeNull();
     rerender(<Markdown source={source} />);
-    fireEvent.click(screen.getByRole("button", { name: /Abrir vista previa/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Abrir en panel lateral" }));
     expect(open).toHaveBeenCalledOnce();
     expect(open.mock.calls[0]?.[0].detail).toMatchObject({ lang: "html", title: "Aplicación web" });
     expect(screen.queryByRole("dialog")).toBeNull();
     rerender(<Markdown source={source + '\nNuevo texto'} />);
-    expect(screen.getAllByRole("button", { name: /Abrir vista previa/ })).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: "Abrir en panel lateral" })).toHaveLength(1);
     window.removeEventListener(ARTIFACT_EVENT, open);
+  });
+  it("shows an inline sandbox by default, toggles code and handles actions safely", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:inline') });
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() });
+    const open = vi.spyOn(window, 'open').mockReturnValue(null);
+    const code = '<title>Mi página</title>\n' + Array.from({ length: 11 }, () => '<p>Hola</p>').join('\n');
+    const { container, rerender } = render(<Markdown source={'```html\n' + code + '\n```'} />);
+    const wrap = container.querySelector<HTMLElement>('.e-code');
+    expect(wrap?.style.display).toBe('none');
+    expect(screen.getByRole('tab', { name: 'Vista previa' }).getAttribute('aria-selected')).toBe('true');
+    const frame = container.querySelector('iframe');
+    expect(frame?.getAttribute('sandbox')).toBe(ARTIFACT_SANDBOX);
+    expect(frame?.getAttribute('src')).toBe('/artifact-preview.html');
+    const post = vi.spyOn(frame?.contentWindow ?? window, 'postMessage');
+    if (frame) fireEvent.load(frame);
+    expect(post).toHaveBeenCalledWith(expect.objectContaining({ type: 'erasmus:artifact-document', document: expect.stringContaining('<title>Mi página</title>') }), '*');
+    fireEvent.click(screen.getByRole('tab', { name: 'Código' }));
+    expect(wrap?.style.display).toBe('');
+    fireEvent.click(screen.getByRole('tab', { name: 'Vista previa' }));
+    expect(wrap?.style.display).toBe('none');
+    fireEvent.click(screen.getByRole('button', { name: /^Copiar$/ }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(code + '\n'));
+    fireEvent.click(screen.getByRole('button', { name: 'Nueva pestaña' }));
+    expect(open).toHaveBeenCalledWith('blob:inline', '_blank', 'noopener,noreferrer');
+    rerender(<Markdown source={'```html\n' + code + '\n```'} streaming />);
+    expect(container.querySelector('iframe')).toBeNull();
+    expect(wrap?.style.display).toBe('');
   });
   it("switches tabs, copies, downloads, opens safely and closes", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);

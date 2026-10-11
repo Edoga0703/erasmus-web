@@ -1,7 +1,6 @@
 import { memo, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
-import { ArrowUpRight, Code2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { InlineArtifact } from "@/components/artifacts/InlineArtifact";
 import { openArtifact } from "@/lib/artifacts";
 import { highlightWithin, renderMarkdown } from "@/lib/markdown";
 import { IMAGE_VIEW_EVENT } from "@/lib/images";
@@ -13,7 +12,7 @@ const COPY_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" st
 const CHECK_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>';
 const EYE_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>';
 const PREVIEWABLE = new Set(["html", "svg"]);
-type ArtifactCard = { node: HTMLElement; code: string; lang: string };
+type ArtifactCard = { node: HTMLElement; wrap: HTMLElement; code: string; lang: string };
 
 /** Wraps sanitized <pre> nodes in a ChatGPT-style frame (language + Copiar + Vista previa). Only static markup is injected; code text is read via textContent. */
 function decorate(root: HTMLElement, onPreview: (code: string, lang: string) => void): ArtifactCard[] {
@@ -54,7 +53,7 @@ function decorate(root: HTMLElement, onPreview: (code: string, lang: string) => 
       const node = document.createElement("div");
       node.className = "e-artifact-card";
       wrap.before(node);
-      cards.push({ node, code: source, lang });
+      cards.push({ node, wrap, code: source, lang });
     }
   });
   return cards;
@@ -97,11 +96,7 @@ function Html({ source, streaming }: { source: string; streaming?: boolean | und
     <>
       <MarkdownHtml html={html} divRef={ref} />
       {cards.map((card, i) => createPortal(
-        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-e-line bg-e-bg px-4 py-3">
-          <Code2 className="size-7 shrink-0 text-e-dim" />
-          <div className="min-w-0 flex-1"><p className="text-sm font-medium">{card.lang === "svg" ? "Gráfico vectorial" : "Aplicación web"}</p><p className="text-xs text-e-dim">Componente interactivo · {card.lang === "svg" ? "SVG" : "HTML / Tailwind CSS"}</p></div>
-          <Button variant="ghost" size="sm" className="gap-1 text-xs" onClick={() => openArtifact(card.code, card.lang)}>Abrir vista previa <ArrowUpRight className="size-4" /></Button>
-        </div>, card.node, String(i),
+        <InlineArtifact code={card.code} lang={card.lang} wrap={card.wrap} />, card.node, String(i),
       ))}
     </>
   );
