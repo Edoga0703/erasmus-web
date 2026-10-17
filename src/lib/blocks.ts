@@ -11,10 +11,69 @@ export interface ToolBlock {
 
 export type Segment = { type: "text"; text: string } | { type: "block"; index: number; block: ToolBlock };
 
-const OPEN = /```(code:python|code:bash|file:list|file:read|file:write|file:append)([^\n]*)\n/gi;
+const OPEN = /(`{3,})(code:python|code:bash|file:list|file:read|file:write|file:append)([^\n]*)\n/gi;
+const TOOL_TAG = /^(code:python|code:bash|file:list|file:read|file:write|file:append)\b/i;
 
 function normalizeKind(k: string): BlockKind {
   return k.toLowerCase() as BlockKind;
+}
+
+/**
+ * Finds the matching closing fence for a tool block starting at `start`.
+ * Supports variable fence lengths (3+ backticks) and nested Markdown code fences
+ * (e.g. ```js ... ``` inside a `file:write README.md` block) without premature truncation.
+ */
+function findClosingFence(
+  content: string,
+  start: number,
+  fenceLen: number,
+  allowNestedFences: boolean,
+): { end: number; afterEnd: number } | null {
+  let innerDepth = 0;
+  let searchPos = start;
+
+  while (searchPos < content.length) {
+    const idx = content.indexOf("```", searchPos);
+    if (idx < 0) return null;
+
+    let tickCount = 3;
+    while (idx + tickCount < content.length && content[idx + tickCount] === "`") {
+      tickCount++;
+    }
+
+    const atLineStart = idx === start || content[idx - 1] === "\n";
+    const lineEnd = content.indexOf("\n", idx + tickCount);
+    const restOfLine = (lineEnd >= 0 ? content.slice(idx + tickCount, lineEnd) : content.slice(idx + tickCount)).trim();
+
+    if (atLineStart) {
+      // Another tool block opening while the previous block was never closed: treat previous as unclosed up to here.
+      if (tickCount >= 3 && TOOL_TAG.test(restOfLine)) {
+        return null;
+      }
+      if (restOfLine === "") {
+        if (innerDepth > 0 && tickCount < fenceLen + 1) {
+          innerDepth--;
+          searchPos = lineEnd >= 0 ? lineEnd + 1 : content.length;
+          continue;
+        }
+        if (tickCount >= fenceLen) {
+          return { end: idx, afterEnd: idx + tickCount };
+        }
+      } else if (allowNestedFences && tickCount >= 3 && !TOOL_TAG.test(restOfLine)) {
+        // Any info string opening a nested code block (e.g. ts, python title="x", json {1-5})
+        innerDepth++;
+        searchPos = lineEnd >= 0 ? lineEnd + 1 : content.length;
+        continue;
+      }
+    } else if (innerDepth === 0 && tickCount >= fenceLen && restOfLine === "") {
+      // Inline closing fence at the end of a single-line block (e.g. ```file:write a.txt\nHello```).
+      return { end: idx, afterEnd: idx + tickCount };
+    }
+
+    searchPos = idx + tickCount;
+  }
+
+  return null;
 }
 
 /** Splits assistant content into text and tool-block segments (handles unclosed trailing block). */
@@ -26,22 +85,32 @@ export function parseSegments(content: string): Segment[] {
   let m: RegExpExecArray | null;
   while ((m = OPEN.exec(content)) !== null) {
     if (m.index > pos) segs.push({ type: "text", text: content.slice(pos, m.index) });
-    const kind = normalizeKind(m[1] ?? "");
-    const arg = (m[2] ?? "").trim();
+    const fence = m[1] ?? "```";
+    const kind = normalizeKind(m[2] ?? "");
+    const arg = (m[3] ?? "").trim();
     const start = m.index + m[0].length;
-    const end = content.indexOf("```", start);
-    const closed = end >= 0;
-    const body = (closed ? content.slice(start, end) : content.slice(start)).replace(/\n$/, "");
+    const allowNested = kind === "file:write" || kind === "file:append";
+    const closeMatch = findClosingFence(content, start, fence.length, allowNested);
+    const closed = closeMatch !== null;
+    let body = (closeMatch ? content.slice(start, closeMatch.end) : content.slice(start)).replace(/\n$/, "");
     if (kind === "code:python" || kind === "code:bash") {
       // Unsupported execution blocks remain ordinary, visible Markdown code.
-      segs.push({ type: "text", text: `\`\`\`${kind === "code:python" ? "python" : "bash"}\n${body}${closed ? "\n```" : ""}` });
-      pos = closed ? end + 3 : content.length;
+      segs.push({ type: "text", text: `${fence}${kind === "code:python" ? "python" : "bash"}\n${body}${closed ? `\n${fence}` : ""}` });
+      pos = closeMatch ? closeMatch.afterEnd : content.length;
       OPEN.lastIndex = pos;
       continue;
     }
-    const target = kind === "file:write" || kind === "file:append" ? arg : body.trim().split("\n")[0] ?? "";
+    let target = kind === "file:write" || kind === "file:append" ? arg : body.trim().split("\n")[0] ?? "";
+    if ((kind === "file:write" || kind === "file:append") && !target && body.trim()) {
+      const lines = body.split("\n");
+      const firstLine = lines[0]?.trim() ?? "";
+      if (firstLine && !firstLine.includes(" ") && (firstLine.includes("/") || firstLine.includes(".") || firstLine.includes("\\"))) {
+        target = firstLine;
+        body = lines.slice(1).join("\n").replace(/^\n+/, "");
+      }
+    }
     segs.push({ type: "block", index: idx++, block: { kind, target: kind.startsWith("code:") ? (body.trim().split("\n")[0] ?? "") : target, body, closed } });
-    pos = closed ? end + 3 : content.length;
+    pos = closeMatch ? closeMatch.afterEnd : content.length;
     OPEN.lastIndex = pos;
   }
   if (pos < content.length) segs.push({ type: "text", text: content.slice(pos) });

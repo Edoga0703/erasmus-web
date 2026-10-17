@@ -76,4 +76,45 @@ describe("Erasmus Web beta settings", () => {
     expect(parseSegments(content)[0]).toEqual({ type: "text", text: '```python\nprint(1)\n```' });
     expect(parseSegments(content).find((s) => s.type === "block")).toMatchObject({ index: 0 });
   });
+
+  it("preserves nested markdown code fences inside file:write blocks without truncating", () => {
+    const mdContent = [
+      "```file:write README.md",
+      "# Guía",
+      "```ts",
+      "const x = 42;",
+      "```",
+      "Fin del documento.",
+      "```",
+      "Texto final.",
+    ].join("\n");
+    const blocks = extractBlocks(mdContent);
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0]).toEqual({
+      kind: "file:write",
+      target: "README.md",
+      body: "# Guía\n```ts\nconst x = 42;\n```\nFin del documento.",
+      closed: true,
+    });
+    const segs = parseSegments(mdContent);
+    expect(segs).toHaveLength(2);
+    expect(segs[1]).toEqual({ type: "text", text: "\nTexto final." });
+  });
+
+  it("handles nested code fences with attributes and target on the second line", () => {
+    const mdWithAttrs = [
+      "```file:write",
+      "src/utils.ts",
+      "export const demo = true;",
+      "```ts title=\"main.ts\"",
+      "const y = 100;",
+      "```",
+      "```",
+    ].join("\n");
+    const blocks = extractBlocks(mdWithAttrs);
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0]?.target).toBe("src/utils.ts");
+    expect(blocks[0]?.body).toContain("```ts title=\"main.ts\"\nconst y = 100;\n```");
+    expect(blocks[0]?.closed).toBe(true);
+  });
 });

@@ -154,14 +154,11 @@ export function AppShell() {
   const visible = chat.messages.filter((m) => !m.hidden);
   const down = conn.state === "offline" || conn.state === "denied";
   const lastAssistant = [...visible].reverse().find((m) => m.role === "assistant" && !m.kind)?.id;
-  const lastUser = [...visible].reverse().find((m) => m.role === "user");
 
   const regenerate = useCallback(() => {
     if (preparingFiles) return;
-    const image = visible.find((m) => m.id === lastAssistant)?.imageRequest;
-    if (image) void chat.generateImage(image.prompt, image.size);
-    else if (lastUser) void chat.send(lastUser.content, lastUser.attachments);
-  }, [lastUser, lastAssistant, visible, chat, preparingFiles]);
+    chat.regenerate();
+  }, [chat, preparingFiles]);
   const canLeave = () => !chat.temporary || chat.messages.length === 0 || window.confirm("Esta conversación temporal desaparecerá al salir. ¿Continuar?");
   const newChat = () => { if (!canLeave()) return; chat.reset(); setSideOpen(false); };
   const openChat = (id: string) => { if (!canLeave()) return; setSideOpen(false); setOpeningChat(true); chat.open(id).catch(() => toast.error("No se pudo abrir la conversación.")).finally(() => setOpeningChat(false)); };
@@ -179,38 +176,49 @@ export function AppShell() {
     return c.toDataURL(f.type === "image/png" ? "image/png" : "image/jpeg", 0.85);
   };
 
-  /** Saves textual attachments in this conversation's workspace and sends their content to the model. */
+  /** Saves attachments in this conversation's workspace and sends their extracted text/images to the model. */
   const sendWithFiles = async (text: string, files: File[]) => {
     if (chat.busy || preparingFiles) return;
     setPreparingFiles(true);
     const atts: Attachment[] = [];
     try {
-    for (const f of files) {
-      const isImg = f.type.startsWith("image/");
-      const att: Attachment = { name: f.name, size: f.size, url: isImg ? URL.createObjectURL(f) : undefined };
-      if (isImg) { try { att.image = await imageToDataUrl(f); } catch { toast.error(`No se pudo leer ${f.name}.`); } }
-      const isPdf = f.type === "application/pdf" || /\.pdf$/i.test(f.name);
-      const isSheet = /\.xlsx?$/i.test(f.name) || f.type.includes("spreadsheet") || f.type === "application/vnd.ms-excel";
-      const isZip = /\.zip$/i.test(f.name) || f.type === "application/zip" || f.type === "application/x-zip-compressed";
-      const isText = f.type.startsWith("text/") || /\.(txt|md|markdown|json|csv|tsv|html|htm|css|scss|sass|less|js|jsx|ts|tsx|mjs|cjs|py|java|c|cpp|h|hpp|cs|go|rs|php|rb|sh|bash|zsh|bat|cmd|ps1|sql|yaml|yml|xml|env|ini|toml|cfg|conf|properties|log|tex|svg|vue|svelte|astro|graphql|gql|prisma|proto)$/i.test(f.name);
-      if (!isImg) {
-        try {
-          // Never read unrecognized binaries as text: it injects corrupt characters into the prompt.
-          att.text = isPdf ? await extractPdf(f) : isSheet ? await extractSheet(f) : isZip ? await extractZip(f) : isText ? capText(await f.text()) : undefined;
-          const path = `${conversationDir(chat.chatId)}/${f.name}`;
-          if (att.text !== undefined && !isZip) {
-            await api.fsWrite(path, att.text);
-            att.path = path;
-          } else if (f.size <= 30 * 1024 * 1024) {
-            await api.fsWrite(path, arrayBufferToBase64(await f.arrayBuffer()), false, "base64");
-            att.path = path;
+      for (const f of files) {
+        const isImg = f.type.startsWith("image/");
+        const att: Attachment = { name: f.name, size: f.size, url: isImg ? URL.createObjectURL(f) : undefined };
+        if (isImg) {
+          try {
+            att.image = await imageToDataUrl(f);
+            if (f.size <= 30 * 1024 * 1024) {
+              const path = `${conversationDir(chat.chatId)}/${f.name}`;
+              await api.fsWrite(path, arrayBufferToBase64(await f.arrayBuffer()), false, "base64");
+              att.path = path;
+            }
+          } catch {
+            toast.error(`No se pudo leer ${f.name}.`);
           }
-        } catch (e) { toast.error(e instanceof ApiError ? e.message : `No se pudo subir ${f.name}.`); }
+        }
+        const isPdf = f.type === "application/pdf" || /\.pdf$/i.test(f.name);
+        const isSheet = /\.xlsx?$/i.test(f.name) || f.type.includes("spreadsheet") || f.type === "application/vnd.ms-excel";
+        const isZip = /\.zip$/i.test(f.name) || f.type === "application/zip" || f.type === "application/x-zip-compressed";
+        const isText = !isPdf && !isSheet && !isZip && (f.type.startsWith("text/") || /\.(txt|md|markdown|json|csv|tsv|html|htm|css|scss|sass|less|js|jsx|ts|tsx|mjs|cjs|py|java|c|cpp|h|hpp|cs|go|rs|php|rb|sh|bash|zsh|bat|cmd|ps1|sql|yaml|yml|xml|env|ini|toml|cfg|conf|properties|log|tex|svg|vue|svelte|astro|graphql|gql|prisma|proto)$/i.test(f.name));
+        if (!isImg) {
+          try {
+            // Never read unrecognized binaries as text: it injects corrupt characters into the prompt.
+            att.text = isPdf ? await extractPdf(f) : isSheet ? await extractSheet(f) : isZip ? await extractZip(f) : isText ? capText(await f.text()) : undefined;
+            const path = `${conversationDir(chat.chatId)}/${f.name}`;
+            if (isText && att.text !== undefined) {
+              await api.fsWrite(path, att.text);
+              att.path = path;
+            } else if (f.size <= 30 * 1024 * 1024) {
+              await api.fsWrite(path, arrayBufferToBase64(await f.arrayBuffer()), false, "base64");
+              att.path = path;
+            }
+          } catch (e) { toast.error(e instanceof ApiError ? e.message : `No se pudo subir ${f.name}.`); }
+        }
+        atts.push(att);
       }
-      atts.push(att);
-    }
-    if (atts.some((a) => a.path)) window.dispatchEvent(new Event("erasmus:files-changed"));
-    await chat.send(text, atts);
+      if (atts.some((a) => a.path)) window.dispatchEvent(new Event("erasmus:files-changed"));
+      await chat.send(text, atts);
     } finally { setPreparingFiles(false); }
   };
 

@@ -56,8 +56,49 @@ interface LocalChatSnapshot {
 function withoutTemporaryUrls(m: UIMessage): UIMessage {
   const clean: UIMessage = { ...m, streaming: false };
   if (m.compaction?.status === "running") clean.compaction = { ...m.compaction, status: "error" };
-  if (m.attachments) clean.attachments = m.attachments.map(({ url: _url, image: _image, ...a }) => a);
+  if (m.attachments) {
+    clean.attachments = m.attachments.map(({ url: _url, image: _image, text, ...a }) => ({
+      ...a,
+      ...(text !== undefined ? { text: text.length > 8000 ? text.slice(0, 8000) + "\n…[recortado en copia local]" : text } : {}),
+    }));
+  }
   return clean;
+}
+
+function toStoredMessage(m: UIMessage): StoredMessage {
+  if (m.role === "user") {
+    const attachments = m.attachments?.map(({ name, size, path, text }) => ({
+      name,
+      size,
+      ...(path !== undefined ? { path } : {}),
+      ...(text !== undefined ? { text } : {}),
+    }));
+    return {
+      id: m.id,
+      role: "user",
+      text: m.content,
+      ts: m.ts,
+      ...(m.hidden ? { hidden: true } : {}),
+      ...(attachments?.length ? { attachments } : {}),
+    };
+  }
+  return {
+    id: m.id,
+    role: "assistant",
+    c: m.content,
+    ts: m.ts,
+    ...(m.tools ? { tools: m.tools } : {}),
+    ...(m.imageRequest ? { imageRequest: m.imageRequest, ...(m.error ? { error: m.error } : {}) } : {}),
+    ...(m.kind ? {
+      kind: m.kind,
+      ...(m.compaction ? { compaction: m.compaction.status === "running" ? { ...m.compaction, status: "error" as const } : m.compaction } : {}),
+      ...(m.summary ? { summary: m.summary } : {}),
+      ...(m.cutId ? { cutId: m.cutId } : {}),
+    } : {}),
+    ...(m.reasoning ? { reasoning: m.reasoning, ...(m.thinkMs ? { thinkMs: m.thinkMs } : {}) } : {}),
+    ...(m.usage ? { usage: m.usage } : {}),
+    ...(m.finish ? { finish: m.finish } : {}),
+  };
 }
 
 function recoverLocalChat(): LocalChatSnapshot | null {
@@ -112,33 +153,41 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export const conversationDir = (convId: string) => `conversations/${convId}`;
 
-async function runBlock(b: ToolBlock, convId: string): Promise<{ state: ToolState; feedback: string | null }> {
+async function runBlock(b: ToolBlock, _convId: string): Promise<{ state: ToolState; feedback: string | null }> {
   try {
     if (b.kind === "code:python" || b.kind === "code:bash") {
       return { state: { status: "saved" }, feedback: null };
     }
+    const target = b.target.trim();
     if (b.kind === "file:list") {
-      const r = await api.fsList(b.target || ".");
+      const r = await api.fsList(target || ".");
       const lines = r.items.map((i) => `${i.is_dir ? "[DIR] " : ""}${i.name}${i.is_dir ? "" : ` (${i.size} B)`}`).join("\n");
-      return { state: { status: "ok", detail: `${r.showing} de ${r.total} elementos`, output: lines || "(vacío)" }, feedback: `[CONTENIDO DEL DIRECTORIO ${b.target || "."}]:\n<datos>\n${lines}\n</datos>${r.warning ? `\n${r.warning}` : ""}` };
+      return { state: { status: "ok", detail: `${r.showing} de ${r.total} elementos`, output: lines || "(vacío)" }, feedback: `[CONTENIDO DEL DIRECTORIO ${target || "."}]:\n<datos>\n${lines}\n</datos>${r.warning ? `\n${r.warning}` : ""}` };
+    }
+    if (!target) {
+      return {
+        state: { status: "error", detail: "Falta la ruta del archivo." },
+        feedback: `[ERROR EN ${b.kind}]: Debes especificar la ruta del archivo.`,
+      };
     }
     if (b.kind === "file:read") {
-      const r = await api.fsRead(b.target);
-      return { state: { status: "ok", detail: `${r.total_lines} líneas${r.truncated ? " (truncado)" : ""}`, output: r.content }, feedback: `[CONTENIDO DE ${b.target}]:\n<datos>\n${r.content.slice(0, 8000)}\n</datos>` };
+      const r = await api.fsRead(target);
+      return { state: { status: "ok", detail: `${r.total_lines} líneas${r.truncated ? " (truncado)" : ""}`, output: r.content }, feedback: `[CONTENIDO DE ${target}]:\n<datos>\n${r.content.slice(0, 8000)}\n</datos>` };
     }
-    // file:write / file:append
+    // file:write / file:append (atomic client-side polyfill for backend v5.4)
     const append = b.kind === "file:append";
     let before = "";
-    try { before = (await api.fsRead(b.target)).content; } catch { before = ""; }
+    try { before = (await api.fsRead(target)).content; } catch { before = ""; }
     const content = b.body.endsWith("\n") || !b.body ? b.body : b.body + "\n";
-    const r = await api.fsWrite(b.target, content, append);
-    const after = append ? before + content : content;
+    const payload = append ? before + content : content;
+    const r = await api.fsWrite(target, payload, false);
+    const after = payload;
     const partial = !b.closed;
     return {
-      state: { status: partial ? "error" : "ok", detail: `${r.bytes_written} bytes ${append ? "añadidos" : "escritos"}${partial ? " · bloque incompleto" : ""}`, diff: lineDiff(before, after) },
+      state: { status: partial ? "error" : "ok", detail: `${append ? content.length : r.bytes_written} bytes ${append ? "añadidos" : "escritos"}${partial ? " · bloque incompleto" : ""}`, diff: lineDiff(before, after) },
       feedback: partial
-        ? `[AVISO DE BLOQUE INCOMPLETO]: El bloque para ${b.target} se cortó antes de cerrarse. Se guardó la porción recibida. Emite AHORA \`\`\`file:append ${b.target}\`\`\` para continuar.`
-        : `[ARCHIVO GUARDADO EN ${b.target}]: ${r.bytes_written} bytes (${r.mode}).`,
+        ? `[AVISO DE BLOQUE INCOMPLETO]: El bloque para ${target} se cortó antes de cerrarse. Se guardó la porción recibida. Emite AHORA \`\`\`file:write ${target}\`\`\` con el contenido completo para finalizar el archivo.`
+        : `[ARCHIVO GUARDADO EN ${target}]: ${append ? content.length : r.bytes_written} bytes (${append ? "append" : r.mode}).`,
     };
   } catch (e) {
     const msg = e instanceof ApiError ? e.message : String(e);
@@ -211,7 +260,7 @@ export function useChat(opts: { model: string }) {
       title: t,
       created: created.current,
       updated: Date.now(),
-      messages: msgsRef.current.map<StoredMessage>((m) => (m.role === "user" ? { id: m.id, role: "user", text: m.content, ts: m.ts, hidden: m.hidden } : { id: m.id, role: "assistant", c: m.content, ts: m.ts, tools: m.tools, ...(m.imageRequest ? { imageRequest: m.imageRequest, error: m.error } : {}), ...(m.kind ? { kind: m.kind, compaction: m.compaction?.status === "running" ? { ...m.compaction, status: "error" as const } : m.compaction, summary: m.summary, cutId: m.cutId } : {}), ...(m.reasoning ? { reasoning: m.reasoning, thinkMs: m.thinkMs } : {}), ...(m.usage ? { usage: m.usage } : {}), ...(m.finish ? { finish: m.finish } : {}) })),
+      messages: msgsRef.current.map<StoredMessage>(toStoredMessage),
     };
     try { await api.syncChat(data); setListVersion((v) => v + 1); } catch { /* best effort */ }
   }, [chatId]);
@@ -238,9 +287,9 @@ export function useChat(opts: { model: string }) {
     let out = "";
     try {
       await streamChat({ model: opts.model, messages: [{ role: "user", content: `${COMPACT_PROMPT}\n\n<conversacion>\n${transcript}\n</conversacion>` }], sessionId: chatId, signal, reasoning: "low", onToken: (tk) => { out += tk; } });
-    } catch (e) {
+    } catch {
       patch(cid, { compaction: { status: "error", startedAt: t0, ms: Date.now() - t0 } });
-      throw e;
+      return false;
     }
     if (signal.aborted || !out.trim()) {
       patch(cid, { compaction: { status: "error", startedAt: t0, ms: Date.now() - t0 } });
@@ -259,6 +308,8 @@ export function useChat(opts: { model: string }) {
     abortRef.current = ctrl;
     let executed = 0;
     let activeAssistantId: string | null = null;
+    let partialAcc = "";
+    let partialReasoning = "";
     let proactiveFailed = false;
     try {
       for (let step = 0; step < MAX_AGENT_STEPS; step++) {
@@ -275,6 +326,8 @@ export function useChat(opts: { model: string }) {
           aid = uid();
           const id = aid;
           activeAssistantId = id;
+          partialAcc = "";
+          partialReasoning = "";
           commit((ms) => [...ms, { id, role: "assistant", content: "", streaming: true, tools: {}, ts: Date.now() }]);
           const history = modelHistory(msgsRef.current, id);
           acc = "";
@@ -295,8 +348,8 @@ export function useChat(opts: { model: string }) {
               messages: history,
               sessionId: chatId,
               signal: ctrl.signal,
-              onToken: (tok) => { if (r0 && !frozen) { frozen = Math.max(Date.now() - r0, 1000); patch(id, { thinkMs: frozen }); } acc += tok; schedulePaint(); },
-              onReasoning: (tok) => { const n = Date.now(); if (!r0) r0 = n; r1 = n; reasoning += tok; schedulePaint(); },
+              onToken: (tok) => { if (r0 && !frozen) { frozen = Math.max(Date.now() - r0, 1000); patch(id, { thinkMs: frozen }); } acc += tok; partialAcc = acc; schedulePaint(); },
+              onReasoning: (tok) => { const n = Date.now(); if (!r0) r0 = n; r1 = n; reasoning += tok; partialReasoning = reasoning; schedulePaint(); },
               onMeta: (mm) => { meta = { ...meta, ...(mm.finishReason ? { finish: mm.finishReason } : {}), ...(mm.usage ? { usage: mm.usage } : {}) }; },
             });
           } catch (e) {
@@ -328,8 +381,8 @@ export function useChat(opts: { model: string }) {
             patch(aid, (m) => ({ tools: { ...m.tools, [i]: { status: "limit", detail: "Límite de pasos alcanzado (30 bloques por turno)." } } }));
             continue;
           }
-           const blk = blocks[i];
-           if (!blk) continue;
+          const blk = blocks[i];
+          if (!blk) continue;
           patch(aid, (m) => ({ tools: { ...m.tools, [i]: { status: "running" } } }));
           const { state, feedback: fb } = await runBlock(blk, chatId);
           executed++;
@@ -338,8 +391,8 @@ export function useChat(opts: { model: string }) {
         }
         if (ctrl.signal.aborted) break;
         if (limitHit) { setError("Límite de pasos alcanzado: el agente se detuvo tras 30 bloques."); break; }
-         if (!feedback.length) break;
-         if (step === MAX_AGENT_STEPS - 1) { setError("Pausa de control: límite de pasos del agente alcanzado."); break; }
+        if (!feedback.length) break;
+        if (step === MAX_AGENT_STEPS - 1) { setError("Pausa de control: límite de pasos del agente alcanzado."); break; }
         commit((ms) => [...ms, { id: uid(), role: "user", hidden: true, content: `[RESULTADOS DE HERRAMIENTAS]\n${feedback.join("\n\n")}`, ts: Date.now() }]);
       }
     } catch (e) {
@@ -353,7 +406,11 @@ export function useChat(opts: { model: string }) {
       const err = e instanceof ApiError ? e : null;
       const retryable = !err || err.status === 0 || err.status === 408 || err.status >= 500;
       const message = !err ? "Error inesperado en la conversación." : err.status === 0 ? "Sin conexión con Erasmus." : err.status === 504 || err.status === 408 ? "Tiempo de espera agotado." : err.message;
-      if (activeAssistantId) patch(activeAssistantId, { streaming: false, error: { message, retryable } });
+      if (activeAssistantId) {
+        patch(activeAssistantId, { content: partialAcc, ...(partialReasoning ? { reasoning: partialReasoning } : {}), streaming: false, error: { message, retryable } });
+      } else {
+        setError(message);
+      }
       setFailure({ message, retryable, nonce: Date.now() });
     } finally {
       setBusy(false);
@@ -370,7 +427,10 @@ export function useChat(opts: { model: string }) {
     // Límite de tamaño de adjuntos desactivado temporalmente para pruebas (ver FILE_MAX_FRACTION).
     let t = titleRef.current;
     if (msgsRef.current.length === 0) { t = clean.slice(0, 60); setTitle(t); titleRef.current = t; }
-    commit((ms) => [...ms, { id: uid(), role: "user", content: clean, ts: Date.now(), ...(attachments?.length ? { attachments } : {}) }]);
+    commit((ms) => [
+      ...ms.filter((m) => !(m.error && !m.content.trim() && !m.imageRequest) && !(m.kind === "compaction" && m.compaction?.status === "error")),
+      { id: uid(), role: "user", content: clean, ts: Date.now(), ...(attachments?.length ? { attachments } : {}) },
+    ]);
     await runLoop(t);
   }, [busy, commit, opts.model, runLoop]);
 
@@ -423,7 +483,26 @@ export function useChat(opts: { model: string }) {
       if (image.error?.retryable) void generateImage(image.imageRequest.prompt, image.imageRequest.size, image.id);
       return;
     }
-    commit((ms) => ms.filter((m) => !m.error));
+    commit((ms) => ms.filter((m) => !m.error && !(m.kind === "compaction" && m.compaction?.status === "error")));
+    void runLoop(titleRef.current);
+  }, [busy, commit, generateImage, runLoop]);
+
+  /** Regenerates the last assistant turn without duplicating the preceding user message. */
+  const regenerate = useCallback(() => {
+    if (busy) return;
+    const all = msgsRef.current;
+    const lastVisibleAsst = [...all].reverse().find((m) => m.role === "assistant" && !m.hidden && !m.kind);
+    if (lastVisibleAsst?.imageRequest) {
+      void generateImage(lastVisibleAsst.imageRequest.prompt, lastVisibleAsst.imageRequest.size, lastVisibleAsst.id);
+      return;
+    }
+    let lastUserIdx = -1;
+    for (let i = all.length - 1; i >= 0; i--) {
+      const m = all[i];
+      if (m && m.role === "user" && !m.hidden) { lastUserIdx = i; break; }
+    }
+    if (lastUserIdx < 0) return;
+    commit((ms) => ms.slice(0, lastUserIdx + 1));
     void runLoop(titleRef.current);
   }, [busy, commit, generateImage, runLoop]);
 
@@ -483,7 +562,7 @@ export function useChat(opts: { model: string }) {
     created.current = now;
     setTemporary(false);
     temporaryRef.current = false;
-    await api.syncChat({ id: nextId, title: nextTitle, created: now, updated: now, messages: branched.map<StoredMessage>((m) => m.role === "user" ? { id: m.id, role: "user", text: m.content, ts: m.ts, hidden: m.hidden } : { id: m.id, role: "assistant", c: m.content, ts: m.ts, tools: m.tools, reasoning: m.reasoning, thinkMs: m.thinkMs, finish: m.finish, usage: m.usage }) });
+    await api.syncChat({ id: nextId, title: nextTitle, created: now, updated: now, messages: branched.map<StoredMessage>(toStoredMessage) });
     setListVersion((version) => version + 1);
   }, []);
 
@@ -504,6 +583,14 @@ export function useChat(opts: { model: string }) {
         return base;
       }
       if (sm.hidden) base.hidden = true;
+      if (sm.role === "user" && sm.attachments?.length) {
+        base.attachments = sm.attachments.map((a) => ({
+          name: a.name,
+          size: a.size,
+          ...(a.path !== undefined ? { path: a.path } : {}),
+          ...(a.text !== undefined ? { text: a.text } : {}),
+        }));
+      }
       if (sm.imageRequest) base.imageRequest = sm.imageRequest;
       if (sm.imageRequest && sm.error) base.error = sm.error;
       if (sm.reasoning) { base.reasoning = sm.reasoning; if (sm.thinkMs) base.thinkMs = sm.thinkMs; }
@@ -547,5 +634,5 @@ export function useChat(opts: { model: string }) {
     setListVersion((v) => v + 1);
   }, [chatId, persist]);
 
-  return { ready: localReady, open, rename, branchFrom, startTemporary, temporary, listVersion, chatId, title, messages, busy, error, send, generateImage, stop, reset, continueLast, retry, failure, limit, dismissLimit: () => setLimit(null), dismissError: () => setError(null) };
+  return { ready: localReady, open, rename, branchFrom, startTemporary, temporary, listVersion, chatId, title, messages, busy, error, send, generateImage, regenerate, stop, reset, continueLast, retry, failure, limit, dismissLimit: () => setLimit(null), dismissError: () => setError(null) };
 }

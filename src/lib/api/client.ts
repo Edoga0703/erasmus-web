@@ -215,6 +215,27 @@ function withSystem(msgs: StreamOptions["messages"]): StreamOptions["messages"] 
   return sys ? [{ role: "system", content: sys }, ...msgs] : msgs;
 }
 
+function processSseLine(rawLine: string, opts: StreamOptions): boolean {
+  const line = rawLine.trim();
+  if (!line.startsWith("data:")) return false;
+  const data = line.slice(5).trim();
+  if (data === "[DONE]") return true;
+  try {
+    const j = JSON.parse(data);
+    const t = j?.choices?.[0]?.delta?.content ?? j?.choices?.[0]?.message?.content;
+    if (t) opts.onToken(t);
+    const rc = j?.choices?.[0]?.delta?.reasoning_content ?? j?.choices?.[0]?.delta?.reasoning ?? j?.choices?.[0]?.delta?.thinking ?? j?.choices?.[0]?.delta?.thought;
+    if (rc) opts.onReasoning?.(rc);
+    const fr = j?.choices?.[0]?.finish_reason;
+    const us = toUsage(j?.usage);
+    if (fr || us) opts.onMeta?.({ ...(fr ? { finishReason: fr } : {}), ...(us ? { usage: us } : {}) });
+    if (j?.error) throw new ApiError(502, j.error.code ?? "stream", j.error.message ?? "Error en el stream");
+  } catch (e) {
+    if (e instanceof ApiError) throw e;
+  }
+  return false;
+}
+
 /** POST /v1/chat/completions with stream:true; parses SSE "data:" lines token by token. */
 export async function streamChat(opts: StreamOptions): Promise<void> {
   let res: Response;
@@ -235,7 +256,7 @@ export async function streamChat(opts: StreamOptions): Promise<void> {
     const j = await res.json().catch(() => null);
     const c = j?.choices?.[0]?.message?.content;
     if (c) opts.onToken(c);
-    const rc0 = j?.choices?.[0]?.message?.reasoning_content;
+    const rc0 = j?.choices?.[0]?.message?.reasoning_content ?? j?.choices?.[0]?.message?.reasoning ?? j?.choices?.[0]?.message?.thinking ?? j?.choices?.[0]?.message?.thought;
     if (rc0) opts.onReasoning?.(rc0);
     const u0 = toUsage(j?.usage);
     opts.onMeta?.({ ...(j?.choices?.[0]?.finish_reason ? { finishReason: j.choices[0].finish_reason } : {}), ...(u0 ? { usage: u0 } : {}) });
@@ -244,35 +265,44 @@ export async function streamChat(opts: StreamOptions): Promise<void> {
   const reader = res.body.getReader();
   const dec = new TextDecoder();
   let buf = "";
+  const INACTIVITY_TIMEOUT_MS = 35000;
+  let inactivityTimer: ReturnType<typeof setTimeout> | undefined;
+  let timedOut = false;
+  const resetInactivity = () => {
+    if (inactivityTimer) clearTimeout(inactivityTimer);
+    inactivityTimer = setTimeout(() => {
+      timedOut = true;
+      try { void reader.cancel(); } catch { /* ignore */ }
+    }, INACTIVITY_TIMEOUT_MS);
+  };
   try {
+    resetInactivity();
     for (;;) {
       const { value, done } = await reader.read();
-      if (done) break;
+      resetInactivity();
+      if (done) {
+        buf += dec.decode();
+        if (buf.trim()) {
+          for (const tail of buf.split("\n")) {
+            if (processSseLine(tail, opts)) return;
+          }
+        }
+        break;
+      }
       buf += dec.decode(value, { stream: true });
       let nl: number;
       while ((nl = buf.indexOf("\n")) >= 0) {
-        const line = buf.slice(0, nl).trim();
+        const line = buf.slice(0, nl);
         buf = buf.slice(nl + 1);
-        if (!line.startsWith("data:")) continue;
-        const data = line.slice(5).trim();
-        if (data === "[DONE]") return;
-        try {
-          const j = JSON.parse(data);
-          const t = j?.choices?.[0]?.delta?.content ?? j?.choices?.[0]?.message?.content;
-          if (t) opts.onToken(t);
-          const rc = j?.choices?.[0]?.delta?.reasoning_content;
-          if (rc) opts.onReasoning?.(rc);
-          const fr = j?.choices?.[0]?.finish_reason;
-          const us = toUsage(j?.usage);
-          if (fr || us) opts.onMeta?.({ ...(fr ? { finishReason: fr } : {}), ...(us ? { usage: us } : {}) });
-          if (j?.error) throw new ApiError(502, j.error.code ?? "stream", j.error.message ?? "Error en el stream");
-        } catch (e) {
-          if (e instanceof ApiError) throw e;
-        }
+        if (processSseLine(line, opts)) return;
       }
     }
   } catch (e) {
     if ((e as Error)?.name === "AbortError") return;
+    if (timedOut) throw new ApiError(408, "stream_timeout", "La conexión con Erasmus se interrumpió por inactividad. Puedes reintentar.");
     throw e;
+  } finally {
+    if (inactivityTimer) clearTimeout(inactivityTimer);
   }
+  if (timedOut) throw new ApiError(408, "stream_timeout", "La conexión con Erasmus se interrumpió por inactividad. Puedes reintentar.");
 }

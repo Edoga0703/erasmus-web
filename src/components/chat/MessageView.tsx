@@ -34,6 +34,10 @@ export const MessageView = memo(function MessageView({ m, isLast, busy, onRegene
   m: UIMessage; isLast?: boolean | undefined; busy?: boolean | undefined; onRegenerate?: (() => void) | undefined; onBranch?: (() => void) | undefined; onRetry?: (() => void) | undefined; onContinue?: (() => void) | undefined;
 }) {
   const segs = useMemo(() => (m.role === "assistant" ? parseSegments(m.content) : []), [m.content, m.role]);
+  const plain = useMemo(
+    () => segs.filter((s): s is Extract<typeof s, { type: "text" }> => s.type === "text").map((s) => s.text.trim()).filter(Boolean).join("\n\n") || m.content.trim(),
+    [segs, m.content],
+  );
   if (m.hidden) return null;
   if (m.kind === "compaction") return m.compaction ? <CompactionLine c={m.compaction} /> : null;
 
@@ -50,10 +54,9 @@ export const MessageView = memo(function MessageView({ m, isLast, busy, onRegene
   }
 
   const empty = !m.content.trim();
-  const plain = m.content.replace(/```[\s\S]*?```/g, (b) => b).trim();
   return (
     <Message from="assistant" className="max-w-full text-e-tx">
-      {((empty && m.streaming) || (m.reasoning && !segs.some((s) => s.type === "block"))) && <ThinkingChip since={m.ts} active={!!m.streaming && empty && !m.reasoning} reasoning={m.reasoning} thinkMs={m.thinkMs} streaming={m.streaming && empty} />}
+      {((empty && m.streaming) || Boolean(m.reasoning)) && <ThinkingChip since={m.ts} active={!!m.streaming && empty && !m.reasoning} reasoning={m.reasoning} thinkMs={m.thinkMs} streaming={m.streaming && empty} />}
       {segs.some((s) => s.type === "block") && <ActivitySummary message={m} />}
       {segs.map((s, i) =>
         s.type === "text" ? (
@@ -95,13 +98,27 @@ export const MessageView = memo(function MessageView({ m, isLast, busy, onRegene
   );
 });
 
+function stripMarkdownForTts(text: string): string {
+  return text
+    .replace(/```[\s\S]*?```/g, " [código omitido] ")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(/^[#>\s*+-]+/gm, "")
+    .replace(/[*_~]+/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function ResponseMenu({ text, disabled = false, onRegenerate, onBranch }: { text: string; disabled?: boolean | undefined; onRegenerate?: (() => void) | undefined; onBranch?: (() => void) | undefined }) {
   const [speaking, setSpeaking] = useState(false);
   const speak = () => {
     if (!("speechSynthesis" in window)) return;
     window.speechSynthesis.cancel();
     if (speaking) { setSpeaking(false); return; }
-    const utterance = new SpeechSynthesisUtterance(text);
+    const cleanText = stripMarkdownForTts(text);
+    if (!cleanText) return;
+    const utterance = new SpeechSynthesisUtterance(cleanText);
     utterance.lang = "es";
     utterance.onend = () => setSpeaking(false);
     utterance.onerror = () => setSpeaking(false);

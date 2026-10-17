@@ -119,7 +119,7 @@ export function Composer({ busy, disabled, onSend, onStop, onGenerateImage, draf
             {files.map((x, i) => <AttachChip key={i + x.f.name} a={{ name: x.f.name, size: x.f.size, url: x.url }} onRemove={() => removeFile(i)} />)}
           </div>
         )}
-        <input ref={fileRef} type="file" hidden multiple accept="image/*,.txt,.csv,.md,.json,.py,.sh,.html,.xml,.yaml,.yml,.tsv,.log,.pdf,.xlsx,.xls" onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }} />
+        <input ref={fileRef} type="file" hidden multiple accept="image/*,.txt,.csv,.md,.json,.py,.sh,.html,.xml,.yaml,.yml,.tsv,.log,.pdf,.xlsx,.xls,.zip" onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }} />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" type="button" aria-label="Añadir archivos" className="e-icon-btn shrink-0 text-e-tx" disabled={disabled || busy}><Plus className="size-5" /></Button>
