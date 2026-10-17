@@ -39,7 +39,7 @@ export function useChatManifest(version: number) {
   return { chats, setChats, err };
 }
 
-/** History from GET /api/workspace/chats, updated desc. Deletion is omitted until the server supports it. */
+/** History from GET /api/workspace/chats, updated desc, with inline rename and server-confirmed deletion. */
 export function ChatList({ activeId, activeTitle, version, onOpen, onRename, onDeleted }: {
   activeId: string;
   activeTitle: string;

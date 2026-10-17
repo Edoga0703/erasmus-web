@@ -135,16 +135,41 @@ const highlighterCache = new Map<
   Promise<HighlighterGeneric<BundledLanguage, BundledTheme>>
 >();
 
-// Token cache
+// Languages that failed to load so we don't retry infinitely
+const failedLanguages = new Set<string>();
+
+// Bounded LRU Token cache
+const MAX_TOKENS_CACHE = 150;
 const tokensCache = new Map<string, TokenizedCode>();
 
 // Subscribers for async token updates
 const subscribers = new Map<string, Set<(result: TokenizedCode) => void>>();
 
-const getTokensCacheKey = (code: string, language: BundledLanguage) => {
-  const start = code.slice(0, 100);
-  const end = code.length > 100 ? code.slice(-100) : "";
-  return `${language}:${code.length}:${start}:${end}`;
+// Fast 32-bit FNV-1a hash over the full code string to prevent collisions
+const hashString = (str: string): string => {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < str.length; i++) {
+    // oxlint-disable-next-line eslint(no-bitwise)
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  // oxlint-disable-next-line eslint(no-bitwise)
+  return (h >>> 0).toString(36);
+};
+
+const getTokensCacheKey = (code: string, language: BundledLanguage) =>
+  `${language}:${code.length}:${hashString(code)}`;
+
+const setCachedTokens = (key: string, value: TokenizedCode) => {
+  if (tokensCache.has(key)) {
+    tokensCache.delete(key);
+  } else if (tokensCache.size >= MAX_TOKENS_CACHE) {
+    const oldestKey = tokensCache.keys().next().value;
+    if (oldestKey !== undefined) {
+      tokensCache.delete(oldestKey);
+    }
+  }
+  tokensCache.set(key, value);
 };
 
 const getHighlighter = (
@@ -189,10 +214,16 @@ export const highlightCode = (
 ): TokenizedCode | null => {
   const tokensCacheKey = getTokensCacheKey(code, language);
 
-  // Return cached result if available
+  // Return cached result if available (and refresh LRU position)
   const cached = tokensCache.get(tokensCacheKey);
   if (cached) {
+    tokensCache.delete(tokensCacheKey);
+    tokensCache.set(tokensCacheKey, cached);
     return cached;
+  }
+
+  if (failedLanguages.has(language)) {
+    return createRawTokens(code);
   }
 
   // Subscribe callback if provided
@@ -224,8 +255,8 @@ export const highlightCode = (
         tokens: result.tokens,
       };
 
-      // Cache the result
-      tokensCache.set(tokensCacheKey, tokenized);
+      // Cache the result with LRU bound
+      setCachedTokens(tokensCacheKey, tokenized);
 
       // Notify all subscribers
       const subs = subscribers.get(tokensCacheKey);
@@ -239,7 +270,16 @@ export const highlightCode = (
     // oxlint-disable-next-line eslint-plugin-promise(prefer-await-to-then), eslint-plugin-promise(prefer-await-to-callbacks)
     .catch((error) => {
       console.error("Failed to highlight code:", error);
-      subscribers.delete(tokensCacheKey);
+      highlighterCache.delete(language);
+      failedLanguages.add(language);
+      const fallback = createRawTokens(code);
+      const subs = subscribers.get(tokensCacheKey);
+      if (subs) {
+        for (const sub of subs) {
+          sub(fallback);
+        }
+        subscribers.delete(tokensCacheKey);
+      }
     });
 
   return null;

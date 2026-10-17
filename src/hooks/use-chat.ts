@@ -56,8 +56,14 @@ interface LocalChatSnapshot {
 function withoutTemporaryUrls(m: UIMessage): UIMessage {
   const clean: UIMessage = { ...m, streaming: false };
   if (m.compaction?.status === "running") clean.compaction = { ...m.compaction, status: "error" };
-  if (m.attachments) {
-    clean.attachments = m.attachments.map(({ url: _url, image: _image, text, ...a }) => ({
+  if (m.attachments) clean.attachments = m.attachments.map(({ url: _url, image: _image, ...a }) => a);
+  return clean;
+}
+
+function withTrimmedAttachmentText(m: UIMessage): UIMessage {
+  const clean = withoutTemporaryUrls(m);
+  if (clean.attachments) {
+    clean.attachments = clean.attachments.map(({ text, ...a }) => ({
       ...a,
       ...(text !== undefined ? { text: text.length > 8000 ? text.slice(0, 8000) + "\n…[recortado en copia local]" : text } : {}),
     }));
@@ -150,6 +156,7 @@ function modelHistory(all: UIMessage[], excludeId?: string) {
   return summary ? [{ role: "system", content: `[RESUMEN DE LA CONVERSACIÓN ANTERIOR]\n${summary}` }, ...rest] : rest;
 }
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const utf8Bytes = (s: string) => new TextEncoder().encode(s).byteLength;
 
 export const conversationDir = (convId: string) => `conversations/${convId}`;
 
@@ -177,17 +184,24 @@ async function runBlock(b: ToolBlock, _convId: string): Promise<{ state: ToolSta
     // file:write / file:append (atomic client-side polyfill for backend v5.4)
     const append = b.kind === "file:append";
     let before = "";
-    try { before = (await api.fsRead(target)).content; } catch { before = ""; }
+    try {
+      before = (await api.fsRead(target)).content;
+    } catch (readErr) {
+      // On file:append, only treat 404 (not found) as an empty starting file; network/server errors must abort rather than overwrite existing content.
+      if (append && (!(readErr instanceof ApiError) || readErr.status !== 404)) throw readErr;
+      before = "";
+    }
     const content = b.body.endsWith("\n") || !b.body ? b.body : b.body + "\n";
     const payload = append ? before + content : content;
     const r = await api.fsWrite(target, payload, false);
     const after = payload;
     const partial = !b.closed;
+    const writtenBytes = append ? utf8Bytes(content) : r.bytes_written;
     return {
-      state: { status: partial ? "error" : "ok", detail: `${append ? content.length : r.bytes_written} bytes ${append ? "añadidos" : "escritos"}${partial ? " · bloque incompleto" : ""}`, diff: lineDiff(before, after) },
+      state: { status: partial ? "error" : "ok", detail: `${writtenBytes} bytes ${append ? "añadidos" : "escritos"}${partial ? " · bloque incompleto" : ""}`, diff: lineDiff(before, after) },
       feedback: partial
         ? `[AVISO DE BLOQUE INCOMPLETO]: El bloque para ${target} se cortó antes de cerrarse. Se guardó la porción recibida. Emite AHORA \`\`\`file:write ${target}\`\`\` con el contenido completo para finalizar el archivo.`
-        : `[ARCHIVO GUARDADO EN ${target}]: ${append ? content.length : r.bytes_written} bytes (${append ? "append" : r.mode}).`,
+        : `[ARCHIVO GUARDADO EN ${target}]: ${writtenBytes} bytes (${append ? "append" : r.mode}).`,
     };
   } catch (e) {
     const msg = e instanceof ApiError ? e.message : String(e);
@@ -239,7 +253,18 @@ export function useChat(opts: { model: string }) {
         };
         localStorage.setItem(LOCAL_CHAT_KEY(), JSON.stringify(snapshot));
       } catch {
-        // Server persistence remains authoritative; local recovery is best effort.
+        try {
+          const fallback: LocalChatSnapshot = {
+            v: 1,
+            chatId,
+            title,
+            created: created.current,
+            messages: messages.map(withTrimmedAttachmentText),
+          };
+          localStorage.setItem(LOCAL_CHAT_KEY(), JSON.stringify(fallback));
+        } catch {
+          // Server persistence remains authoritative; local recovery is best effort.
+        }
       }
     }, 250);
     return () => window.clearTimeout(timer);

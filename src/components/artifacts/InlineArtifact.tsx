@@ -64,7 +64,7 @@ export function InlineArtifact({ code, lang, wrap }: { code: string; lang: strin
       {error && <p role="alert" className="px-3 py-2 text-xs text-e-err">{error}</p>}
       <div id={`${id}-preview`} role="tabpanel" aria-labelledby={`${id}-tab-preview`} hidden={tab !== "preview"}>
         {/* Keep the static wrapper: direct srcDoc inherits the app CSP and blocks Tailwind in production. */}
-        <iframe title={`Vista previa: ${title}`} sandbox={ARTIFACT_SANDBOX} referrerPolicy="no-referrer" src="/artifact-preview.html" onLoad={(event) => event.currentTarget.contentWindow?.postMessage({ type: "erasmus:artifact-document", document: doc }, "*")} className="e-frame h-[440px] w-full rounded-b-2xl border-0" />
+        <iframe key={doc} title={`Vista previa: ${title}`} sandbox={ARTIFACT_SANDBOX} referrerPolicy="no-referrer" src="/artifact-preview.html" onLoad={(event) => event.currentTarget.contentWindow?.postMessage({ type: "erasmus:artifact-document", document: doc }, "*")} className="e-frame h-[440px] w-full rounded-b-2xl border-0" />
       </div>
     </div>
   );

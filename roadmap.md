@@ -22,12 +22,12 @@
 
 - [x] Razonamiento plegable, aviso de corte + Continuar, tokens por respuesta, galería de imágenes, Personalización, indicador de uso del plan, exportar Markdown/PDF
 - [x] Seguridad: clave solo en la pestaña y enmascarada; CSP en la versión publicada
-- [ ] Usuarios con inicio de sesión mediante la API (espera: diseño del login en el servidor)
+- [x] Usuarios con inicio de sesión mediante la API (`/api/auth/login` con código `erm-...` y sesión `X-Erasmus-Session`)
 - [ ] Panel de administración para crear y controlar usuarios (espera: endpoints del servidor)
-- [ ] Eliminar conversaciones y su contenido (espera: endpoint del servidor)
+- [x] Eliminar conversaciones y su contenido (`DELETE /api/workspace/chat?id=`)
 - [x] Estado público sin credenciales ni comprobación manual; política de privacidad ES/EN/PT
 - [ ] Aplicar en el servidor la eliminación automática a 30 días y el payload mínimo de Estado
-- [ ] Adaptar el cliente al contrato unificado Erasmus VPS v5.4 (sesión, chat, historial, archivos, ZIP y cuenta)
-- [ ] Añadir canje de cupones v5.4 para visitantes y usuarios autenticados
-- [ ] Retirar del cliente la clave manual del modelo y los caminos temporales del puente anterior
-- [ ] Validar la integración v5.4 en escritorio y teléfono, incluyendo sesión expirada y descargas
+- [x] Adaptar el cliente al contrato unificado Erasmus VPS v5.4 (sesión, chat, historial, archivos, ZIP y cuenta)
+- [x] Añadir canje de cupones v5.4 para visitantes (`/comprar`) y usuarios autenticados (`Ajustes → Datos`)
+- [x] Retirar del cliente la clave manual del modelo y los caminos temporales del puente anterior
+- [ ] Validar la integración v5.4 en escritorio y teléfono con sesión activa en producción, incluyendo sesión expirada y descargas

@@ -13,6 +13,7 @@ export type Segment = { type: "text"; text: string } | { type: "block"; index: n
 
 const OPEN = /(`{3,})(code:python|code:bash|file:list|file:read|file:write|file:append)([^\n]*)\n/gi;
 const TOOL_TAG = /^(code:python|code:bash|file:list|file:read|file:write|file:append)\b/i;
+const PATH_LINE_RE = /^(?:\.?[A-Za-z0-9_-]+(?:[\\/][A-Za-z0-9_.-]+)+|[A-Za-z0-9_-]+\.[A-Za-z0-9]{1,10}|\.[A-Za-z0-9_-]+)$/;
 
 function normalizeKind(k: string): BlockKind {
   return k.toLowerCase() as BlockKind;
@@ -104,7 +105,7 @@ export function parseSegments(content: string): Segment[] {
     if ((kind === "file:write" || kind === "file:append") && !target && body.trim()) {
       const lines = body.split("\n");
       const firstLine = lines[0]?.trim() ?? "";
-      if (firstLine && !firstLine.includes(" ") && (firstLine.includes("/") || firstLine.includes(".") || firstLine.includes("\\"))) {
+      if (lines.length > 1 && PATH_LINE_RE.test(firstLine)) {
         target = firstLine;
         body = lines.slice(1).join("\n").replace(/^\n+/, "");
       }

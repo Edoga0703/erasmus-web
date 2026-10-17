@@ -101,7 +101,7 @@ describe("Erasmus Web beta settings", () => {
     expect(segs[1]).toEqual({ type: "text", text: "\nTexto final." });
   });
 
-  it("handles nested code fences with attributes and target on the second line", () => {
+  it("handles nested code fences with attributes and target on the second line without mistaking code for a filename", () => {
     const mdWithAttrs = [
       "```file:write",
       "src/utils.ts",
@@ -116,5 +116,15 @@ describe("Erasmus Web beta settings", () => {
     expect(blocks[0]?.target).toBe("src/utils.ts");
     expect(blocks[0]?.body).toContain("```ts title=\"main.ts\"\nconst y = 100;\n```");
     expect(blocks[0]?.closed).toBe(true);
+
+    const missingTargetWithCode = [
+      "```file:write",
+      "console.log('hola');",
+      "const z = 1;",
+      "```",
+    ].join("\n");
+    const codeBlocks = extractBlocks(missingTargetWithCode);
+    expect(codeBlocks[0]?.target).toBe("");
+    expect(codeBlocks[0]?.body).toContain("console.log('hola');");
   });
 });

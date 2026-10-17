@@ -22,7 +22,14 @@ export function UsageMeter() {
     const on = () => void load();
     window.addEventListener("erasmus:turn-done", on);
     window.addEventListener("erasmus:model-config", on);
-    return () => { window.removeEventListener("erasmus:turn-done", on); window.removeEventListener("erasmus:model-config", on); };
+    window.addEventListener("erasmus:session", on);
+    window.addEventListener("erasmus:session-changed", on);
+    return () => {
+      window.removeEventListener("erasmus:turn-done", on);
+      window.removeEventListener("erasmus:model-config", on);
+      window.removeEventListener("erasmus:session", on);
+      window.removeEventListener("erasmus:session-changed", on);
+    };
   }, [load]);
   if (!acc) return null;
   const total = acc.balance + acc.used;

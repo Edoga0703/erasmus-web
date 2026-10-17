@@ -47,6 +47,8 @@ export function SettingsDialog({ onClose, initialTab = "general" }: { onClose: (
       const res = await api.redeemCoupon(code);
       setCouponMsg({ ok: true, text: res.message || "Cupón canjeado con éxito." });
       setCouponCode("");
+      window.dispatchEvent(new Event("erasmus:turn-done"));
+      window.dispatchEvent(new Event("erasmus:session"));
       window.dispatchEvent(new Event("erasmus:session-changed"));
     } catch (e) {
       setCouponMsg({ ok: false, text: e instanceof ApiError ? e.message : "No se pudo canjear el cupón." });
@@ -114,17 +116,41 @@ export function SettingsDialog({ onClose, initialTab = "general" }: { onClose: (
           </nav>
           <div className={cn("min-h-0 flex-1 overflow-y-auto px-5 py-4 sm:block", mobileDetail ? "block" : "hidden")} role="tabpanel">
             {tab === "general" && (
-              <section className="space-y-6">
+              <section>
+                <h3 className="mb-2 text-[13px] font-medium">Tema</h3>
+                <div className="flex gap-2">
+                  {(["dark", "light"] as const).map((t) => (
+                    <Button variant="ghost" key={t} aria-pressed={theme === t} onClick={() => setTheme(t)} className={cn(btn, theme === t && "bg-e-bg3 text-e-tx")}>
+                      {t === "dark" ? <Moon className="size-3.5" /> : <Sun className="size-3.5" />} {t === "dark" ? "Oscuro" : "Claro"}
+                    </Button>
+                  ))}
+                </div>
+                <p className="mt-2 text-[12px] text-e-dim">Se guarda en este navegador. Los gráficos y diagramas se redibujan al cambiarlo.</p>
+              </section>
+            )}
+            {tab === "custom" && <CustomInstructions />}
+            {tab === "model" && <ModelSettings />}
+            {tab === "data" && (
+              <section className="space-y-5">
                 <div>
-                  <h3 className="mb-2 text-[13px] font-medium">Tema</h3>
-                  <div className="flex gap-2">
-                    {(["dark", "light"] as const).map((t) => (
-                      <Button variant="ghost" key={t} aria-pressed={theme === t} onClick={() => setTheme(t)} className={cn(btn, theme === t && "bg-e-bg3 text-e-tx")}>
-                        {t === "dark" ? <Moon className="size-3.5" /> : <Sun className="size-3.5" />} {t === "dark" ? "Oscuro" : "Claro"}
-                      </Button>
-                    ))}
+                  {counts && (<>
+                    <Row k="Workspace" v={counts.workspace} />
+                    <Row k="Conversaciones" v={counts.chats} />
+                    <Row k="Archivos" v={counts.files} />
+                  </>)}
+                  {!counts && !countErr && <p className="text-[13px] text-e-dim">Cargando…</p>}
+                  {countErr && (
+                    <div className="e-err-banner mt-3 flex items-center gap-3 px-3 py-2 text-[13px]" role="alert">
+                      <span className="flex-1">{countErr}</span>
+                      <Button variant="ghost" onClick={() => void loadCounts()} className="inline-flex items-center gap-1 rounded-md border border-current px-2 py-1 text-[12px]"><RefreshCw className="size-3" /> Reintentar</Button>
+                    </div>
+                  )}
+                  <div className="mt-4">
+                    <Button variant="ghost" className={btn} onClick={() => void exportZip()} disabled={zipping} data-zip-export>
+                      <Download className="size-3.5" /> {zipping ? "Exportando…" : "Exportar workspace (ZIP)"}
+                    </Button>
+                    {zipDone && <p className="mt-2 text-[12.5px] text-e-ok" data-zip-done>Descargado {zipDone.name} ({(zipDone.size / 1024).toFixed(1)} KB).</p>}
                   </div>
-                  <p className="mt-2 text-[12px] text-e-dim">Se guarda en este navegador. Los gráficos y diagramas se redibujan al cambiarlo.</p>
                 </div>
                 <div className="border-t border-e-line pt-4">
                   <h3 className="mb-2 text-[13px] font-medium">Canjear cupón o código Pro</h3>
@@ -132,48 +158,27 @@ export function SettingsDialog({ onClose, initialTab = "general" }: { onClose: (
                     <input
                       type="text"
                       placeholder="ERM-PRO-..."
+                      aria-label="Código de cupón"
                       value={couponCode}
                       onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
-                      className="flex-1 rounded-lg border border-e-line bg-e-bg3 px-3 py-1.5 text-[13px] font-mono uppercase text-e-tx outline-none focus:border-e-acc"
+                      onKeyDown={(e) => { if (e.key === "Enter") void handleRedeemCoupon(); }}
+                      className="flex-1 rounded-lg border border-e-line bg-e-bg3 px-3 py-1.5 font-mono text-[13px] uppercase text-e-tx outline-none focus:border-e-acc"
                     />
                     <Button
                       variant="outline"
                       disabled={redeeming || !couponCode.trim()}
-                      onClick={handleRedeemCoupon}
+                      onClick={() => void handleRedeemCoupon()}
                       className="rounded-lg text-[13px]"
                     >
                       {redeeming ? "Canjeando…" : "Canjear"}
                     </Button>
                   </div>
                   {couponMsg && (
-                    <p className={cn("mt-2 text-[12px]", couponMsg.ok ? "text-e-ok" : "text-e-err")}>
+                    <p role="status" className={cn("mt-2 text-[12px]", couponMsg.ok ? "text-e-ok" : "text-e-err")}>
                       {couponMsg.text}
                     </p>
                   )}
                   <p className="mt-2 text-[12px] text-e-dim">Los cupones añaden tiempo de vigencia o cuota de tokens a tu cuenta inmediatamente.</p>
-                </div>
-              </section>
-            )}
-            {tab === "custom" && <CustomInstructions />}
-            {tab === "model" && <ModelSettings />}
-            {tab === "data" && (
-              <section>
-                {counts && (<>
-                  <Row k="Workspace" v={counts.workspace} />
-                  <Row k="Conversaciones" v={counts.chats} />
-                  <Row k="Archivos" v={counts.files} />
-                </>)}
-                {!counts && !countErr && <p className="text-[13px] text-e-dim">Cargando…</p>}
-                {countErr && (
-                  <div className="e-err-banner mt-3 flex items-center gap-3 px-3 py-2 text-[13px]" role="alert">
-                    <span className="flex-1">{countErr}</span>
-                    <Button variant="ghost" onClick={() => void loadCounts()} className="inline-flex items-center gap-1 rounded-md border border-current px-2 py-1 text-[12px]"><RefreshCw className="size-3" /> Reintentar</Button>
-                  </div>
-                )}
-                <div className="mt-4"><Button variant="ghost" className={btn} onClick={() => void exportZip()} disabled={zipping} data-zip-export>
-                  <Download className="size-3.5" /> {zipping ? "Exportando…" : "Exportar workspace (ZIP)"}
-                </Button>
-                {zipDone && <p className="mt-2 text-[12.5px] text-e-ok" data-zip-done>Descargado {zipDone.name} ({(zipDone.size / 1024).toFixed(1)} KB).</p>}
                 </div>
               </section>
             )}
