@@ -1,7 +1,11 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { AppShell } from "@/components/shell/AppShell";
+import { getSession } from "@/lib/session";
 
-export const Route = createFileRoute("/_auth/chat")({
+export const Route = createFileRoute("/chat")({
+  beforeLoad: () => {
+    if (!getSession()) throw redirect({ to: "/entrar" });
+  },
   head: () => ({
     meta: [
       { title: "Chat — Erasmus" },

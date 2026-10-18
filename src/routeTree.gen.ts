@@ -10,26 +10,26 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as AuthRouteRouteImport } from './routes/_auth/route'
 import { Route as AyudaRouteImport } from './routes/ayuda'
+import { Route as ChatRouteImport } from './routes/chat'
 import { Route as ComprarRouteImport } from './routes/comprar'
 import { Route as EntrarRouteImport } from './routes/entrar'
 import { Route as EstadoRouteImport } from './routes/estado'
 import { Route as PrivacidadRouteImport } from './routes/privacidad'
-import { Route as AuthChatRouteImport } from './routes/_auth/chat'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthRouteRoute = AuthRouteRouteImport.update({
-  id: '/_auth',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const AyudaRoute = AyudaRouteImport.update({
   id: '/ayuda',
   path: '/ayuda',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ChatRoute = ChatRouteImport.update({
+  id: '/chat',
+  path: '/chat',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ComprarRoute = ComprarRouteImport.update({
@@ -52,76 +52,69 @@ const PrivacidadRoute = PrivacidadRouteImport.update({
   path: '/privacidad',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthChatRoute = AuthChatRouteImport.update({
-  id: '/chat',
-  path: '/chat',
-  getParentRoute: () => AuthRouteRoute,
-} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/ayuda': typeof AyudaRoute
+  '/chat': typeof ChatRoute
   '/comprar': typeof ComprarRoute
   '/entrar': typeof EntrarRoute
   '/estado': typeof EstadoRoute
   '/privacidad': typeof PrivacidadRoute
-  '/chat': typeof AuthChatRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/ayuda': typeof AyudaRoute
+  '/chat': typeof ChatRoute
   '/comprar': typeof ComprarRoute
   '/entrar': typeof EntrarRoute
   '/estado': typeof EstadoRoute
   '/privacidad': typeof PrivacidadRoute
-  '/chat': typeof AuthChatRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/_auth': typeof AuthRouteRouteWithChildren
   '/ayuda': typeof AyudaRoute
+  '/chat': typeof ChatRoute
   '/comprar': typeof ComprarRoute
   '/entrar': typeof EntrarRoute
   '/estado': typeof EstadoRoute
   '/privacidad': typeof PrivacidadRoute
-  '/_auth/chat': typeof AuthChatRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
     | '/ayuda'
+    | '/chat'
     | '/comprar'
     | '/entrar'
     | '/estado'
     | '/privacidad'
-    | '/chat'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/ayuda'
+    | '/chat'
     | '/comprar'
     | '/entrar'
     | '/estado'
     | '/privacidad'
-    | '/chat'
   id:
     | '__root__'
     | '/'
-    | '/_auth'
     | '/ayuda'
+    | '/chat'
     | '/comprar'
     | '/entrar'
     | '/estado'
     | '/privacidad'
-    | '/_auth/chat'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  AuthRouteRoute: typeof AuthRouteRouteWithChildren
   AyudaRoute: typeof AyudaRoute
+  ChatRoute: typeof ChatRoute
   ComprarRoute: typeof ComprarRoute
   EntrarRoute: typeof EntrarRoute
   EstadoRoute: typeof EstadoRoute
@@ -137,18 +130,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_auth': {
-      id: '/_auth'
-      path: ''
-      fullPath: '/'
-      preLoaderRoute: typeof AuthRouteRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/ayuda': {
       id: '/ayuda'
       path: '/ayuda'
       fullPath: '/ayuda'
       preLoaderRoute: typeof AyudaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/chat': {
+      id: '/chat'
+      path: '/chat'
+      fullPath: '/chat'
+      preLoaderRoute: typeof ChatRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/comprar': {
@@ -179,32 +172,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PrivacidadRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_auth/chat': {
-      id: '/_auth/chat'
-      path: '/chat'
-      fullPath: '/chat'
-      preLoaderRoute: typeof AuthChatRouteImport
-      parentRoute: typeof AuthRouteRoute
-    }
   }
 }
 
-interface AuthRouteRouteChildren {
-  AuthChatRoute: typeof AuthChatRoute
-}
-
-const AuthRouteRouteChildren: AuthRouteRouteChildren = {
-  AuthChatRoute: AuthChatRoute,
-}
-
-const AuthRouteRouteWithChildren = AuthRouteRoute._addFileChildren(
-  AuthRouteRouteChildren,
-)
-
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  AuthRouteRoute: AuthRouteRouteWithChildren,
   AyudaRoute: AyudaRoute,
+  ChatRoute: ChatRoute,
   ComprarRoute: ComprarRoute,
   EntrarRoute: EntrarRoute,
   EstadoRoute: EstadoRoute,
