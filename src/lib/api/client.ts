@@ -101,6 +101,7 @@ async function parseError(res: Response): Promise<ApiError> {
 }
 
 const DEFAULT_JSON_TIMEOUT_MS = 25_000;
+const DEFAULT_BLOB_TIMEOUT_MS = 60_000;
 
 export async function apiJson<T>(
   path: string,
@@ -141,13 +142,52 @@ export async function apiJson<T>(
   }
 }
 
+async function apiBlob(
+  path: string,
+  signal?: AbortSignal,
+  timeoutMs = DEFAULT_BLOB_TIMEOUT_MS,
+): Promise<{ res: Response; blob: Blob }> {
+  const ctrl = new AbortController();
+  let timedOut = false;
+  const onCallerAbort = () => ctrl.abort();
+  if (signal?.aborted) ctrl.abort();
+  signal?.addEventListener("abort", onCallerAbort, { once: true });
+  const timer = timeoutMs > 0 ? setTimeout(() => { timedOut = true; ctrl.abort(); }, timeoutMs) : undefined;
+  try {
+    let res: Response;
+    try {
+      res = await apiFetch(path, { method: "GET", signal: ctrl.signal });
+    } catch (e) {
+      if (timedOut) throw new ApiError(408, "request_timeout", "Tiempo de espera agotado.");
+      if (signal?.aborted) throw e;
+      throw new ApiError(0, "network", "No se pudo conectar con Erasmus.");
+    }
+    try {
+      if (!res.ok) throw await parseError(res);
+      const blob = await res.blob();
+      return { res, blob };
+    } catch (e) {
+      if (timedOut) throw new ApiError(408, "request_timeout", "Tiempo de espera agotado.");
+      throw e;
+    }
+  } finally {
+    if (timer) clearTimeout(timer);
+    signal?.removeEventListener("abort", onCallerAbort);
+  }
+}
+
 export const api = {
   generateImage: (prompt: string, size: ImageSize = "1024x1024", n = 1, signal?: AbortSignal) =>
     apiJson<{ created: number; data: { url: string; revised_prompt?: string }[] }>("/v1/images/generations", { prompt, size, n }, "POST", signal, 60_000),
   status: () => apiJson<StatusResponse>("/health"),
   session: () => apiJson<SessionProfile>("/api/auth/me"),
-  fsList: async (path: string): Promise<FsListResponse> => {
-    const r = await apiJson<{ ok: boolean; entries: { name: string; is_dir: boolean; size?: number; modified?: number | string; mtime?: number | string }[] }>(`/api/workspace/list?path=${encodeURIComponent(path)}`);
+  fsList: async (path: string, signal?: AbortSignal): Promise<FsListResponse> => {
+    const r = await apiJson<{ ok: boolean; entries: { name: string; is_dir: boolean; size?: number; modified?: number | string; mtime?: number | string }[] }>(
+      `/api/workspace/list?path=${encodeURIComponent(path)}`,
+      undefined,
+      "GET",
+      signal,
+    );
     const items = (r.entries ?? []).map((entry) => ({
       name: entry.name,
       is_dir: entry.is_dir,
@@ -156,22 +196,21 @@ export const api = {
     }));
     return { ok: r.ok, path, items, total: items.length, showing: items.length };
   },
-  fsRead: async (path: string): Promise<FsReadResponse> => {
+  fsRead: async (path: string, signal?: AbortSignal): Promise<FsReadResponse> => {
     try {
-      return await apiJson<FsReadResponse>("/api/fs/read", { path });
+      return await apiJson<FsReadResponse>("/api/fs/read", { path }, "POST", signal);
     } catch (error) {
-      // v5.4 may reject regular files on /api/fs/read with 400 or 404; its authenticated download route remains usable.
+      // v5.4/v5.6 may reject regular files on /api/fs/read with 400 or 404; its authenticated download route remains usable.
       if (!(error instanceof ApiError) || (error.status !== 404 && error.status !== 400)) throw error;
-      const res = await apiFetch(`/api/fs/download?path=${encodeURIComponent(path)}`, { method: "GET" });
-      if (!res.ok) throw await parseError(res);
-      const content = await res.text();
+      const { blob } = await apiBlob(`/api/fs/download?path=${encodeURIComponent(path)}`, signal, DEFAULT_JSON_TIMEOUT_MS);
+      const content = await blob.text();
       const totalLines = content ? content.split("\n").length : 0;
       return { ok: true, name: path.split("/").pop() ?? path, content, total_lines: totalLines, truncated: false };
     }
   },
-  fsWrite: async (path: string, content: string, append = false, encoding: "utf8" | "base64" = "utf8"): Promise<FsWriteResponse> => {
+  fsWrite: async (path: string, content: string, append = false, encoding: "utf8" | "base64" = "utf8", signal?: AbortSignal): Promise<FsWriteResponse> => {
     if (append) throw new ApiError(501, "append_unavailable", "Añadir a un archivo no está disponible en este momento.");
-    const r = await apiJson<{ ok: boolean; path: string; bytes_written: number }>("/api/fs/write", { path, content, encoding });
+    const r = await apiJson<{ ok: boolean; path: string; bytes_written: number }>("/api/fs/write", { path, content, encoding }, "POST", signal);
     return { ok: r.ok, name: r.path, mode: "write", bytes_written: r.bytes_written };
   },
   exec: (_req: ExecRequest): Promise<ExecResponse> => Promise.reject(new ApiError(501, "exec_unavailable", "La ejecución de código no está disponible.")),
@@ -218,22 +257,15 @@ export const api = {
     await walk("", 0);
     return { ok: true, workspace_name: "Mi espacio", files, ...(truncated ? { truncated: true } : {}) };
   },
-  download: async (path: string): Promise<Blob> => {
-    let res: Response;
-    try {
-      res = await apiFetch(`/api/fs/download?path=${encodeURIComponent(path)}`, { method: "GET" });
-    } catch {
-      throw new ApiError(0, "network", "No se pudo conectar con Erasmus.");
-    }
-    if (!res.ok) throw await parseError(res);
-    return res.blob();
+  download: async (path: string, signal?: AbortSignal): Promise<Blob> => {
+    const { blob } = await apiBlob(`/api/fs/download?path=${encodeURIComponent(path)}`, signal);
+    return blob;
   },
-  zip: async (): Promise<{ name: string; blob: Blob }> => {
-    const res = await apiFetch("/api/workspace/zip", { method: "GET" });
-    if (!res.ok) throw await parseError(res);
+  zip: async (signal?: AbortSignal): Promise<{ name: string; blob: Blob }> => {
+    const { res, blob } = await apiBlob("/api/workspace/zip", signal);
     const disposition = res.headers.get("Content-Disposition") ?? "";
     const name = disposition.match(/filename="?([^";]+)"?/i)?.[1] ?? "workspace_erasmus.zip";
-    return { name, blob: await res.blob() };
+    return { name, blob };
   },
   /** GET /v1/models; the server presents the Erasmus model brand. */
   models: () => apiJson<{ data: { id: string; context_length?: number }[] }>("/v1/models"),
@@ -277,6 +309,8 @@ export interface StreamOptions {
   onMeta?: (m: StreamMeta) => void;
   /** Overrides the saved reasoning level (compaction uses "low"). */
   reasoning?: string;
+  /** When false (e.g. background compaction), do not throw stream_incomplete if EOF arrives after emitting tokens without [DONE]/finish_reason. */
+  requireFinish?: boolean;
 }
 export interface StreamUsage { prompt: number; completion: number; reasoning: number; total: number }
 export interface StreamMeta { finishReason?: string; usage?: StreamUsage }
@@ -286,12 +320,19 @@ function toUsage(u: Record<string, unknown> | null | undefined): StreamUsage | u
   return { prompt: Number(u["prompt_tokens"] ?? 0), completion: Number(u["completion_tokens"] ?? 0), reasoning: Number(det["reasoning_tokens"] ?? 0), total: Number(u["total_tokens"]) };
 }
 
-function withSystem(msgs: StreamOptions["messages"]): StreamOptions["messages"] {
-  const sys = [
-    "Eres Erasmus. No tienes ejecución de Python o bash en este servidor. No emitas bloques code:python ni code:bash; muestra el código solicitado como bloques Markdown normales. Puedes trabajar con archivos mediante file:list, file:read y file:write. file:append no está disponible: para actualizar un archivo, lee su contenido y reescríbelo completo con file:write.",
-    customSystemText(),
-  ].filter(Boolean).join("\n\n");
-  return sys ? [{ role: "system", content: sys }, ...msgs] : msgs;
+/**
+ * Coordinates client workspace/tool instructions with the VPS Gateway v5.6.0 authoritative prompt.
+ * Avoids repeating identity/temporal preambles already injected by gateway.mjs and merges any leading
+ * system message (such as conversation compaction summaries) into a single system block to save prompt tokens.
+ */
+export function withSystem(msgs: StreamOptions["messages"]): StreamOptions["messages"] {
+  const baseTools = "Entorno web sin ejecución Python/bash (usa bloques Markdown estándar para código). Herramientas de espacio de trabajo: file:list, file:read y file:write (reescribe el archivo completo; no uses code:python, code:bash ni file:append). Puedes generar vistas interactivas usando bloques html, svg, mermaid o chart.";
+  const custom = customSystemText();
+  const first = msgs[0];
+  const existingSystem = first?.role === "system" && typeof first.content === "string" ? first.content.trim() : "";
+  const sys = [baseTools, custom, existingSystem].filter(Boolean).join("\n\n");
+  const rest = existingSystem ? msgs.slice(1) : msgs;
+  return sys ? [{ role: "system", content: sys }, ...rest] : rest;
 }
 
 function processSseLine(rawLine: string, opts: StreamOptions): boolean {
@@ -317,6 +358,7 @@ function processSseLine(rawLine: string, opts: StreamOptions): boolean {
 
 /** POST /v1/chat/completions with stream:true; parses SSE "data:" lines token by token. */
 export async function streamChat(opts: StreamOptions): Promise<void> {
+  if (opts.signal?.aborted) return;
   let res: Response;
   try {
     res = await apiFetch("/v1/chat/completions", {
@@ -326,7 +368,7 @@ export async function streamChat(opts: StreamOptions): Promise<void> {
       body: JSON.stringify({ model: getModelConfig().model || opts.model, messages: withSystem(opts.messages), stream: true, reasoning_effort: opts.reasoning ?? getModelConfig().reasoning }),
     });
   } catch (e) {
-    if ((e as Error)?.name === "AbortError") return;
+    if (opts.signal?.aborted || (e as Error)?.name === "AbortError") return;
     throw new ApiError(0, "network", "No se pudo conectar con Erasmus.");
   }
   if (!res.ok) throw await parseError(res);
@@ -343,12 +385,22 @@ export async function streamChat(opts: StreamOptions): Promise<void> {
   }
   const reader = res.body.getReader();
   let finished = false;
-  const sseOpts: typeof opts = { ...opts, onMeta: (m) => { if (m.finishReason) finished = true; opts.onMeta?.(m); } };
+  let hasOutput = false;
+  const sseOpts: typeof opts = {
+    ...opts,
+    onToken: (t) => { hasOutput = true; opts.onToken(t); },
+    onReasoning: (r) => { hasOutput = true; opts.onReasoning?.(r); },
+    onMeta: (m) => { if (m.finishReason) finished = true; opts.onMeta?.(m); },
+  };
   const dec = new TextDecoder();
   let buf = "";
   const INACTIVITY_TIMEOUT_MS = 35000;
   let inactivityTimer: ReturnType<typeof setTimeout> | undefined;
   let timedOut = false;
+  const onAbort = () => {
+    try { void reader.cancel(); } catch { /* ignore */ }
+  };
+  opts.signal?.addEventListener("abort", onAbort, { once: true });
   const resetInactivity = () => {
     if (inactivityTimer) clearTimeout(inactivityTimer);
     inactivityTimer = setTimeout(() => {
@@ -361,6 +413,7 @@ export async function streamChat(opts: StreamOptions): Promise<void> {
     for (;;) {
       const { value, done } = await reader.read();
       resetInactivity();
+      if (opts.signal?.aborted) return;
       if (done) {
         buf += dec.decode();
         if (buf.trim()) {
@@ -379,16 +432,20 @@ export async function streamChat(opts: StreamOptions): Promise<void> {
       }
     }
   } catch (e) {
-    if ((e as Error)?.name === "AbortError") return;
+    if (opts.signal?.aborted || (e as Error)?.name === "AbortError") return;
     if (timedOut) throw new ApiError(408, "stream_timeout", "La conexión con Erasmus se interrumpió por inactividad. Puedes reintentar.");
     throw e;
   } finally {
     if (inactivityTimer) clearTimeout(inactivityTimer);
+    opts.signal?.removeEventListener("abort", onAbort);
     // Close the stream even after [DONE] or a parser error so the connection is released.
     try { await reader.cancel(); } catch { /* already closed */ }
     try { reader.releaseLock(); } catch { /* ignore */ }
   }
+  if (opts.signal?.aborted) return;
   if (timedOut) throw new ApiError(408, "stream_timeout", "La conexión con Erasmus se interrumpió por inactividad. Puedes reintentar.");
-  // Clean EOF without [DONE] or a finish_reason means the answer was cut off.
-  if (!finished) throw new ApiError(408, "stream_incomplete", "La respuesta se interrumpió antes de terminar. Puedes reintentar.");
+  // Clean EOF without [DONE] or a finish_reason means the answer was cut off (unless caller explicitly opted out after receiving output).
+  if (!finished && !(opts.requireFinish === false && hasOutput)) {
+    throw new ApiError(408, "stream_incomplete", "La respuesta se interrumpió antes de terminar. Puedes reintentar.");
+  }
 }

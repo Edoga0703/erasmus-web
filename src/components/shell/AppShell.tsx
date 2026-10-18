@@ -53,7 +53,7 @@ export function uniqueWorkspacePath(convId: string, fileName: string, taken: Set
 
 import { SearchDialog } from "./SearchDialog";
 import { FilesPanel } from "@/components/files/FilesPanel";
-import { SettingsDialog } from "./SettingsDialog";
+import { SettingsDialog, type SettingsTab } from "./SettingsDialog";
 import { UsageMeter } from "./UsageMeter";
 import { AppSplash } from "./AppSplash";
 import { InChatSearch } from "@/components/chat/InChatSearch";
@@ -99,7 +99,7 @@ export function AppShell() {
   const [artifact, setArtifact] = useState<Artifact | null>(null);
   const [panelTab, setPanelTab] = useState<"files" | "artifacts">("files");
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [settingsTab, setSettingsTab] = useState<"general" | "model" | "about">("general");
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>("general");
   const [preparingFiles, setPreparingFiles] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [inChatSearchOpen, setInChatSearchOpen] = useState(false);
@@ -109,6 +109,8 @@ export function AppShell() {
   const [draft, setDraft] = useState<{ text: string; n: number }>();
   const [openingChat, setOpeningChat] = useState(false);
   const scroller = useRef<HTMLElement>(null);
+  const activeChatIdRef = useRef(chat.chatId);
+  activeChatIdRef.current = chat.chatId;
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const signOut = async () => {
@@ -158,6 +160,17 @@ export function AppShell() {
   }, []);
 
   useEffect(() => {
+    const openSettings = (event: Event) => {
+      const detail = (event as CustomEvent<SettingsTab | undefined>).detail;
+      setSettingsTab(detail ?? "general");
+      setSettingsOpen(true);
+      setSideOpen(false);
+    };
+    window.addEventListener("erasmus:open-settings", openSettings);
+    return () => window.removeEventListener("erasmus:open-settings", openSettings);
+  }, []);
+
+  useEffect(() => {
     const open = (event: Event) => {
       const detail: unknown = (event as CustomEvent<unknown>).detail;
       if (!isArtifact(detail)) return;
@@ -197,6 +210,7 @@ export function AppShell() {
     return !chat.temporary || chat.messages.length === 0 || window.confirm("Esta conversación temporal desaparecerá al salir. ¿Continuar?");
   };
   const newChat = () => { if (!canLeave()) return; chat.reset(); setSideOpen(false); };
+  const startTempChat = () => { if (!canLeave()) return; chat.startTemporary(); setSideOpen(false); };
   const openChat = (id: string) => { if (!canLeave()) return; setSideOpen(false); setOpeningChat(true); chat.open(id).catch(() => toast.error("No se pudo abrir la conversación.")).finally(() => setOpeningChat(false)); };
 
   /** Downscale photos (max 1600 px, JPEG) so they travel inline to the model. */
@@ -215,22 +229,28 @@ export function AppShell() {
   /** Saves attachments in this conversation's workspace (deduplicating names) and sends their extracted text/images to the model. */
   const sendWithFiles = async (text: string, files: File[]) => {
     if (chat.busy || preparingFiles) return;
+    const originChatId = chat.chatId;
     setPreparingFiles(true);
     const atts: Attachment[] = [];
+    const createdBlobUrls: string[] = [];
     const usedPaths = new Set<string>(
       chat.messages.flatMap((m) => m.attachments?.map((a) => a.path).filter((p): p is string => Boolean(p)) ?? []),
     );
     try {
       for (const f of files) {
+        if (activeChatIdRef.current !== originChatId) break;
         const isImg = f.type.startsWith("image/");
-        const att: Attachment = { name: f.name, size: f.size, url: isImg ? URL.createObjectURL(f) : undefined };
-        const path = uniqueWorkspacePath(chat.chatId, f.name, usedPaths);
+        const blobUrl = isImg ? URL.createObjectURL(f) : undefined;
+        if (blobUrl) createdBlobUrls.push(blobUrl);
+        const att: Attachment = { name: f.name, size: f.size, url: blobUrl };
+        const path = uniqueWorkspacePath(originChatId, f.name, usedPaths);
         if (isImg) {
           try {
             att.image = await imageToDataUrl(f);
           } catch {
             toast.error(`No se pudo procesar la imagen ${f.name}.`);
           }
+          if (activeChatIdRef.current !== originChatId) break;
           if (f.size <= MAX_UPLOAD_BYTES) {
             try {
               await api.fsWrite(path, arrayBufferToBase64(await f.arrayBuffer()), false, "base64");
@@ -252,6 +272,7 @@ export function AppShell() {
           } catch {
             toast.error(`No se pudo leer el contenido de ${f.name}.`);
           }
+          if (activeChatIdRef.current !== originChatId) break;
           if (isText && att.text !== undefined) {
             try {
               await api.fsWrite(path, att.text);
@@ -273,6 +294,11 @@ export function AppShell() {
         atts.push(att);
       }
       if (atts.some((a) => a.path)) window.dispatchEvent(new Event("erasmus:files-changed"));
+      // Never send into a different conversation if the active chat changed while files were being prepared.
+      if (activeChatIdRef.current !== originChatId) {
+        for (const u of createdBlobUrls) URL.revokeObjectURL(u);
+        return;
+      }
       await chat.send(text, atts);
     } finally { setPreparingFiles(false); }
   };
@@ -373,7 +399,7 @@ export function AppShell() {
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="e-pop min-w-60 p-1.5">
-              <DropdownMenuItem className="gap-2.5 rounded-lg px-3 py-2" onSelect={() => chat.startTemporary()}><TimerReset /> Nueva conversación temporal</DropdownMenuItem>
+              <DropdownMenuItem className="gap-2.5 rounded-lg px-3 py-2" onSelect={startTempChat}><TimerReset /> Nueva conversación temporal</DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem className="gap-2.5 rounded-lg px-3 py-2" onSelect={() => { setSettingsTab("model"); setSettingsOpen(true); }}><Settings /> Modelo</DropdownMenuItem>
             </DropdownMenuContent>
@@ -420,7 +446,7 @@ export function AppShell() {
                 {openingChat && <div className="space-y-5 py-6" role="status" aria-label="Abriendo conversación"><div className="h-4 w-2/3 animate-pulse rounded bg-e-bg3" /><div className="h-4 w-full animate-pulse rounded bg-e-bg3" /><div className="h-4 w-4/5 animate-pulse rounded bg-e-bg3" /></div>}
                 {visible.map((m) => (
                   <MessageView key={m.id} m={m} isLast={m.id === lastAssistant} busy={chat.busy}
-                    onRegenerate={m.id === lastAssistant ? regenerate : undefined} onBranch={m.role === "assistant" ? () => void chat.branchFrom(m.id) : undefined} onRetry={m.error?.retryable ? chat.retry : undefined} onContinue={m.id === lastAssistant ? chat.continueLast : undefined} />
+                    onRegenerate={m.id === lastAssistant ? regenerate : undefined} onBranch={m.role === "assistant" ? () => { if (!canLeave()) return; void chat.branchFrom(m.id); } : undefined} onRetry={m.error?.retryable ? chat.retry : undefined} onContinue={m.id === lastAssistant ? chat.continueLast : undefined} />
                 ))}
               </div>
             </section>

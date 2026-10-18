@@ -1,5 +1,5 @@
 import { userKey } from "@/lib/session";
-/** Single source of truth for the Erasmus v5.4 API. */
+/** Single source of truth for the Erasmus v5.4/v5.6 API. */
 export const API_BASE: string = String(import.meta.env['VITE_API_BASE'] || "https://crm.cuentastupana.com").replace(/\/+$/, "");
 
 /* ---- User-facing model preferences; access is assigned by the server session. ---- */
@@ -8,6 +8,13 @@ export interface ModelConfig { model: string; reasoning: ReasoningEffort }
 const CFG_KEY = () => userKey("model.cfg");
 const VALID_EFFORTS = new Set<ReasoningEffort>(["none", "low", "medium", "high"]);
 export const DEFAULT_MODEL_CFG: ModelConfig = { model: "erasmus-v2", reasoning: "medium" };
+
+export const REASONING_EFFORTS: readonly { id: ReasoningEffort; label: string; shortLabel: string; desc: string }[] = [
+  { id: "none", label: "Sin razonamiento", shortLabel: "Sin razonar", desc: "Respuesta inmediata sin cadena de pensamiento (ahorra tokens)" },
+  { id: "low", label: "Bajo", shortLabel: "Bajo", desc: "Rápido, piensa poco para consultas directas" },
+  { id: "medium", label: "Medio", shortLabel: "Medio", desc: "Equilibrado entre velocidad y profundidad (predeterminado)" },
+  { id: "high", label: "Alto", shortLabel: "Alto", desc: "Piensa más a fondo para código, arquitectura y análisis complejo" },
+];
 
 export function normalizeReasoningEffort(value: unknown): ReasoningEffort {
   return typeof value === "string" && VALID_EFFORTS.has(value as ReasoningEffort)

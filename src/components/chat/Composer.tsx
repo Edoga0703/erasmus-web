@@ -1,42 +1,63 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { ArrowUp, Brain, Check, Palette, Paperclip, Plus, Square, X } from "lucide-react";
-import { getModelConfig, saveModelConfig, type ReasoningEffort } from "@/lib/api/config";
+import { getModelConfig, REASONING_EFFORTS, saveModelConfig, type ReasoningEffort } from "@/lib/api/config";
 import { cleanImagePrompt, IMAGE_SIZES, type ImageSize } from "@/lib/images";
-
-const EFFORTS: [ReasoningEffort, string, string][] = [["none", "Sin razonamiento", "Respuesta inmediata"], ["low", "Bajo", "Rápido, piensa poco"], ["medium", "Medio", "Equilibrado (predeterminado)"], ["high", "Alto", "Piensa más a fondo"]];
+import { Button } from "@/components/ui/button";
+import { AttachChip } from "./AttachChip";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { cn } from "@/lib/utils";
 
 /** Reasoning level pill (reasoning_effort on every completion), persisted with the model config. */
 function ReasoningPicker({ disabled }: { disabled?: boolean | undefined }) {
-  const [v, setV] = useState<ReasoningEffort>("medium");
+  const [v, setV] = useState<ReasoningEffort>(() => getModelConfig().reasoning);
   useEffect(() => {
     const sync = () => setV(getModelConfig().reasoning);
     sync();
     window.addEventListener("erasmus:model-config", sync);
-    return () => window.removeEventListener("erasmus:model-config", sync);
+    window.addEventListener("erasmus:session-changed", sync);
+    return () => {
+      window.removeEventListener("erasmus:model-config", sync);
+      window.removeEventListener("erasmus:session-changed", sync);
+    };
   }, []);
-  const label = EFFORTS.find((e) => e[0] === v)?.[1] ?? "Medio";
+  const current = REASONING_EFFORTS.find((e) => e.id === v) ?? REASONING_EFFORTS[2]!;
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" type="button" disabled={disabled} aria-label={`Nivel de razonamiento: ${label}`} className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-[13.5px] text-e-dim hover:bg-e-bg3 hover:text-e-tx">
-          <Brain className="size-4" /><span>{v === "none" ? "Sin razonar" : label}</span>
+        <Button
+          variant="ghost"
+          type="button"
+          disabled={disabled}
+          aria-label={`Nivel de razonamiento: ${current.label}`}
+          data-reasoning-picker={v}
+          className={cn(
+            "inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-[13.5px] hover:bg-e-bg3 hover:text-e-tx",
+            v === "high" ? "text-e-tx font-medium" : "text-e-dim",
+          )}
+        >
+          <Brain className="size-4" />
+          <span>{current.shortLabel}</span>
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" side="top" className="e-pop min-w-64 p-1.5">
-        <div className="px-3 pb-1 pt-1.5 text-[12px] font-medium text-e-dim">Nivel de razonamiento</div>
-        {EFFORTS.map(([id, l, d]) => (
-          <DropdownMenuItem key={id} className="gap-3 rounded-lg px-3 py-2" onSelect={() => saveModelConfig({ ...getModelConfig(), reasoning: id })}>
-            <span className="flex-1"><span className="block text-[14px]">{l}</span><span className="block text-[12px] text-e-dim">{d}</span></span>
-            {v === id && <Check className="size-4" />}
+      <DropdownMenuContent align="start" side="top" className="e-pop min-w-68 p-1.5">
+        <div className="px-3 pb-1 pt-1.5 text-[12px] font-medium text-e-dim">Profundidad de razonamiento</div>
+        {REASONING_EFFORTS.map(({ id, label, desc }) => (
+          <DropdownMenuItem
+            key={id}
+            className="gap-3 rounded-lg px-3 py-2"
+            onSelect={() => saveModelConfig({ ...getModelConfig(), reasoning: id })}
+          >
+            <span className="flex-1">
+              <span className="block text-[14px] font-medium">{label}</span>
+              <span className="block text-[12px] text-e-dim">{desc}</span>
+            </span>
+            {v === id && <Check className="size-4 shrink-0 text-e-ok" />}
           </DropdownMenuItem>
         ))}
       </DropdownMenuContent>
     </DropdownMenu>
   );
 }
-import { Button } from "@/components/ui/button";
-import { AttachChip } from "./AttachChip";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 /** ChatGPT-style pill composer. "+" queues photos/files shown as tiles; the shell uploads them on send. */
 export function Composer({ busy, disabled, onSend, onStop, onGenerateImage, draft, centered }: {

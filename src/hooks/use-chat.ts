@@ -172,7 +172,12 @@ export function modelHistory(all: UIMessage[], excludeId?: string, ctxLen = DEFA
   const rest = all.slice(start).filter((m) => !m.kind && !m.error && m.id !== excludeId).map((m) => ({ role: m.role as string, content: toModelContent(m, ctxLen) }));
   return summary ? [{ role: "system", content: `[RESUMEN DE LA CONVERSACIÓN ANTERIOR]\n${summary}` }, ...rest] : rest;
 }
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const sleep = (ms: number, signal?: AbortSignal) => new Promise<void>((resolve) => {
+  if (signal?.aborted) { resolve(); return; }
+  const timer = setTimeout(() => { signal?.removeEventListener("abort", onAbort); resolve(); }, ms);
+  const onAbort = () => { clearTimeout(timer); resolve(); };
+  signal?.addEventListener("abort", onAbort, { once: true });
+});
 const utf8Bytes = (s: string) => new TextEncoder().encode(s).byteLength;
 
 async function blobToDataUrl(blob: Blob, fallbackMime: string): Promise<string> {
@@ -200,7 +205,7 @@ export async function runBlock(b: ToolBlock, _convId: string, signal?: AbortSign
     }
     const target = b.target.trim();
     if (b.kind === "file:list") {
-      const r = await api.fsList(target || ".");
+      const r = await api.fsList(target || ".", signal);
       const lines = r.items.map((i) => `${i.is_dir ? "[DIR] " : ""}${i.name}${i.is_dir ? "" : ` (${i.size} B)`}`).join("\n");
       return { state: { status: "ok", detail: `${r.showing} de ${r.total} elementos`, output: lines || "(vacío)" }, feedback: `[CONTENIDO DEL DIRECTORIO ${target || "."}]:\n<datos>\n${lines}\n</datos>${r.warning ? `\n${r.warning}` : ""}` };
     }
@@ -211,15 +216,16 @@ export async function runBlock(b: ToolBlock, _convId: string, signal?: AbortSign
       };
     }
     if (b.kind === "file:read") {
-      const r = await api.fsRead(target);
+      const r = await api.fsRead(target, signal);
       return { state: { status: "ok", detail: `${r.total_lines} líneas${r.truncated ? " (truncado)" : ""}`, output: r.content }, feedback: `[CONTENIDO DE ${target}]:\n<datos>\n${r.content.slice(0, 8000)}\n</datos>` };
     }
-    // file:write / file:append (atomic client-side polyfill for backend v5.4)
+    // file:write / file:append (atomic client-side polyfill for backend v5.4/v5.6)
     const append = b.kind === "file:append";
     let before = "";
     try {
-      before = (await api.fsRead(target)).content;
+      before = (await api.fsRead(target, signal)).content;
     } catch (readErr) {
+      if (signal?.aborted) return { state: { status: "error", detail: "Cancelado." }, feedback: null };
       // On file:append, treat 4xx (except 401/403/429) as file-not-found so append creates it; abort on network (0) or 5xx to prevent overwriting existing content.
       if (append) {
         const isMissing = readErr instanceof ApiError && readErr.status >= 400 && readErr.status < 500 && readErr.status !== 401 && readErr.status !== 403 && readErr.status !== 429;
@@ -231,7 +237,7 @@ export async function runBlock(b: ToolBlock, _convId: string, signal?: AbortSign
     const payload = append ? before + content : content;
     // Stop pressed between read and write: never touch the file.
     if (signal?.aborted) return { state: { status: "error", detail: "Cancelado." }, feedback: null };
-    const r = await api.fsWrite(target, payload, false);
+    const r = await api.fsWrite(target, payload, false, "utf8", signal);
     const after = payload;
     const partial = !b.closed;
     const writtenBytes = append ? utf8Bytes(content) : r.bytes_written;
@@ -242,6 +248,7 @@ export async function runBlock(b: ToolBlock, _convId: string, signal?: AbortSign
         : `[ARCHIVO GUARDADO EN ${target}]: ${writtenBytes} bytes (${append ? "append" : r.mode}).`,
     };
   } catch (e) {
+    if (signal?.aborted) return { state: { status: "error", detail: "Cancelado." }, feedback: null };
     const msg = e instanceof ApiError ? e.message : String(e);
     return { state: { status: "error", detail: msg }, feedback: `[ERROR EN ${b.kind} ${b.target}]: ${msg}` };
   }
@@ -320,14 +327,14 @@ export function useChat(opts: { model: string }) {
     commit((ms) => ms.map((m) => (m.id === id ? { ...m, ...(typeof p === "function" ? p(m) : p) } : m)));
   }, [commit]);
 
-  const persist = useCallback((t: string): Promise<void> => {
+  const persist = useCallback((t: string, targetId = chatId, snapshot = msgsRef.current): Promise<void> => {
     if (temporaryRef.current) return Promise.resolve();
     const data: ChatData = {
-      id: chatId,
+      id: targetId,
       title: t,
       created: created.current,
       updated: Date.now(),
-      messages: msgsRef.current.map<StoredMessage>(toStoredMessage),
+      messages: snapshot.map<StoredMessage>(toStoredMessage),
     };
     const next = syncQueueRef.current.then(async () => {
       try {
@@ -349,7 +356,9 @@ export function useChat(opts: { model: string }) {
   const [limit, setLimit] = useState<{ message: string; file: boolean } | null>(null);
 
   /** Summarize everything except the last KEEP_RECENT model-visible messages; shows a live line in the chat. */
-  const compactNow = useCallback(async (signal: AbortSignal, ctxLen: number): Promise<boolean> => {
+  const compactNow = useCallback(async (signal: AbortSignal, ctxLen: number, isOwned?: () => boolean): Promise<boolean> => {
+    const alive = () => !isOwned || isOwned();
+    if (!alive() || signal.aborted) return false;
     const all = msgsRef.current.filter((m) => !m.streaming);
     const { summary: prev, start } = summaryBase(all);
     const rest = all.slice(start).filter((m) => !m.kind);
@@ -365,18 +374,27 @@ export function useChat(opts: { model: string }) {
     commit((ms) => [...ms, { id: cid, role: "assistant", kind: "compaction", content: "", compaction: { status: "running", startedAt: t0 }, ts: t0 }]);
     let out = "";
     try {
-      await streamChat({ model: opts.model, messages: [{ role: "user", content: `${COMPACT_PROMPT}\n\n<conversacion>\n${transcript}\n</conversacion>` }], sessionId: chatId, signal, reasoning: "low", onToken: (tk) => { out += tk; } });
+      await streamChat({
+        model: opts.model,
+        messages: [{ role: "user", content: `${COMPACT_PROMPT}\n\n<conversacion>\n${transcript}\n</conversacion>` }],
+        sessionId: chatId,
+        signal,
+        reasoning: "low",
+        requireFinish: false,
+        onToken: (tk) => { out += tk; },
+      });
     } catch {
-      patch(cid, { compaction: { status: "error", startedAt: t0, ms: Date.now() - t0 } });
+      if (alive()) patch(cid, { compaction: { status: "error", startedAt: t0, ms: Date.now() - t0 } });
       return false;
     }
+    if (!alive()) return false;
     if (signal.aborted || !out.trim()) {
       patch(cid, { compaction: { status: "error", startedAt: t0, ms: Date.now() - t0 } });
       return false;
     }
     patch(cid, { summary: out.trim(), cutId: cut.id, compaction: { status: "done", startedAt: t0, ms: Date.now() - t0 } });
-    await sleep(1000);
-    return true;
+    await sleep(1000, signal);
+    return alive() && !signal.aborted;
   }, [chatId, commit, opts.model, patch]);
 
   const runLoop = useCallback(async (t: string) => {
@@ -386,6 +404,7 @@ export function useChat(opts: { model: string }) {
     const ctrl = new AbortController();
     abortRef.current = ctrl;
     const gen = genRef.current;
+    const turnChatId = chatId;
     const owned = () => genRef.current === gen && abortRef.current === ctrl;
     let executed = 0;
     let activeAssistantId: string | null = null;
@@ -395,15 +414,18 @@ export function useChat(opts: { model: string }) {
     try {
       for (let step = 0; step < MAX_AGENT_STEPS; step++) {
         const ctxLen = await getContextLength(opts.model);
+        if (!owned() || ctrl.signal.aborted) break;
         if (!proactiveFailed && historyTokens(modelHistory(msgsRef.current, undefined, ctxLen)) > ctxLen * COMPACT_AT - ANSWER_RESERVE) {
           // A failed attempt is not repeated in the same turn, so the chat never shows duplicate lines.
-          if (!(await compactNow(ctrl.signal, ctxLen))) proactiveFailed = true;
-          if (ctrl.signal.aborted) break;
+          if (!(await compactNow(ctrl.signal, ctxLen, owned))) proactiveFailed = true;
+          if (!owned() || ctrl.signal.aborted) break;
         }
         let retried = false;
+        let rateLimitRetried = false;
         let aid = "";
         let acc = "";
         for (;;) {
+          if (!owned() || ctrl.signal.aborted) break;
           aid = uid();
           const id = aid;
           activeAssistantId = id;
@@ -417,9 +439,10 @@ export function useChat(opts: { model: string }) {
           let r0 = 0, r1 = 0, frozen = 0;
           let meta: { finish?: string; usage?: StreamUsage } = {};
           const schedulePaint = () => {
-            if (frame !== undefined) return;
+            if (frame !== undefined || !owned()) return;
             frame = requestAnimationFrame(() => {
               frame = undefined;
+              if (!owned()) return;
               patch(id, { content: acc, ...(reasoning ? { reasoning } : {}) });
             });
           };
@@ -427,36 +450,63 @@ export function useChat(opts: { model: string }) {
             await streamChat({
               model: opts.model,
               messages: history,
-              sessionId: chatId,
+              sessionId: turnChatId,
               signal: ctrl.signal,
-              onToken: (tok) => { if (r0 && !frozen) { frozen = Math.max(Date.now() - r0, 1000); patch(id, { thinkMs: frozen }); } acc += tok; partialAcc = acc; schedulePaint(); },
-              onReasoning: (tok) => { const n = Date.now(); if (!r0) r0 = n; r1 = n; reasoning += tok; partialReasoning = reasoning; schedulePaint(); },
-              onMeta: (mm) => { meta = { ...meta, ...(mm.finishReason ? { finish: mm.finishReason } : {}), ...(mm.usage ? { usage: mm.usage } : {}) }; },
+              onToken: (tok) => {
+                if (!owned()) return;
+                if (r0 && !frozen) { frozen = Math.max(Date.now() - r0, 1000); patch(id, { thinkMs: frozen }); }
+                acc += tok;
+                partialAcc = acc;
+                schedulePaint();
+              },
+              onReasoning: (tok) => {
+                if (!owned()) return;
+                const n = Date.now();
+                if (!r0) r0 = n;
+                r1 = n;
+                reasoning += tok;
+                partialReasoning = reasoning;
+                schedulePaint();
+              },
+              onMeta: (mm) => {
+                if (!owned()) return;
+                meta = { ...meta, ...(mm.finishReason ? { finish: mm.finishReason } : {}), ...(mm.usage ? { usage: mm.usage } : {}) };
+              },
             });
           } catch (e) {
+            if (!owned()) return;
+            // On 429 before any token was emitted, wait briefly once (cancelable) and retry automatically.
+            if (e instanceof ApiError && e.status === 429 && !rateLimitRetried && !acc && !reasoning) {
+              rateLimitRetried = true;
+              commit((ms) => ms.filter((m) => m.id !== id));
+              await sleep(2000, ctrl.signal);
+              if (!owned() || ctrl.signal.aborted) return;
+              continue;
+            }
             if (!isContextOverflow(e)) throw e;
             commit((ms) => ms.filter((m) => m.id !== id));
             // One automatic compaction + retry; a second overflow (or nothing left to compact) is terminal.
             if (!retried) {
               retried = true;
-              if (await compactNow(ctrl.signal, ctxLen)) { if (ctrl.signal.aborted) return; continue; }
+              if (await compactNow(ctrl.signal, ctxLen, owned)) { if (!owned() || ctrl.signal.aborted) return; continue; }
             }
             throw new ApiError(413, "context_overflow_final", LIMIT_MSG);
           } finally {
             if (frame !== undefined) cancelAnimationFrame(frame);
           }
+          if (!owned()) return;
           patch(id, { content: acc, ...(reasoning ? { reasoning, thinkMs: frozen || Math.max(r1 - r0, 1) } : {}), ...meta, streaming: false });
           activeAssistantId = null;
           break;
         }
-        if (ctrl.signal.aborted) break;
+        if (!owned() || ctrl.signal.aborted) break;
 
         const blocks = extractBlocks(acc);
         if (!blocks.length) break;
         const feedback: string[] = [];
         let limitHit = false;
         for (let i = 0; i < blocks.length; i++) {
-          if (ctrl.signal.aborted) break;
+          if (!owned() || ctrl.signal.aborted) break;
           if (executed >= MAX_BLOCKS_PER_TURN) {
             limitHit = true;
             patch(aid, (m) => ({ tools: { ...m.tools, [i]: { status: "limit", detail: "Límite de pasos alcanzado (30 bloques por turno)." } } }));
@@ -465,12 +515,13 @@ export function useChat(opts: { model: string }) {
           const blk = blocks[i];
           if (!blk) continue;
           patch(aid, (m) => ({ tools: { ...m.tools, [i]: { status: "running" } } }));
-          const { state, feedback: fb } = await runBlock(blk, chatId, ctrl.signal);
+          const { state, feedback: fb } = await runBlock(blk, turnChatId, ctrl.signal);
+          if (!owned()) return;
           executed++;
           patch(aid, (m) => ({ tools: { ...m.tools, [i]: state } }));
           if (fb) feedback.push(fb);
         }
-        if (ctrl.signal.aborted) break;
+        if (!owned() || ctrl.signal.aborted) break;
         if (limitHit) { setError("Límite de pasos alcanzado: el agente se detuvo tras 30 bloques."); break; }
         if (!feedback.length) break;
         if (step === MAX_AGENT_STEPS - 1) { setError("Pausa de control: límite de pasos del agente alcanzado."); break; }
@@ -500,7 +551,7 @@ export function useChat(opts: { model: string }) {
       if (owned()) {
         setBusy(false);
         abortRef.current = null;
-        void persist(t);
+        void persist(t, turnChatId, msgsRef.current);
       }
     }
   }, [chatId, commit, compactNow, opts.model, patch, persist]);
@@ -523,6 +574,9 @@ export function useChat(opts: { model: string }) {
     if (!prompt || busy || abortRef.current) return;
     const ctrl = new AbortController();
     abortRef.current = ctrl;
+    const gen = genRef.current;
+    const turnChatId = chatId;
+    const owned = () => genRef.current === gen && abortRef.current === ctrl;
     setBusy(true); setError(null); setFailure(null); setLimit(null);
     let t = titleRef.current;
     if (!msgsRef.current.length) { t = prompt.slice(0, 60); setTitle(t); titleRef.current = t; }
@@ -532,7 +586,7 @@ export function useChat(opts: { model: string }) {
     else commit((ms) => [...ms, { id: uid(), role: "user", content: `🎨 Generar imagen: ${prompt}`, ts: Date.now() }, pending]);
     try {
       const result = await api.generateImage(prompt, size, 1, ctrl.signal);
-      if (ctrl.signal.aborted || abortRef.current !== ctrl) return;
+      if (ctrl.signal.aborted || !owned()) return;
       const url = result.data?.[0]?.url;
       if (!url || !imageUrl(url)) throw new ApiError(502, "invalid_image_response", "Erasmus no devolvió una imagen válida.");
       // Escape model/user text used as Markdown, so prompts cannot inject links or HTML.
@@ -543,7 +597,7 @@ export function useChat(opts: { model: string }) {
       patch(aid, { content: `![${alt}](${safeUrl.replace(/\(/g, "%28").replace(/\)/g, "%29")})\n\n> [!TIP]\n> **Imagen generada con éxito**\n> Formato: ${label}`, streaming: false });
       window.dispatchEvent(new Event("erasmus:files-changed"));
     } catch (e) {
-      if (abortRef.current !== ctrl) return;
+      if (!owned()) return;
       if (ctrl.signal.aborted) patch(aid, { content: "Generación de imagen detenida.", streaming: false });
       else {
         const err = e instanceof ApiError ? e : null;
@@ -552,13 +606,13 @@ export function useChat(opts: { model: string }) {
         patch(aid, { content: "", streaming: false, error: { message, retryable } });
       }
     } finally {
-      if (abortRef.current === ctrl) {
+      if (owned()) {
         abortRef.current = null; setBusy(false);
         window.dispatchEvent(new Event("erasmus:turn-done"));
-        void persist(t);
+        void persist(t, turnChatId, msgsRef.current);
       }
     }
-  }, [busy, commit, patch, persist]);
+  }, [busy, chatId, commit, patch, persist]);
 
   const retry = useCallback(() => {
     if (busy) return;
@@ -634,7 +688,9 @@ export function useChat(opts: { model: string }) {
   }, []);
 
   const branchFrom = useCallback(async (messageId: string) => {
-    genRef.current++;
+    abortRef.current?.abort();
+    abortRef.current = null; setBusy(false);
+    const seq = ++genRef.current;
     const index = msgsRef.current.findIndex((message) => message.id === messageId);
     if (index < 0) return;
     const branched = msgsRef.current.slice(0, index + 1).map(withoutTemporaryUrls);
@@ -643,6 +699,7 @@ export function useChat(opts: { model: string }) {
     const now = Date.now();
     try {
       await api.syncChat({ id: nextId, title: nextTitle, created: now, updated: now, messages: branched.map<StoredMessage>(toStoredMessage) });
+      if (genRef.current !== seq) return;
       msgsRef.current = branched;
       setMessages(branched);
       setChatId(nextId);
@@ -725,7 +782,9 @@ export function useChat(opts: { model: string }) {
           const msgId = m.id;
           const attPath = att.path;
           void api.download(attPath).then(async (blob) => {
+            if (genRef.current !== seq) return;
             const dataUrl = await blobToDataUrl(blob, fallbackMime);
+            if (genRef.current !== seq) return;
             patch(msgId, (cur) => (cur.attachments ? {
               attachments: cur.attachments.map((x) => (x.path === attPath ? { ...x, image: dataUrl, url: dataUrl } : x)),
             } : {}));

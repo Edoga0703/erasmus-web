@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { ArrowRight, Check, Copy, Loader2, Ticket } from "lucide-react";
+import { ArrowRight, Check, Copy, Download, Loader2, Ticket } from "lucide-react";
 import { PublicHeader } from "@/components/PublicHeader";
 import { claimCoupon } from "@/lib/auth";
 import { useT } from "@/lib/i18n";
@@ -26,6 +26,7 @@ function BuyPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [accessCode, setAccessCode] = useState("");
+  const [planName, setPlanName] = useState("pro");
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -37,6 +38,25 @@ function BuyPage() {
   const copyAccess = async () => {
     try { await navigator.clipboard.writeText(accessCode); setCopied(true); setError(""); }
     catch { setError("No se pudo copiar. Selecciona y copia tu código manualmente."); }
+  };
+
+  const downloadAccess = () => {
+    if (!accessCode) return;
+    const content = [
+      "=== CREDENCIAL DE ACCESO ERASMUS ===",
+      `Código de acceso: ${accessCode}`,
+      `Plan asignado: ${planName.toUpperCase()}`,
+      `Fecha de emisión: ${new Date().toISOString()}`,
+      "",
+      "Guarda este archivo en un lugar seguro. Este código es tu única llave para entrar en Erasmus.",
+    ].join("\n");
+    const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `clave-erasmus-${accessCode.slice(0, 8)}.txt`;
+    a.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
   const claim = async (event: React.FormEvent) => {
@@ -51,6 +71,7 @@ function BuyPage() {
       return;
     }
     setAccessCode(result.claim.accessCode);
+    setPlanName(result.claim.plan);
   };
 
   return (
@@ -64,7 +85,8 @@ function BuyPage() {
             <p className="mt-2 text-[13.5px] leading-relaxed text-e-dim">{t("buy_save_key")}</p>
             <div className="mt-5 flex items-center gap-2 rounded-xl border border-e-line bg-e-bg3 px-3 py-3">
               <code className="min-w-0 flex-1 select-all break-all text-[13px]">{accessCode}</code>
-              <button type="button" className="e-icon-btn shrink-0" aria-label={t("buy_copy")} onClick={() => void copyAccess()}><Copy className="size-4" /></button>
+              <button type="button" className="e-icon-btn shrink-0" aria-label={t("buy_copy")} title={t("buy_copy")} onClick={() => void copyAccess()}><Copy className="size-4" /></button>
+              <button type="button" className="e-icon-btn shrink-0" aria-label="Descargar código en archivo de texto" title="Descargar respaldo (.txt)" onClick={downloadAccess}><Download className="size-4" /></button>
             </div>
             {error && <p role="alert" className="mt-2 text-[13px] text-e-err">{error}</p>}
             {copied && <p className="mt-2 text-[12.5px] text-e-ok">{t("buy_copied")}</p>}

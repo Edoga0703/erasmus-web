@@ -1,15 +1,16 @@
 import { CustomInstructions } from "./CustomInstructions";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, Download, Moon, RefreshCw, ShieldCheck, Sun, Trash2, X } from "lucide-react";
-import { api, ApiError } from "@/lib/api/client";
-import { displayModel, getModelConfig } from "@/lib/api/config";
+import { CalendarClock, ChevronLeft, ChevronRight, Coins, Download, ImageIcon, Moon, RefreshCw, ShieldCheck, Sun, Trash2, X } from "lucide-react";
+import { api, ApiError, normalizeTs } from "@/lib/api/client";
+import { displayModel, getModelConfig, REASONING_EFFORTS } from "@/lib/api/config";
 import { Button } from "@/components/ui/button";
 import { Link } from "@tanstack/react-router";
 import { setTheme, useTheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 import { ModelSettings } from "./ModelSettings";
-import { clearSession } from "@/lib/session";
+import { clearSession, getSession } from "@/lib/session";
 import { logout } from "@/lib/auth";
+import { formatPlanExpiry, formatPlanName, type AccountSnapshot } from "./UsageMeter";
 
 export const APP_VERSION = "Erasmus Web 1.0 · Beta test";
 const UPDATED_AT: string = String(import.meta.env["VITE_DEPLOYED_AT"] || "8 de octubre de 2026");
@@ -17,11 +18,11 @@ const UPDATED_AT: string = String(import.meta.env["VITE_DEPLOYED_AT"] || "8 de o
 type Counts = { chats: number; files: number; workspace: string } | null;
 
 const TABS = [["general", "General"], ["custom", "Personalización"], ["model", "Modelo"], ["data", "Datos"], ["security", "Seguridad"], ["about", "Acerca de"]] as const;
-type Tab = (typeof TABS)[number][0];
+export type SettingsTab = (typeof TABS)[number][0];
 
 /** Settings modal. Rendered on top of the shell; never unmounts the chat, so chat state survives open/close. */
-export function SettingsDialog({ onClose, initialTab = "general" }: { onClose: () => void; initialTab?: Tab }) {
-  const [tab, setTab] = useState<Tab>(initialTab);
+export function SettingsDialog({ onClose, initialTab = "general" }: { onClose: () => void; initialTab?: SettingsTab }) {
+  const [tab, setTab] = useState<SettingsTab>(initialTab);
   const [mobileDetail, setMobileDetail] = useState(initialTab !== "general");
   const theme = useTheme();
   const [deletionInfo, setDeletionInfo] = useState(false);
@@ -32,12 +33,46 @@ export function SettingsDialog({ onClose, initialTab = "general" }: { onClose: (
     if (deletionInfo && typeof el?.scrollIntoView === "function") el.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }, [deletionInfo]);
   const [counts, setCounts] = useState<Counts>(null);
+  const [accountSnap, setAccountSnap] = useState<AccountSnapshot | null>(null);
   const [countErr, setCountErr] = useState("");
   const [zipping, setZipping] = useState(false);
   const [zipDone, setZipDone] = useState<{ name: string; size: number } | null>(null);
   const [couponCode, setCouponCode] = useState("");
   const [redeeming, setRedeeming] = useState(false);
   const [couponMsg, setCouponMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const loadCounts = useCallback(async () => {
+    setCountErr("");
+    const sess = getSession();
+    // Always load account snapshot in parallel on a best-effort basis so workspace counts still work if /api/account/me is mocked out.
+    void api.account().then((a) => {
+      setAccountSnap({
+        plan: a.plan || sess?.plan || "pro",
+        balance: Number(a.tokens_balance ?? a.balance_tokens ?? 0),
+        used: Number(a.tokens_used ?? 0),
+        images: a.images_used,
+        ...(a.images_quota ? { quota: a.images_quota } : {}),
+        inflight: a.inflight,
+        expiresAt: normalizeTs(a.expires_at ?? a.expires, sess?.expires ?? 0),
+      });
+    }).catch(() => {
+      if (sess) {
+        setAccountSnap((prev) => prev ?? {
+          plan: sess.plan || "pro",
+          balance: 0,
+          used: 0,
+          expiresAt: sess.expires || 0,
+        });
+      }
+    });
+    try {
+      const [c, f] = await Promise.all([api.chats(), api.files()]);
+      setCounts({ chats: c.chats.length, files: f.files.length, workspace: f.workspace_name || c.workspace_name });
+    } catch (e) {
+      setCounts(null);
+      setCountErr(e instanceof ApiError && e.status !== 0 ? e.message : "No se pudo conectar con Erasmus.");
+    }
+  }, []);
 
   const handleRedeemCoupon = async () => {
     const code = couponCode.trim();
@@ -51,23 +86,13 @@ export function SettingsDialog({ onClose, initialTab = "general" }: { onClose: (
       window.dispatchEvent(new Event("erasmus:turn-done"));
       window.dispatchEvent(new Event("erasmus:session"));
       window.dispatchEvent(new Event("erasmus:session-changed"));
+      void loadCounts();
     } catch (e) {
       setCouponMsg({ ok: false, text: e instanceof ApiError ? e.message : "No se pudo canjear el cupón." });
     } finally {
       setRedeeming(false);
     }
   };
-
-  const loadCounts = useCallback(async () => {
-    setCountErr("");
-    try {
-      const [c, f] = await Promise.all([api.chats(), api.files()]);
-      setCounts({ chats: c.chats.length, files: f.files.length, workspace: f.workspace_name || c.workspace_name });
-    } catch (e) {
-      setCounts(null);
-      setCountErr(e instanceof ApiError && e.status !== 0 ? e.message : "No se pudo conectar con Erasmus.");
-    }
-  }, []);
 
   useEffect(() => { if (tab === "data") void loadCounts(); }, [tab, loadCounts]);
   useEffect(() => {
@@ -80,10 +105,15 @@ export function SettingsDialog({ onClose, initialTab = "general" }: { onClose: (
   useEffect(() => {
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     panelRef.current?.focus();
+    const isVisible = (el: HTMLElement) => {
+      if (el.hidden || el.closest("[hidden], .hidden")) return false;
+      const style = window.getComputedStyle(el);
+      return style.display !== "none" && style.visibility !== "hidden";
+    };
     const trap = (e: KeyboardEvent) => {
       const panel = panelRef.current;
       if (e.key !== "Tab" || !panel) return;
-      const items = [...panel.querySelectorAll<HTMLElement>('button:not([disabled]), [href], input:not([disabled]), select, textarea, [tabindex]:not([tabindex="-1"])')].filter((el) => el.offsetParent !== null);
+      const items = [...panel.querySelectorAll<HTMLElement>('button:not([disabled]), [href], input:not([disabled]), select, textarea, [tabindex]:not([tabindex="-1"])')].filter(isVisible);
       const first = items[0]; const last = items[items.length - 1];
       if (!first || !last) return;
       if (!panel.contains(document.activeElement)) { e.preventDefault(); first.focus(); }
@@ -116,6 +146,12 @@ export function SettingsDialog({ onClose, initialTab = "general" }: { onClose: (
       <span className="text-e-dim">{k}</span><span className="min-w-0 truncate text-right font-mono text-[12px]">{v}</span>
     </div>
   );
+
+  const expiryInfo = accountSnap ? formatPlanExpiry(accountSnap.expiresAt) : null;
+  const totalTokens = accountSnap ? accountSnap.balance + accountSnap.used : 0;
+  const usedPct = totalTokens > 0 && accountSnap ? Math.min(100, Math.round((accountSnap.used / totalTokens) * 100)) : 0;
+  const lowTokens = totalTokens > 0 && accountSnap ? accountSnap.balance / totalTokens < 0.1 : false;
+  const reasoningLabel = REASONING_EFFORTS.find((r) => r.id === getModelConfig().reasoning)?.label ?? "Medio";
 
   return (
     <div className="fixed inset-0 z-50 flex items-stretch justify-center sm:items-center sm:p-6" role="dialog" aria-modal="true" aria-label="Ajustes">
@@ -151,6 +187,67 @@ export function SettingsDialog({ onClose, initialTab = "general" }: { onClose: (
             {tab === "model" && <ModelSettings />}
             {tab === "data" && (
               <section className="space-y-5">
+                {accountSnap && (
+                  <div className="rounded-2xl border border-e-line bg-e-bg3/60 p-4" data-account-card>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <h3 className="text-[14px] font-semibold text-e-tx">Estado de cuenta y saldo</h3>
+                        <p className="text-[12px] text-e-dim">Cuota en tiempo real asignada a tu sesión</p>
+                      </div>
+                      <span className="rounded-full border border-e-line bg-e-bg2 px-3 py-1 text-[12px] font-semibold text-e-tx">
+                        Plan {formatPlanName(accountSnap.plan)}
+                      </span>
+                    </div>
+
+                    {totalTokens > 0 && (
+                      <div className="mt-3.5">
+                        <div className="mb-1.5 flex items-center justify-between text-[12px]">
+                          <span className="text-e-dim">Consumo del plan ({usedPct}% usado)</span>
+                          <span className={cn("font-mono", lowTokens ? "font-semibold text-e-err" : "text-e-tx")}>
+                            {accountSnap.balance.toLocaleString("es-ES")} disponibles
+                          </span>
+                        </div>
+                        <div className="h-2 overflow-hidden rounded-full bg-e-bg2">
+                          <div
+                            className={cn("h-full rounded-full transition-all", lowTokens ? "bg-e-err" : "bg-e-acc")}
+                            style={{ width: `${usedPct}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="mt-3.5 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                      <div className="rounded-xl border border-e-line bg-e-bg2 px-3 py-2">
+                        <div className="flex items-center gap-1.5 text-[11.5px] text-e-dim"><Coins className="size-3.5" /> Disponibles</div>
+                        <div className="mt-0.5 font-mono text-[13.5px] font-semibold text-e-tx">{accountSnap.balance.toLocaleString("es-ES")}</div>
+                      </div>
+                      <div className="rounded-xl border border-e-line bg-e-bg2 px-3 py-2">
+                        <div className="text-[11.5px] text-e-dim">Tokens usados</div>
+                        <div className="mt-0.5 font-mono text-[13.5px] text-e-tx">{accountSnap.used.toLocaleString("es-ES")}</div>
+                      </div>
+                      {accountSnap.images !== undefined && (
+                        <div className="col-span-2 rounded-xl border border-e-line bg-e-bg2 px-3 py-2 sm:col-span-1">
+                          <div className="flex items-center gap-1.5 text-[11.5px] text-e-dim"><ImageIcon className="size-3.5" /> Imágenes</div>
+                          <div className="mt-0.5 font-mono text-[13.5px] text-e-tx">
+                            {accountSnap.images.toLocaleString("es-ES")}{accountSnap.quota ? ` / ${accountSnap.quota.toLocaleString("es-ES")}` : ""}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {expiryInfo && (
+                      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-e-line pt-2.5 text-[12.5px]">
+                        <span className="inline-flex items-center gap-1.5 text-e-dim">
+                          <CalendarClock className="size-3.5" /> Vencimiento del plan
+                        </span>
+                        <span className={cn("font-mono", expiryInfo.urgent ? "font-semibold text-e-err" : "text-e-tx")}>
+                          {expiryInfo.label} · {expiryInfo.dateStr}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <div>
                   {counts && (<>
                     <Row k="Workspace" v={counts.workspace} />
@@ -236,7 +333,11 @@ export function SettingsDialog({ onClose, initialTab = "general" }: { onClose: (
             {tab === "about" && (
               <section className="text-[13px]">
                 <h3 className="text-[16px] font-medium">{APP_VERSION}</h3>
-                <div className="mt-4"><Row k="Modelo" v={displayModel(getModelConfig().model)} /><Row k="Última actualización" v={UPDATED_AT} /></div>
+                <div className="mt-4">
+                  <Row k="Modelo" v={displayModel(getModelConfig().model)} />
+                  <Row k="Razonamiento" v={reasoningLabel} />
+                  <Row k="Última actualización" v={UPDATED_AT} />
+                </div>
               </section>
             )}
           </div>

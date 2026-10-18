@@ -1,8 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiError, api, apiJson, normalizeTs, publicStatus, streamChat } from "@/lib/api/client";
-import { getModelConfig, normalizeReasoningEffort } from "@/lib/api/config";
-import { withAttachments } from "@/hooks/use-chat";
+import { ApiError, api, apiJson, normalizeTs, publicStatus, streamChat, withSystem } from "@/lib/api/client";
+import { getModelConfig, normalizeReasoningEffort, REASONING_EFFORTS, saveModelConfig } from "@/lib/api/config";
+import { runBlock, withAttachments } from "@/hooks/use-chat";
 import { uniqueWorkspacePath } from "@/components/shell/AppShell";
+import { claimCoupon } from "@/lib/auth";
+import { clearSession, getSession } from "@/lib/session";
+import { formatPlanExpiry, formatPlanName } from "@/components/shell/UsageMeter";
 
 /** Regla: 503 es mantenimiento temporal del motor; se muestra el mensaje del servidor (p. ej. "Ajuste rápido") y nunca expulsa la sesión. */
 describe("manejo de 503", () => {
@@ -43,10 +46,68 @@ describe("robustez de red", () => {
     const err = await streamChat({ model: "erasmus-v2", messages: [{ role: "user", content: "Hola" }], onToken: () => {} }).catch((e) => e);
     expect((err as ApiError).code).toBe("stream_incomplete");
   });
+
+  it("detener manualmente el stream con AbortSignal no lanza stream_incomplete", async () => {
+    const ctrl = new AbortController();
+    const stream = new ReadableStream<Uint8Array>({
+      start(c) {
+        c.enqueue(new TextEncoder().encode('data: {"choices":[{"delta":{"content":"Parcial"}}]}\n'));
+      },
+    });
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(stream, { status: 200, headers: { "Content-Type": "text/event-stream" } })));
+    let out = "";
+    await expect(
+      streamChat({
+        model: "erasmus-v2",
+        messages: [{ role: "user", content: "Hola" }],
+        signal: ctrl.signal,
+        onToken: (t) => {
+          out += t;
+          ctrl.abort();
+        },
+      }),
+    ).resolves.toBeUndefined();
+    expect(out).toBe("Parcial");
+  });
+
+  it("permite cerrar sin finish_reason cuando requireFinish es false y hubo salida (compactación)", async () => {
+    const stream = new ReadableStream<Uint8Array>({
+      start(c) {
+        c.enqueue(new TextEncoder().encode('data: {"choices":[{"delta":{"content":"Resumen válido"}}]}\n'));
+        c.close();
+      },
+    });
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(stream, { status: 200, headers: { "Content-Type": "text/event-stream" } })));
+    let summary = "";
+    await expect(
+      streamChat({
+        model: "erasmus-v2",
+        messages: [{ role: "user", content: "Resume" }],
+        requireFinish: false,
+        onToken: (t) => { summary += t; },
+      }),
+    ).resolves.toBeUndefined();
+    expect(summary).toBe("Resumen válido");
+  });
+
+  it("propaga AbortSignal desde runBlock hacia las lecturas/escrituras del workspace", async () => {
+    const ctrl = new AbortController();
+    vi.stubGlobal("fetch", vi.fn((_u: string, init: RequestInit) => new Promise((_r, reject) => {
+      init.signal?.addEventListener("abort", () => {
+        ctrl.abort();
+        reject(new DOMException("aborted", "AbortError"));
+      });
+      setTimeout(() => ctrl.abort(), 10);
+    })));
+    const res = await runBlock({ kind: "file:read", target: "notas.txt", body: "", raw: "", closed: true }, "c1", ctrl.signal);
+    expect(res.state.status).toBe("error");
+    expect(res.state.detail).toBe("Cancelado.");
+    expect(res.feedback).toBeNull();
+  });
 });
 
 describe("mensajes públicos de errores y contratos", () => {
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => { vi.unstubAllGlobals(); clearSession(); localStorage.clear(); });
 
   it.each([
     [402, "Has alcanzado el límite de imágenes de tu plan."],
@@ -128,6 +189,9 @@ describe("mensajes públicos de errores y contratos", () => {
     expect(normalizeReasoningEffort("high")).toBe("high");
     expect(normalizeReasoningEffort("ultra")).toBe("medium");
     expect(getModelConfig().reasoning).toBe("medium");
+    expect(REASONING_EFFORTS.map((r) => r.id)).toEqual(["none", "low", "medium", "high"]);
+    saveModelConfig({ model: "erasmus-v2", reasoning: "high" });
+    expect(getModelConfig().reasoning).toBe("high");
   });
 
   it("acepta variantes saludables en publicStatus y deduplica rutas de adjuntos", async () => {
@@ -152,5 +216,48 @@ describe("mensajes públicos de errores y contratos", () => {
     const modelPrompt = withAttachments(msg, 2_000); // 2000 tokens * 0.5 * 4 = 4000 chars max
     expect(modelPrompt).toContain("recortado para el modelo; el archivo completo sigue en conversations/c1/informe.pdf");
     expect(msg.attachments[0]?.text).toHaveLength(10_000);
+  });
+
+  it("unifica el system prompt del cliente con el resumen de compactación sin duplicar bloques system", () => {
+    const merged = withSystem([
+      { role: "system", content: "[RESUMEN DE LA CONVERSACIÓN ANTERIOR]\nContexto previo" },
+      { role: "user", content: "Hola" },
+    ]);
+    expect(merged).toHaveLength(2);
+    expect(merged[0]?.role).toBe("system");
+    expect(String(merged[0]?.content)).toContain("file:list, file:read y file:write");
+    expect(String(merged[0]?.content)).toContain("[RESUMEN DE LA CONVERSACIÓN ANTERIOR]\nContexto previo");
+    expect(merged[1]?.role).toBe("user");
+  });
+
+  it("canjea cupón de nuevo usuario (claim_new) e inicia sesión automáticamente incluso si solo devuelve code", async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.endsWith("/api/coupons/claim_new")) {
+        return new Response(JSON.stringify({ ok: true, code: "erm-1234-5678-90123-4567", plan: "pro", expires_at: "2026-11-18T00:00:00.000Z" }), { status: 200 });
+      }
+      if (url.endsWith("/api/auth/login")) {
+        return new Response(JSON.stringify({ ok: true, session: "sess_abc", user_id: "usr_1", plan: "pro", expires: "2026-11-18T00:00:00.000Z" }), { status: 200 });
+      }
+      return new Response("{}", { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const res = await claimCoupon("erm-promo-2026");
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.claim.accessCode).toBe("erm-1234-5678-90123-4567");
+      expect(res.claim.plan).toBe("pro");
+    }
+    expect(getSession()?.token).toBe("sess_abc");
+  });
+
+  it("formatea nombres de plan y fechas de vencimiento (expires_at)", () => {
+    expect(formatPlanName("pro")).toBe("Pro");
+    expect(formatPlanName("enterprise")).toBe("Enterprise");
+    const soon = formatPlanExpiry(Date.now() + 2 * 86_400_000);
+    expect(soon?.urgent).toBe(true);
+    expect(soon?.expired).toBe(false);
+    const expired = formatPlanExpiry(Date.now() - 10_000);
+    expect(expired?.expired).toBe(true);
+    expect(expired?.label).toBe("Vencido");
   });
 });

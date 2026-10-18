@@ -47,5 +47,20 @@ export interface StoredMessage {
   error?: { message: string; retryable: boolean } | undefined;
 }
 export interface ChatData { id: string; title: string; created: number; updated: number; messages: StoredMessage[]; allMessages?: StoredMessage[] | undefined }
-export interface AccountResponse { tokens_balance: number; tokens_used: number; images_used: number; images_quota: number; plan: string; label?: string; inflight: number }
-export interface SessionProfile { ok: boolean; user_id: string; plan: string; status: string; expires_at?: string | null; has_dedicated_motor?: boolean; motor_in_cooldown?: boolean; cooldown_until?: boolean | string | null }
+export interface AccountResponse {
+  tokens_balance: number;
+  balance_tokens?: number | undefined;
+  tokens_used: number;
+  images_used: number;
+  images_quota: number;
+  plan: string;
+  label?: string | undefined;
+  inflight: number;
+  expires_at?: string | number | null | undefined;
+  expires?: string | number | null | undefined;
+  status?: string | undefined;
+  has_dedicated_motor?: boolean | undefined;
+  motor_in_cooldown?: boolean | undefined;
+  cooldown_until?: boolean | string | number | null | undefined;
+}
+export interface SessionProfile { ok: boolean; user_id: string; plan: string; status: string; expires_at?: string | number | null; has_dedicated_motor?: boolean; motor_in_cooldown?: boolean; cooldown_until?: boolean | string | number | null }

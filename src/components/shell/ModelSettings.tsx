@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { CheckCircle2, Loader2, PlugZap, XCircle } from "lucide-react";
+import { Brain, Check, CheckCircle2, Loader2, PlugZap, XCircle } from "lucide-react";
 import { api, ApiError } from "@/lib/api/client";
-import { getModelConfig, displayModel } from "@/lib/api/config";
+import { displayModel, getModelConfig, REASONING_EFFORTS, saveModelConfig, type ReasoningEffort } from "@/lib/api/config";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 
 type Test = { kind: "idle" } | { kind: "run" } | { kind: "ok"; ms: number; models: string[]; account: string } | { kind: "err"; msg: string };
 
@@ -16,10 +17,26 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
   );
 }
 
-/** Server-assigned model connection. Users never manage infrastructure credentials. */
+/** Server-assigned model connection + reasoning_effort selector synced with the Composer. */
 export function ModelSettings() {
   const [models, setModels] = useState<string[]>([getModelConfig().model]);
+  const [reasoning, setReasoning] = useState<ReasoningEffort>(() => getModelConfig().reasoning);
   const [test, setTest] = useState<Test>({ kind: "idle" });
+
+  useEffect(() => {
+    const sync = () => setReasoning(getModelConfig().reasoning);
+    window.addEventListener("erasmus:model-config", sync);
+    window.addEventListener("erasmus:session-changed", sync);
+    return () => {
+      window.removeEventListener("erasmus:model-config", sync);
+      window.removeEventListener("erasmus:session-changed", sync);
+    };
+  }, []);
+
+  const handleReasoningChange = (effort: ReasoningEffort) => {
+    setReasoning(effort);
+    saveModelConfig({ ...getModelConfig(), reasoning: effort });
+  };
 
   const loadModels = async () => {
     const m = await api.models();
@@ -36,8 +53,18 @@ export function ModelSettings() {
       const m = await loadModels();
       const ms = Math.round(performance.now() - t0);
       let account = "no disponible";
-      try { const a = await api.account(); const n = (v: unknown) => (typeof v === "number" ? v.toLocaleString("es-ES") : "—");
-        account = [`plan ${String(a["plan"] ?? "—")}`, `tokens disponibles ${n(a["tokens_balance"])}`, `usados ${n(a["tokens_used"])}`, `imágenes ${n(a["images_used"])}${typeof a["images_quota"] === "number" && a["images_quota"] > 0 ? ` de ${n(a["images_quota"])}` : ""}`, `en curso ${n(a["inflight"])}`].join(" · "); } catch { /* optional */ }
+      try {
+        const a = await api.account();
+        const n = (v: unknown) => (typeof v === "number" ? v.toLocaleString("es-ES") : "—");
+        const balance = a.tokens_balance ?? a.balance_tokens;
+        account = [
+          `plan ${String(a.plan ?? "—")}`,
+          `tokens disponibles ${n(balance)}`,
+          `usados ${n(a.tokens_used)}`,
+          `imágenes ${n(a.images_used)}${typeof a.images_quota === "number" && a.images_quota > 0 ? ` de ${n(a.images_quota)}` : ""}`,
+          `en curso ${n(a.inflight)}`,
+        ].join(" · ");
+      } catch { /* optional */ }
       setTest({ kind: "ok", ms, models: (m.data ?? []).map((d) => d.id + (d.context_length ? ` (${Math.round(d.context_length / 1000)}k)` : "")), account });
     } catch (e) {
       setTest({ kind: "err", msg: e instanceof ApiError ? (e.status === 0 ? "No se pudo conectar con el servidor." : e.message) : "Error desconocido." });
@@ -59,6 +86,39 @@ export function ModelSettings() {
             {models.map((m) => <SelectItem key={m} value={m}>{displayModel(m)}</SelectItem>)}
           </SelectContent>
         </Select>
+      </Field>
+
+      <Field
+        label="Profundidad de razonamiento"
+        hint="Modula cuánto reflexiona Erasmus antes de responder (reasoning_effort). También puedes cambiarlo en cualquier momento desde la barra del chat."
+      >
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Profundidad de razonamiento">
+          {REASONING_EFFORTS.map(({ id, label, desc }) => {
+            const active = reasoning === id;
+            return (
+              <button
+                key={id}
+                type="button"
+                role="radio"
+                aria-checked={active}
+                onClick={() => handleReasoningChange(id)}
+                className={cn(
+                  "flex items-start gap-2.5 rounded-xl border p-3 text-left transition-colors",
+                  active ? "border-e-acc bg-e-bg3 text-e-tx" : "border-e-line bg-e-bg2 text-e-dim hover:bg-e-bg3 hover:text-e-tx",
+                )}
+              >
+                <Brain className={cn("mt-0.5 size-4 shrink-0", active ? "text-e-ok" : "text-e-dim")} />
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center justify-between gap-1 text-[13.5px] font-medium text-e-tx">
+                    <span>{label}</span>
+                    {active && <Check className="size-3.5 text-e-ok" />}
+                  </span>
+                  <span className="mt-0.5 block text-[12px] leading-snug text-e-dim">{desc}</span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
       </Field>
 
       <div className="flex flex-wrap gap-2 pt-4">
