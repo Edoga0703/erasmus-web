@@ -69,7 +69,7 @@ export function InChatSearch({ rootRef, onClose }: { rootRef: RefObject<HTMLElem
     return () => { registry?.delete("erasmus-search"); registry?.delete("erasmus-search-active"); };
   }, [ranges, selected]);
   const move = (delta: number) => { if (ranges.length) setActive((selected + delta + ranges.length) % ranges.length); };
-  return <div role="search" aria-label="Buscar en esta conversación" className="mx-3 mb-2 flex shrink-0 items-center gap-1 rounded-lg border border-e-line bg-e-bg2 p-1.5 shadow-e sm:ml-auto sm:w-[420px]" onKeyDown={(e) => {
+  return <div role="search" aria-label="Buscar en esta conversación" className="mx-3 mb-2 flex shrink-0 items-center gap-1 rounded-lg border border-e-line bg-e-bg2 p-1.5 shadow-e focus-within:ring-2 focus-within:ring-e-acc/50 sm:ml-auto sm:w-[420px]" onKeyDown={(e) => {
     if (e.key === "Escape") { e.stopPropagation(); onClose(); }
     if (e.key === "Enter") { e.preventDefault(); move(e.shiftKey ? -1 : 1); }
   }}>
