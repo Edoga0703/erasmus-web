@@ -25,6 +25,26 @@ describe("manejo de 503", () => {
   });
 });
 
+/** Reglas de robustez de red de la auditoría. */
+describe("robustez de red", () => {
+  afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
+
+  it("aplica el tiempo límite aunque el llamador pase su propia señal", async () => {
+    vi.stubGlobal("fetch", vi.fn((_u: string, init: RequestInit) => new Promise((_r, reject) => {
+      init.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+    })));
+    const err = await apiJson("/x", undefined, "GET", new AbortController().signal, 20).catch((e) => e);
+    expect((err as ApiError).status).toBe(408);
+  });
+
+  it("un stream que se corta sin [DONE] ni finish_reason es un error reintentable", async () => {
+    const stream = new ReadableStream<Uint8Array>({ start(c) { c.enqueue(new TextEncoder().encode('data: {"choices":[{"delta":{"content":"Hola"}}]}\n')); c.close(); } });
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(stream, { status: 200, headers: { "Content-Type": "text/event-stream" } })));
+    const err = await streamChat({ model: "erasmus-v2", messages: [{ role: "user", content: "Hola" }], onToken: () => {} }).catch((e) => e);
+    expect((err as ApiError).code).toBe("stream_incomplete");
+  });
+});
+
 describe("mensajes públicos de errores y contratos", () => {
   afterEach(() => vi.unstubAllGlobals());
 
@@ -83,6 +103,7 @@ describe("mensajes públicos de errores y contratos", () => {
         controller.enqueue(encoder.encode('data: {"choices":[{"delta":{"thinking":"Pensamiento en thinking"}}]}\n'));
         controller.enqueue(encoder.encode('data: {"choices":[{"delta":{"thought":" y thought"}}]}\n'));
         controller.enqueue(encoder.encode('data: {"choices":[{"delta":{"content":"Respuesta final"}}]}\n'));
+        controller.enqueue(encoder.encode("data: [DONE]\n"));
         controller.close();
       },
     });
