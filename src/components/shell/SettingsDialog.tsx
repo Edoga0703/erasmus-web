@@ -75,6 +75,24 @@ export function SettingsDialog({ onClose, initialTab = "general" }: { onClose: (
     window.addEventListener("keydown", k);
     return () => window.removeEventListener("keydown", k);
   }, [deletionInfo, onClose]);
+  // Modal focus: move focus inside on open, keep Tab within the dialog, restore it on close.
+  const panelRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    panelRef.current?.focus();
+    const trap = (e: KeyboardEvent) => {
+      const panel = panelRef.current;
+      if (e.key !== "Tab" || !panel) return;
+      const items = [...panel.querySelectorAll<HTMLElement>('button:not([disabled]), [href], input:not([disabled]), select, textarea, [tabindex]:not([tabindex="-1"])')].filter((el) => el.offsetParent !== null);
+      const first = items[0]; const last = items[items.length - 1];
+      if (!first || !last) return;
+      if (!panel.contains(document.activeElement)) { e.preventDefault(); first.focus(); }
+      else if (e.shiftKey && (document.activeElement === first || document.activeElement === panel)) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    };
+    document.addEventListener("keydown", trap);
+    return () => { document.removeEventListener("keydown", trap); previous?.focus?.(); };
+  }, []);
 
   const exportZip = async () => {
     setZipping(true); setZipDone(null); setCountErr("");
@@ -102,7 +120,7 @@ export function SettingsDialog({ onClose, initialTab = "general" }: { onClose: (
   return (
     <div className="fixed inset-0 z-50 flex items-stretch justify-center sm:items-center sm:p-6" role="dialog" aria-modal="true" aria-label="Ajustes">
       <div className="e-overlay absolute inset-0" onClick={onClose} />
-      <div className="relative flex w-full max-w-2xl flex-col overflow-hidden border-e-line bg-e-bg2 text-e-tx sm:h-[min(600px,85vh)] sm:max-w-[680px] sm:rounded-2xl sm:border sm:shadow-e">
+      <div ref={panelRef} tabIndex={-1} className="relative flex w-full max-w-2xl flex-col overflow-hidden border-e-line bg-e-bg2 text-e-tx outline-none sm:h-[min(600px,85vh)] sm:max-w-[680px] sm:rounded-2xl sm:border sm:shadow-e">
         <div className="flex h-14 shrink-0 items-center gap-1 border-b border-e-line px-4">
           {mobileDetail && <Button variant="ghost" className="e-icon-btn sm:hidden" aria-label="Volver" onClick={() => setMobileDetail(false)}><ChevronLeft className="size-5" /></Button>}
           <h2 className="flex-1 text-[17px] font-semibold">{mobileDetail ? TABS.find((t) => t[0] === tab)?.[1] : "Ajustes"}<span className="hidden sm:inline">{mobileDetail ? "" : ""}</span></h2>
