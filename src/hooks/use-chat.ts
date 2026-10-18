@@ -257,6 +257,8 @@ export function useChat(opts: { model: string }) {
   const [localReady, setLocalReady] = useState(false);
   const [temporary, setTemporary] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+  /** Bumped on every conversation switch; async work from an older generation must not touch state. */
+  const genRef = useRef(0);
   const msgsRef = useRef<UIMessage[]>([]);
   const created = useRef(Date.now());
   const titleRef = useRef(title);
