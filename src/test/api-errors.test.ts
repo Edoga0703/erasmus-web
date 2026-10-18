@@ -99,7 +99,7 @@ describe("robustez de red", () => {
       });
       setTimeout(() => ctrl.abort(), 10);
     })));
-    const res = await runBlock({ kind: "file:read", target: "notas.txt", body: "", raw: "", closed: true }, "c1", ctrl.signal);
+    const res = await runBlock({ kind: "file:read", target: "notas.txt", body: "", closed: true }, "c1", ctrl.signal);
     expect(res.state.status).toBe("error");
     expect(res.state.detail).toBe("Cancelado.");
     expect(res.feedback).toBeNull();
