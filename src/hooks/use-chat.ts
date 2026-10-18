@@ -192,7 +192,8 @@ async function blobToDataUrl(blob: Blob, fallbackMime: string): Promise<string> 
 
 export const conversationDir = (convId: string) => `conversations/${convId}`;
 
-export async function runBlock(b: ToolBlock, _convId: string): Promise<{ state: ToolState; feedback: string | null }> {
+export async function runBlock(b: ToolBlock, _convId: string, signal?: AbortSignal): Promise<{ state: ToolState; feedback: string | null }> {
+  if (signal?.aborted) return { state: { status: "error", detail: "Cancelado." }, feedback: null };
   try {
     if (b.kind === "code:python" || b.kind === "code:bash") {
       return { state: { status: "saved" }, feedback: null };
@@ -228,6 +229,8 @@ export async function runBlock(b: ToolBlock, _convId: string): Promise<{ state: 
     }
     const content = b.body.endsWith("\n") || !b.body ? b.body : b.body + "\n";
     const payload = append ? before + content : content;
+    // Stop pressed between read and write: never touch the file.
+    if (signal?.aborted) return { state: { status: "error", detail: "Cancelado." }, feedback: null };
     const r = await api.fsWrite(target, payload, false);
     const after = payload;
     const partial = !b.closed;
@@ -380,6 +383,8 @@ export function useChat(opts: { model: string }) {
     setLimit(null);
     const ctrl = new AbortController();
     abortRef.current = ctrl;
+    const gen = genRef.current;
+    const owned = () => genRef.current === gen && abortRef.current === ctrl;
     let executed = 0;
     let activeAssistantId: string | null = null;
     let partialAcc = "";
@@ -458,7 +463,7 @@ export function useChat(opts: { model: string }) {
           const blk = blocks[i];
           if (!blk) continue;
           patch(aid, (m) => ({ tools: { ...m.tools, [i]: { status: "running" } } }));
-          const { state, feedback: fb } = await runBlock(blk, chatId);
+          const { state, feedback: fb } = await runBlock(blk, chatId, ctrl.signal);
           executed++;
           patch(aid, (m) => ({ tools: { ...m.tools, [i]: state } }));
           if (fb) feedback.push(fb);
@@ -470,6 +475,8 @@ export function useChat(opts: { model: string }) {
         commit((ms) => [...ms, { id: uid(), role: "user", hidden: true, content: `[RESULTADOS DE HERRAMIENTAS]\n${feedback.join("\n\n")}`, ts: Date.now() }]);
       }
     } catch (e) {
+      // The user switched conversation meanwhile: this turn no longer owns the UI.
+      if (!owned()) return;
       if (e instanceof ApiError && e.code === "context_overflow_final") {
         commit((ms) => ms.filter((m) => !m.streaming));
         const lastUser = [...msgsRef.current].reverse().find((m) => m.role === "user" && !m.hidden);
@@ -478,8 +485,8 @@ export function useChat(opts: { model: string }) {
         return;
       }
       const err = e instanceof ApiError ? e : null;
-      const retryable = !err || err.status === 0 || err.status === 408 || err.status >= 500;
-      const message = !err ? "Error inesperado en la conversación." : err.status === 0 ? "Sin conexión con Erasmus." : err.status === 504 || err.status === 408 ? "Tiempo de espera agotado." : err.message;
+      const retryable = !err || err.status === 0 || err.status === 408 || err.status === 429 || err.status >= 500;
+      const message = !err ? "Error inesperado en la conversación." : err.status === 0 ? "Sin conexión con Erasmus." : err.status === 504 || (err.status === 408 && err.code !== "stream_incomplete") ? "Tiempo de espera agotado." : err.message;
       if (activeAssistantId) {
         patch(activeAssistantId, { content: partialAcc, ...(partialReasoning ? { reasoning: partialReasoning } : {}), streaming: false, error: { message, retryable } });
       } else {
@@ -487,10 +494,12 @@ export function useChat(opts: { model: string }) {
       }
       setFailure({ message, retryable, nonce: Date.now() });
     } finally {
-      setBusy(false);
-      abortRef.current = null;
       window.dispatchEvent(new Event("erasmus:turn-done"));
-      void persist(t);
+      if (owned()) {
+        setBusy(false);
+        abortRef.current = null;
+        void persist(t);
+      }
     }
   }, [chatId, commit, compactNow, opts.model, patch, persist]);
 
@@ -589,6 +598,7 @@ export function useChat(opts: { model: string }) {
   const stop = useCallback(() => abortRef.current?.abort(), []);
 
   const reset = useCallback(() => {
+    genRef.current++;
     abortRef.current?.abort();
     abortRef.current = null; setBusy(false);
     msgsRef.current = [];
@@ -605,6 +615,7 @@ export function useChat(opts: { model: string }) {
   }, []);
 
   const startTemporary = useCallback(() => {
+    genRef.current++;
     abortRef.current?.abort();
     abortRef.current = null; setBusy(false);
     msgsRef.current = [];
@@ -621,6 +632,7 @@ export function useChat(opts: { model: string }) {
   }, []);
 
   const branchFrom = useCallback(async (messageId: string) => {
+    genRef.current++;
     const index = msgsRef.current.findIndex((message) => message.id === messageId);
     if (index < 0) return;
     const branched = msgsRef.current.slice(0, index + 1).map(withoutTemporaryUrls);
@@ -647,7 +659,10 @@ export function useChat(opts: { model: string }) {
   const open = useCallback(async (id: string) => {
     abortRef.current?.abort();
     abortRef.current = null; setBusy(false);
+    const seq = ++genRef.current;
     const { chat_data: cd } = await api.getChat(id);
+    // A newer open/reset happened while loading: drop this stale result.
+    if (genRef.current !== seq) return;
     const targetChatId = cd.id || id;
     const createdTs = normalizeTs(cd.created, Date.now());
     const src = cd.messages?.length ? cd.messages : cd.allMessages ?? [];
