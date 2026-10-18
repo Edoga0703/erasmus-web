@@ -15,10 +15,17 @@ const MIN_TURN_REFRESH_MS = 10_000;
 export function UsageMeter() {
   const [acc, setAcc] = useState<Acc | null>(null);
   const lastFetchedAt = useRef(0);
-  const load = useCallback(async (force = false) => {
+  const trailing = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const load = useCallback(async (force = false): Promise<void> => {
     if (accountEndpointUnsupported && !force) return;
     const now = Date.now();
-    if (!force && now - lastFetchedAt.current < MIN_TURN_REFRESH_MS) return;
+    const wait = MIN_TURN_REFRESH_MS - (now - lastFetchedAt.current);
+    if (!force && wait > 0) {
+      // Throttled: schedule one trailing refresh so the final turn is not lost.
+      if (!trailing.current) trailing.current = setTimeout(() => { trailing.current = null; void load(false); }, wait);
+      return;
+    }
+    if (trailing.current) { clearTimeout(trailing.current); trailing.current = null; }
     lastFetchedAt.current = now;
     try {
       const a = await api.account();
@@ -40,6 +47,7 @@ export function UsageMeter() {
     window.addEventListener("erasmus:session", onForce);
     window.addEventListener("erasmus:session-changed", onForce);
     return () => {
+      if (trailing.current) { clearTimeout(trailing.current); trailing.current = null; }
       window.removeEventListener("erasmus:turn-done", onTurn);
       window.removeEventListener("erasmus:model-config", onForce);
       window.removeEventListener("erasmus:session", onForce);

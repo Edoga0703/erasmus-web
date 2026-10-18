@@ -191,7 +191,11 @@ export function AppShell() {
     if (preparingFiles) return;
     chat.regenerate();
   }, [chat, preparingFiles]);
-  const canLeave = () => !chat.temporary || chat.messages.length === 0 || window.confirm("Esta conversación temporal desaparecerá al salir. ¿Continuar?");
+  const canLeave = () => {
+    // Attachments in preparation belong to this conversation; switching now would send them elsewhere.
+    if (preparingFiles) { toast.info("Espera a que terminen de prepararse los archivos adjuntos."); return false; }
+    return !chat.temporary || chat.messages.length === 0 || window.confirm("Esta conversación temporal desaparecerá al salir. ¿Continuar?");
+  };
   const newChat = () => { if (!canLeave()) return; chat.reset(); setSideOpen(false); };
   const openChat = (id: string) => { if (!canLeave()) return; setSideOpen(false); setOpeningChat(true); chat.open(id).catch(() => toast.error("No se pudo abrir la conversación.")).finally(() => setOpeningChat(false)); };
 

@@ -109,26 +109,36 @@ export async function apiJson<T>(
   signal?: AbortSignal,
   timeoutMs = DEFAULT_JSON_TIMEOUT_MS,
 ): Promise<T> {
-  let res: Response;
   const ctrl = new AbortController();
   let timedOut = false;
   const onCallerAbort = () => ctrl.abort();
+  if (signal?.aborted) ctrl.abort();
   signal?.addEventListener("abort", onCallerAbort, { once: true });
   const timer = timeoutMs > 0 ? setTimeout(() => { timedOut = true; ctrl.abort(); }, timeoutMs) : undefined;
   try {
-    const init: RequestInit = { method: method ?? (body === undefined ? "GET" : "POST"), signal: signal ?? ctrl.signal };
-    if (body !== undefined) init.body = JSON.stringify(body);
-    res = await apiFetch(path, init);
-  } catch (e) {
-    if (timedOut) throw new ApiError(408, "request_timeout", "Tiempo de espera agotado.");
-    if (signal?.aborted) throw e;
-    throw new ApiError(0, "network", "No se pudo conectar con Erasmus.");
+    let res: Response;
+    try {
+      // Always use our controller so the timeout also applies when the caller passes a signal.
+      const init: RequestInit = { method: method ?? (body === undefined ? "GET" : "POST"), signal: ctrl.signal };
+      if (body !== undefined) init.body = JSON.stringify(body);
+      res = await apiFetch(path, init);
+    } catch (e) {
+      if (timedOut) throw new ApiError(408, "request_timeout", "Tiempo de espera agotado.");
+      if (signal?.aborted) throw e;
+      throw new ApiError(0, "network", "No se pudo conectar con Erasmus.");
+    }
+    // Body consumption stays under the same timeout.
+    try {
+      if (!res.ok) throw await parseError(res);
+      return (await res.json()) as T;
+    } catch (e) {
+      if (timedOut) throw new ApiError(408, "request_timeout", "Tiempo de espera agotado.");
+      throw e;
+    }
   } finally {
     if (timer) clearTimeout(timer);
     signal?.removeEventListener("abort", onCallerAbort);
   }
-  if (!res.ok) throw await parseError(res);
-  return (await res.json()) as T;
 }
 
 export const api = {
@@ -332,6 +342,8 @@ export async function streamChat(opts: StreamOptions): Promise<void> {
     return;
   }
   const reader = res.body.getReader();
+  let finished = false;
+  const sseOpts: typeof opts = { ...opts, onMeta: (m) => { if (m.finishReason) finished = true; opts.onMeta?.(m); } };
   const dec = new TextDecoder();
   let buf = "";
   const INACTIVITY_TIMEOUT_MS = 35000;
@@ -353,7 +365,7 @@ export async function streamChat(opts: StreamOptions): Promise<void> {
         buf += dec.decode();
         if (buf.trim()) {
           for (const tail of buf.split("\n")) {
-            if (processSseLine(tail, opts)) return;
+            if (processSseLine(tail, sseOpts)) return;
           }
         }
         break;
@@ -363,7 +375,7 @@ export async function streamChat(opts: StreamOptions): Promise<void> {
       while ((nl = buf.indexOf("\n")) >= 0) {
         const line = buf.slice(0, nl);
         buf = buf.slice(nl + 1);
-        if (processSseLine(line, opts)) return;
+        if (processSseLine(line, sseOpts)) return;
       }
     }
   } catch (e) {
@@ -372,6 +384,11 @@ export async function streamChat(opts: StreamOptions): Promise<void> {
     throw e;
   } finally {
     if (inactivityTimer) clearTimeout(inactivityTimer);
+    // Close the stream even after [DONE] or a parser error so the connection is released.
+    try { await reader.cancel(); } catch { /* already closed */ }
+    try { reader.releaseLock(); } catch { /* ignore */ }
   }
   if (timedOut) throw new ApiError(408, "stream_timeout", "La conexión con Erasmus se interrumpió por inactividad. Puedes reintentar.");
+  // Clean EOF without [DONE] or a finish_reason means the answer was cut off.
+  if (!finished) throw new ApiError(408, "stream_incomplete", "La respuesta se interrumpió antes de terminar. Puedes reintentar.");
 }
