@@ -390,5 +390,6 @@ export async function streamChat(opts: StreamOptions): Promise<void> {
   }
   if (timedOut) throw new ApiError(408, "stream_timeout", "La conexión con Erasmus se interrumpió por inactividad. Puedes reintentar.");
   // Clean EOF without [DONE] or a finish_reason means the answer was cut off.
+  console.log("DBG", finished, JSON.stringify(buf));
   if (!finished) throw new ApiError(408, "stream_incomplete", "La respuesta se interrumpió antes de terminar. Puedes reintentar.");
 }
