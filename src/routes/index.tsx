@@ -1,9 +1,8 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { ArrowUp, Check, FileText, Image, MessagesSquare, ShieldCheck, Sparkles, Zap } from "lucide-react";
-import { getSession } from "@/lib/session";
+import { getSession, HERO_DRAFT_KEY } from "@/lib/session";
 import { PublicHeader } from "@/components/PublicHeader";
-import { HERO_DRAFT_KEY } from "@/components/shell/AppShell";
 import { useReveal } from "@/lib/reveal";
 import { useT } from "@/lib/i18n";
 

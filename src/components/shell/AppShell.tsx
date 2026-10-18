@@ -60,12 +60,12 @@ import { InChatSearch } from "@/components/chat/InChatSearch";
 import { ImagesDialog, ImageViewer, collectImages, type ChatImage } from "@/components/chat/Images";
 import { downloadMarkdown, printAsPdf } from "@/lib/export-chat";
 import { logout } from "@/lib/auth";
-import { getSession } from "@/lib/session";
+import { getSession, HERO_DRAFT_KEY } from "@/lib/session";
+export { HERO_DRAFT_KEY };
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 
 const LS = { side: "erasmus.side.w", collapsed: "erasmus.side.collapsed", panel: "erasmus.panel.w" };
-export const HERO_DRAFT_KEY = "erasmus.hero.draft";
 const MAX_UPLOAD_BYTES = 30 * 1024 * 1024;
 const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
 function readNum(k: string, d: number) { try { const v = Number(localStorage.getItem(k)); return v > 0 ? v : d; } catch { return d; } }

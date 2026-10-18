@@ -29,7 +29,7 @@ const MSG = {
   network: "No se pudo conectar con el servidor.",
 } as const;
 
-export function LoginPage() {
+function LoginPage() {
   const navigate = useNavigate();
   const t = useT();
   const [mode, setMode] = useState<"code" | "coupon">("code");

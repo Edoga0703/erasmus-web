@@ -7,5 +7,5 @@ export const Route = createFileRoute("/_auth")({
   beforeLoad: () => {
     if (!getSession()) throw redirect({ to: "/entrar" });
   },
-  component: () => <Outlet />,
+  component: Outlet,
 });

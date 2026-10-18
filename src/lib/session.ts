@@ -7,6 +7,7 @@ export interface UserSession { token: string; userId: string; plan: string; expi
 
 const SESSION_KEY = "erasmus.session.v1";
 const LOGOUT_SIGNAL = "erasmus.logout.signal";
+export const HERO_DRAFT_KEY = "erasmus.hero.draft";
 /** Unscoped keys written by older builds: wiped on first run so nothing leaks into a user namespace. */
 const LEGACY_KEYS = ["erasmus.active-chat.v1", "erasmus.custom.v1", "erasmus.model.cfg", "erasmus.model.key", "erasmus.ctx.override", "erasmus_bridge_token"];
 
