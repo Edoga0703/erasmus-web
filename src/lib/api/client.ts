@@ -375,7 +375,7 @@ export async function streamChat(opts: StreamOptions): Promise<void> {
       while ((nl = buf.indexOf("\n")) >= 0) {
         const line = buf.slice(0, nl);
         buf = buf.slice(nl + 1);
-        if (processSseLine(line, opts)) return;
+        if (processSseLine(line, sseOpts)) return;
       }
     }
   } catch (e) {
