@@ -3,6 +3,7 @@ import { useState } from "react";
 import { ArrowUp, Check, FileText, Image, MessagesSquare, ShieldCheck, Sparkles, Zap } from "lucide-react";
 import { getSession } from "@/lib/session";
 import { PublicHeader } from "@/components/PublicHeader";
+import { HERO_DRAFT_KEY } from "@/components/shell/AppShell";
 import { useReveal } from "@/lib/reveal";
 import { useT } from "@/lib/i18n";
 
@@ -30,7 +31,13 @@ function Landing() {
   const t = useT();
   const ref = useReveal<HTMLDivElement>();
   const [q, setQ] = useState("");
-  const go = () => void navigate({ to: getSession() ? "/chat" : "/entrar" });
+  const go = () => {
+    const trimmed = q.trim();
+    if (trimmed) {
+      try { sessionStorage.setItem(HERO_DRAFT_KEY, trimmed); } catch { /* ignore */ }
+    }
+    void navigate({ to: getSession() ? "/chat" : "/entrar" });
+  };
 
   const FEATURES = [
     { n: "01", tag: "Chat", icon: MessagesSquare, title: t("feat1_title"), text: t("feat1_text") },

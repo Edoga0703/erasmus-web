@@ -55,8 +55,8 @@ export function sanitize(html: string): string {
 
 export function renderMarkdown(md: string): string {
   const normalized = md.replace(/([^\n])(```(?:[a-zA-Z0-9_-]+)?)/g, "$1\n\n$2");
-  // Generated image paths belong to the same Erasmus API origin.
-  const src = API_BASE.startsWith("http") ? normalized.replace(/(\]\(|src=["'])\/api\/images\//g, `$1${API_BASE}/api/images/`) : normalized;
+  // Generated image paths belong to the same Erasmus API base (works for both absolute URLs and relative /erasmus-api proxy).
+  const src = API_BASE ? normalized.replace(/(\]\(|src=["'])\/api\/images\//g, `$1${API_BASE}/api/images/`) : normalized;
   const html = marked.parse(src, { async: false, gfm: true, breaks: true }) as string;
   return sanitize(callouts(html));
 }

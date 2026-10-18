@@ -6,19 +6,28 @@ export const API_BASE: string = String(import.meta.env['VITE_API_BASE'] || "http
 export type ReasoningEffort = "none" | "low" | "medium" | "high";
 export interface ModelConfig { model: string; reasoning: ReasoningEffort }
 const CFG_KEY = () => userKey("model.cfg");
+const VALID_EFFORTS = new Set<ReasoningEffort>(["none", "low", "medium", "high"]);
 export const DEFAULT_MODEL_CFG: ModelConfig = { model: "erasmus-v2", reasoning: "medium" };
+
+export function normalizeReasoningEffort(value: unknown): ReasoningEffort {
+  return typeof value === "string" && VALID_EFFORTS.has(value as ReasoningEffort)
+    ? (value as ReasoningEffort)
+    : DEFAULT_MODEL_CFG.reasoning;
+}
 
 export function getModelConfig(): ModelConfig {
   if (typeof window === "undefined") return DEFAULT_MODEL_CFG;
   try {
     const raw = JSON.parse(localStorage.getItem(CFG_KEY()) ?? "{}") as Partial<ModelConfig>;
-    return { ...DEFAULT_MODEL_CFG, model: "erasmus-v2", reasoning: raw.reasoning ?? DEFAULT_MODEL_CFG.reasoning };
+    const reasoning = normalizeReasoningEffort(raw?.reasoning);
+    return { ...DEFAULT_MODEL_CFG, model: "erasmus-v2", reasoning };
   } catch { return DEFAULT_MODEL_CFG; }
 }
 
 export function saveModelConfig(c: ModelConfig): void {
   try {
-    localStorage.setItem(CFG_KEY(), JSON.stringify({ model: "erasmus-v2", reasoning: c.reasoning }));
+    const reasoning = normalizeReasoningEffort(c.reasoning);
+    localStorage.setItem(CFG_KEY(), JSON.stringify({ model: "erasmus-v2", reasoning }));
     window.dispatchEvent(new Event("erasmus:model-config"));
   } catch { /* */ }
 }

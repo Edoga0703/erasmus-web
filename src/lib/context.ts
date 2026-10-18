@@ -6,13 +6,23 @@ export const DEFAULT_CONTEXT = 200_000;
 /** Proactive compaction threshold (fraction of the window) and space kept for the answer. */
 export const COMPACT_AT = 0.8;
 export const ANSWER_RESERVE = 8_000;
-/** A single attachment above this fraction of the window is rejected before sending. */
+/** A single attachment above this fraction of the window is capped when building model messages. */
 export const FILE_MAX_FRACTION = 0.5;
 export const KEEP_RECENT = 6;
 const IMAGE_TOKENS = 1_500;
 const OVERRIDE_KEY = () => userKey("ctx.override");
 
 let cached: Promise<number> | null = null;
+
+export function invalidateContextLengthCache(): void {
+  cached = null;
+}
+
+if (typeof window !== "undefined") {
+  const clearCache = () => { cached = null; };
+  window.addEventListener("erasmus:model-config", clearCache);
+  window.addEventListener("erasmus:session", clearCache);
+}
 
 /** Context window in tokens (cached). localStorage override exists only for testing compaction. */
 export function getContextLength(model?: string): Promise<number> {
@@ -46,8 +56,13 @@ export function historyTokens(msgs: { content: string | unknown[] }[]): number {
 
 export function isContextOverflow(e: unknown): boolean {
   if (!(e instanceof ApiError)) return false;
-  const s = `${e.code} ${e.message}`.toLowerCase();
-  return /context_overflow|context_length|context length|maximum context|too many tokens|prompt is too long/.test(s);
+  if (e.status === 413) return true;
+  const code = (e.code ?? "").toLowerCase();
+  if (["context_overflow", "context_length_exceeded", "string_above_max_length", "prompt_too_long"].includes(code)) {
+    return true;
+  }
+  const s = `${code} ${e.message}`.toLowerCase();
+  return /context_overflow|context_length|context length|maximum context|too many tokens|prompt is too long|demasiado largo|límite de contexto|context window/.test(s);
 }
 
 export const COMPACT_PROMPT =

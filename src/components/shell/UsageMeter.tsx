@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Gauge } from "lucide-react";
-import { api } from "@/lib/api/client";
+import { api, ApiError } from "@/lib/api/client";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 
@@ -8,27 +8,42 @@ interface Acc { plan: string; balance: number; used: number; images?: number; qu
 const n = (v: number) => v.toLocaleString("es-ES");
 const short = (v: number) => (v >= 1e6 ? `${(v / 1e6).toFixed(1).replace(".", ",")} M` : v >= 1e3 ? `${Math.round(v / 1e3)} k` : String(v));
 
-/** Plan usage pill in the header; refreshes after every turn. Warns when <10 % of tokens remain. */
+let accountEndpointUnsupported = false;
+const MIN_TURN_REFRESH_MS = 10_000;
+
+/** Plan usage pill in the header; refreshes after every turn (with throttle) or immediately on session/coupon change. Warns when <10 % of tokens remain. */
 export function UsageMeter() {
   const [acc, setAcc] = useState<Acc | null>(null);
-  const load = useCallback(async () => {
+  const lastFetchedAt = useRef(0);
+  const load = useCallback(async (force = false) => {
+    if (accountEndpointUnsupported && !force) return;
+    const now = Date.now();
+    if (!force && now - lastFetchedAt.current < MIN_TURN_REFRESH_MS) return;
+    lastFetchedAt.current = now;
     try {
       const a = await api.account();
+      accountEndpointUnsupported = false;
       setAcc({ plan: a.plan || "—", balance: a.tokens_balance, used: a.tokens_used, images: a.images_used, ...(a.images_quota ? { quota: a.images_quota } : {}), inflight: a.inflight });
-    } catch { /* hidden when the account is not reachable */ }
+    } catch (e) {
+      if (e instanceof ApiError && (e.status === 404 || e.status === 501)) {
+        accountEndpointUnsupported = true;
+      }
+      /* hidden when the account is not reachable */
+    }
   }, []);
   useEffect(() => {
-    void load();
-    const on = () => void load();
-    window.addEventListener("erasmus:turn-done", on);
-    window.addEventListener("erasmus:model-config", on);
-    window.addEventListener("erasmus:session", on);
-    window.addEventListener("erasmus:session-changed", on);
+    void load(true);
+    const onTurn = () => void load(false);
+    const onForce = () => { accountEndpointUnsupported = false; void load(true); };
+    window.addEventListener("erasmus:turn-done", onTurn);
+    window.addEventListener("erasmus:model-config", onForce);
+    window.addEventListener("erasmus:session", onForce);
+    window.addEventListener("erasmus:session-changed", onForce);
     return () => {
-      window.removeEventListener("erasmus:turn-done", on);
-      window.removeEventListener("erasmus:model-config", on);
-      window.removeEventListener("erasmus:session", on);
-      window.removeEventListener("erasmus:session-changed", on);
+      window.removeEventListener("erasmus:turn-done", onTurn);
+      window.removeEventListener("erasmus:model-config", onForce);
+      window.removeEventListener("erasmus:session", onForce);
+      window.removeEventListener("erasmus:session-changed", onForce);
     };
   }, [load]);
   if (!acc) return null;

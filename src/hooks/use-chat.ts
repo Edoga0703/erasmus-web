@@ -1,11 +1,12 @@
 import { userKey } from "@/lib/session";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api, ApiError, streamChat, type StreamUsage } from "@/lib/api/client";
+import { api, ApiError, normalizeTs, streamChat, type StreamUsage } from "@/lib/api/client";
 import { extractBlocks, lineDiff, type DiffRow, type ToolBlock } from "@/lib/blocks";
 import type { ChatData, StoredMessage } from "@/lib/api/types";
 import { cleanImagePrompt, imageUrl, IMAGE_SIZES, type ImageSize } from "@/lib/images";
 import type { CompactionState } from "@/components/chat/Compaction";
-import { ANSWER_RESERVE, COMPACT_AT, COMPACT_PROMPT, FILE_MAX_FRACTION, FILE_TOO_BIG_MSG, KEEP_RECENT, LIMIT_MSG, estimateTokens, getContextLength, historyTokens, isContextOverflow } from "@/lib/context";
+import { ANSWER_RESERVE, COMPACT_AT, COMPACT_PROMPT, DEFAULT_CONTEXT, FILE_MAX_FRACTION, FILE_TOO_BIG_MSG, KEEP_RECENT, LIMIT_MSG, estimateTokens, getContextLength, historyTokens, isContextOverflow } from "@/lib/context";
+import { toast } from "sonner";
 
 export type ToolStatus = "running" | "ok" | "error" | "limit" | "saved";
 export interface ToolState { status: ToolStatus; detail?: string | undefined; output?: string; diff?: DiffRow[]; exitCode?: number; durationMs?: number; stdout?: string; stderr?: string }
@@ -33,10 +34,13 @@ export interface UIMessage {
   ts: number;
 }
 /** File attached to a user message; `url` is a local object URL for image thumbnails (not persisted). */
-export interface Attachment { name: string; size: number; url?: string | undefined; path?: string | undefined; text?: string | undefined; /** data: URL sent to the model as image input (not persisted). */ image?: string | undefined }
+export interface Attachment { name: string; size: number; url?: string | undefined; path?: string | undefined; text?: string | undefined; /** data: URL sent to the model as image input (persisted when <= 1 MB). */ image?: string | undefined }
 
 const MAX_AGENT_STEPS = 30;
 const MAX_BLOCKS_PER_TURN = 30;
+const MAX_PERSISTED_IMAGE_CHARS = 1_000_000;
+const IMAGE_EXT_RE = /\.(png|jpe?g|gif|webp)$/i;
+const IMAGE_MIME_MAP: Record<string, string> = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp" };
 const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 
 export const EXEC_TIMEOUT_DEFAULT = 60;
@@ -56,14 +60,19 @@ interface LocalChatSnapshot {
 function withoutTemporaryUrls(m: UIMessage): UIMessage {
   const clean: UIMessage = { ...m, streaming: false };
   if (m.compaction?.status === "running") clean.compaction = { ...m.compaction, status: "error" };
-  if (m.attachments) clean.attachments = m.attachments.map(({ url: _url, image: _image, ...a }) => a);
+  if (m.attachments) {
+    clean.attachments = m.attachments.map(({ url: _url, image, ...a }) => ({
+      ...a,
+      ...(image && image.length <= MAX_PERSISTED_IMAGE_CHARS ? { image, url: image } : {}),
+    }));
+  }
   return clean;
 }
 
 function withTrimmedAttachmentText(m: UIMessage): UIMessage {
   const clean = withoutTemporaryUrls(m);
   if (clean.attachments) {
-    clean.attachments = clean.attachments.map(({ text, ...a }) => ({
+    clean.attachments = clean.attachments.map(({ text, image: _image, url: _url, ...a }) => ({
       ...a,
       ...(text !== undefined ? { text: text.length > 8000 ? text.slice(0, 8000) + "\n…[recortado en copia local]" : text } : {}),
     }));
@@ -73,11 +82,12 @@ function withTrimmedAttachmentText(m: UIMessage): UIMessage {
 
 function toStoredMessage(m: UIMessage): StoredMessage {
   if (m.role === "user") {
-    const attachments = m.attachments?.map(({ name, size, path, text }) => ({
+    const attachments = m.attachments?.map(({ name, size, path, text, image }) => ({
       name,
       size,
       ...(path !== undefined ? { path } : {}),
       ...(text !== undefined ? { text } : {}),
+      ...(image && image.length <= MAX_PERSISTED_IMAGE_CHARS ? { image } : {}),
     }));
     return {
       id: m.id,
@@ -115,26 +125,33 @@ function recoverLocalChat(): LocalChatSnapshot | null {
       v: 1,
       chatId: parsed.chatId,
       title: parsed.title,
-      created: typeof parsed.created === "number" ? parsed.created : Date.now(),
+      created: normalizeTs(parsed.created, Date.now()),
       messages: parsed.messages.map(withoutTemporaryUrls),
     };
   } catch {
     return null;
   }
 }
-/** Model-facing text of a user message: inline attachment text plus server workspace paths when available. */
+/** Model-facing text of a user message: inline attachment text (capped by FILE_MAX_FRACTION) plus server workspace paths when available. */
 type ContentPart = { type: "text"; text: string } | { type: "image_url"; image_url: { url: string } };
 /** Images go as OpenAI-style image_url parts (the model accepts text + image input). */
-function toModelContent(m: UIMessage): string | ContentPart[] {
-  const text = withAttachments(m);
+export function toModelContent(m: UIMessage, ctxLen = DEFAULT_CONTEXT): string | ContentPart[] {
+  const text = withAttachments(m, ctxLen);
   const imgs = (m.attachments ?? []).flatMap((a) => a.image ? [{ type: "image_url" as const, image_url: { url: a.image } }] : []);
   if (!imgs.length) return text;
   return [{ type: "text", text }, ...imgs];
 }
-function withAttachments(m: UIMessage): string {
+export function withAttachments(m: UIMessage, ctxLen = DEFAULT_CONTEXT): string {
   const a = m.attachments;
   if (!a?.length) return m.content;
-  const inline = a.filter((x) => x.text !== undefined).map((x) => `\n\n--- Archivo adjunto: ${x.name} ---\n${x.text}`).join("");
+  const maxChars = Math.max(1000, Math.floor(ctxLen * FILE_MAX_FRACTION) * 4);
+  const inline = a.filter((x) => x.text !== undefined).map((x) => {
+    const raw = x.text ?? "";
+    const trimmed = raw.length > maxChars
+      ? `${raw.slice(0, maxChars)}\n…[recortado para el modelo; el archivo completo sigue en ${x.path ?? x.name}]`
+      : raw;
+    return `\n\n--- Archivo adjunto: ${x.name} ---\n${trimmed}`;
+  }).join("");
   const refs = a.filter((x) => x.text === undefined && !x.image).map((x) => x.path ?? x.name);
   return m.content + inline + (refs.length ? `\n\n[Archivos adjuntos: ${refs.join(", ")}]` : "");
 }
@@ -150,17 +167,32 @@ function summaryBase(all: UIMessage[]): { summary?: string; start: number } {
   }
   return { start: 0 };
 }
-function modelHistory(all: UIMessage[], excludeId?: string) {
+export function modelHistory(all: UIMessage[], excludeId?: string, ctxLen = DEFAULT_CONTEXT) {
   const { summary, start } = summaryBase(all);
-  const rest = all.slice(start).filter((m) => !m.kind && !m.error && m.id !== excludeId).map((m) => ({ role: m.role as string, content: toModelContent(m) }));
+  const rest = all.slice(start).filter((m) => !m.kind && !m.error && m.id !== excludeId).map((m) => ({ role: m.role as string, content: toModelContent(m, ctxLen) }));
   return summary ? [{ role: "system", content: `[RESUMEN DE LA CONVERSACIÓN ANTERIOR]\n${summary}` }, ...rest] : rest;
 }
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const utf8Bytes = (s: string) => new TextEncoder().encode(s).byteLength;
 
+async function blobToDataUrl(blob: Blob, fallbackMime: string): Promise<string> {
+  const buf = await blob.arrayBuffer();
+  const bytes = new Uint8Array(buf);
+  let binary = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.byteLength; i += chunk) {
+    binary += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + chunk)));
+  }
+  const b64 = typeof window !== "undefined" && typeof window.btoa === "function"
+    ? window.btoa(binary)
+    : Buffer.from(buf).toString("base64");
+  const mime = blob.type && blob.type !== "application/octet-stream" ? blob.type : fallbackMime;
+  return `data:${mime};base64,${b64}`;
+}
+
 export const conversationDir = (convId: string) => `conversations/${convId}`;
 
-async function runBlock(b: ToolBlock, _convId: string): Promise<{ state: ToolState; feedback: string | null }> {
+export async function runBlock(b: ToolBlock, _convId: string): Promise<{ state: ToolState; feedback: string | null }> {
   try {
     if (b.kind === "code:python" || b.kind === "code:bash") {
       return { state: { status: "saved" }, feedback: null };
@@ -187,8 +219,11 @@ async function runBlock(b: ToolBlock, _convId: string): Promise<{ state: ToolSta
     try {
       before = (await api.fsRead(target)).content;
     } catch (readErr) {
-      // On file:append, only treat 404 (not found) as an empty starting file; network/server errors must abort rather than overwrite existing content.
-      if (append && (!(readErr instanceof ApiError) || readErr.status !== 404)) throw readErr;
+      // On file:append, treat 4xx (except 401/403/429) as file-not-found so append creates it; abort on network (0) or 5xx to prevent overwriting existing content.
+      if (append) {
+        const isMissing = readErr instanceof ApiError && readErr.status >= 400 && readErr.status < 500 && readErr.status !== 401 && readErr.status !== 403 && readErr.status !== 429;
+        if (!isMissing) throw readErr;
+      }
       before = "";
     }
     const content = b.body.endsWith("\n") || !b.body ? b.body : b.body + "\n";
@@ -223,6 +258,8 @@ export function useChat(opts: { model: string }) {
   const created = useRef(Date.now());
   const titleRef = useRef(title);
   const temporaryRef = useRef(false);
+  const syncQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const syncWarnedRef = useRef(false);
   titleRef.current = title;
   useEffect(() => () => { abortRef.current?.abort(); abortRef.current = null; }, []);
 
@@ -278,8 +315,8 @@ export function useChat(opts: { model: string }) {
     commit((ms) => ms.map((m) => (m.id === id ? { ...m, ...(typeof p === "function" ? p(m) : p) } : m)));
   }, [commit]);
 
-  const persist = useCallback(async (t: string) => {
-    if (temporaryRef.current) return;
+  const persist = useCallback((t: string): Promise<void> => {
+    if (temporaryRef.current) return Promise.resolve();
     const data: ChatData = {
       id: chatId,
       title: t,
@@ -287,7 +324,19 @@ export function useChat(opts: { model: string }) {
       updated: Date.now(),
       messages: msgsRef.current.map<StoredMessage>(toStoredMessage),
     };
-    try { await api.syncChat(data); setListVersion((v) => v + 1); } catch { /* best effort */ }
+    const next = syncQueueRef.current.then(async () => {
+      try {
+        await api.syncChat(data);
+        setListVersion((v) => v + 1);
+      } catch (e) {
+        if (e instanceof ApiError && e.status >= 400 && e.status < 500 && e.status !== 401 && !syncWarnedRef.current) {
+          syncWarnedRef.current = true;
+          toast.error(`No se pudo guardar la conversación en el espacio: ${e.message}`);
+        }
+      }
+    });
+    syncQueueRef.current = next.catch(() => {});
+    return next;
   }, [chatId]);
 
   /** Last failed model call; retry() relaunches exactly that call from the current history. */
@@ -303,7 +352,7 @@ export function useChat(opts: { model: string }) {
     const older = rest.slice(0, rest.length - KEEP_RECENT);
     const cut = rest[rest.length - KEEP_RECENT];
     if (!cut) return false;
-    let transcript = (prev ? `Resumen previo:\n${prev}\n\n` : "") + older.map((m) => `${m.role === "user" ? "Usuario" : "Erasmus"}: ${withAttachments(m)}`).join("\n\n");
+    let transcript = (prev ? `Resumen previo:\n${prev}\n\n` : "") + older.map((m) => `${m.role === "user" ? "Usuario" : "Erasmus"}: ${withAttachments(m, ctxLen)}`).join("\n\n");
     const maxChars = Math.floor(ctxLen * 0.6) * 4;
     if (transcript.length > maxChars) transcript = "…" + transcript.slice(-maxChars);
     const cid = uid();
@@ -339,7 +388,7 @@ export function useChat(opts: { model: string }) {
     try {
       for (let step = 0; step < MAX_AGENT_STEPS; step++) {
         const ctxLen = await getContextLength(opts.model);
-        if (!proactiveFailed && historyTokens(modelHistory(msgsRef.current)) > ctxLen * COMPACT_AT - ANSWER_RESERVE) {
+        if (!proactiveFailed && historyTokens(modelHistory(msgsRef.current, undefined, ctxLen)) > ctxLen * COMPACT_AT - ANSWER_RESERVE) {
           // A failed attempt is not repeated in the same turn, so the chat never shows duplicate lines.
           if (!(await compactNow(ctrl.signal, ctxLen))) proactiveFailed = true;
           if (ctrl.signal.aborted) break;
@@ -354,7 +403,7 @@ export function useChat(opts: { model: string }) {
           partialAcc = "";
           partialReasoning = "";
           commit((ms) => [...ms, { id, role: "assistant", content: "", streaming: true, tools: {}, ts: Date.now() }]);
-          const history = modelHistory(msgsRef.current, id);
+          const history = modelHistory(msgsRef.current, id, ctxLen);
           acc = "";
           let reasoning = "";
           let frame: number | undefined;
@@ -449,7 +498,6 @@ export function useChat(opts: { model: string }) {
     const clean = text.trim() || (attachments?.length ? "Revisa los archivos adjuntos." : "");
     if (!clean || busy) return;
     setError(null);
-    // Límite de tamaño de adjuntos desactivado temporalmente para pruebas (ver FILE_MAX_FRACTION).
     let t = titleRef.current;
     if (msgsRef.current.length === 0) { t = clean.slice(0, 60); setTitle(t); titleRef.current = t; }
     commit((ms) => [
@@ -579,16 +627,20 @@ export function useChat(opts: { model: string }) {
     const nextId = uid();
     const nextTitle = `Rama de ${titleRef.current}`.slice(0, 120);
     const now = Date.now();
-    msgsRef.current = branched;
-    setMessages(branched);
-    setChatId(nextId);
-    setTitle(nextTitle);
-    titleRef.current = nextTitle;
-    created.current = now;
-    setTemporary(false);
-    temporaryRef.current = false;
-    await api.syncChat({ id: nextId, title: nextTitle, created: now, updated: now, messages: branched.map<StoredMessage>(toStoredMessage) });
-    setListVersion((version) => version + 1);
+    try {
+      await api.syncChat({ id: nextId, title: nextTitle, created: now, updated: now, messages: branched.map<StoredMessage>(toStoredMessage) });
+      msgsRef.current = branched;
+      setMessages(branched);
+      setChatId(nextId);
+      setTitle(nextTitle);
+      titleRef.current = nextTitle;
+      created.current = now;
+      setTemporary(false);
+      temporaryRef.current = false;
+      setListVersion((version) => version + 1);
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "No se pudo ramificar la conversación.");
+    }
   }, []);
 
   /** Restore a saved chat; tool blocks re-render as cards from the persisted tools state. */
@@ -596,10 +648,12 @@ export function useChat(opts: { model: string }) {
     abortRef.current?.abort();
     abortRef.current = null; setBusy(false);
     const { chat_data: cd } = await api.getChat(id);
+    const targetChatId = cd.id || id;
+    const createdTs = normalizeTs(cd.created, Date.now());
     const src = cd.messages?.length ? cd.messages : cd.allMessages ?? [];
     const restored: UIMessage[] = src.map((sm) => {
       const content = (sm.role === "user" ? sm.text : sm.c) ?? sm.content ?? "";
-      const base: UIMessage = { id: sm.id ?? uid(), role: sm.role, content, ts: sm.ts ?? cd.created };
+      const base: UIMessage = { id: sm.id ?? uid(), role: sm.role, content, ts: normalizeTs(sm.ts, createdTs) };
       if (sm.kind === "compaction") {
         base.kind = "compaction";
         if (sm.compaction) base.compaction = sm.compaction.status === "running" ? { ...sm.compaction, status: "error" } : sm.compaction;
@@ -614,6 +668,7 @@ export function useChat(opts: { model: string }) {
           size: a.size,
           ...(a.path !== undefined ? { path: a.path } : {}),
           ...(a.text !== undefined ? { text: a.text } : {}),
+          ...(a.image !== undefined ? { image: a.image, url: a.image } : {}),
         }));
       }
       if (sm.imageRequest) base.imageRequest = sm.imageRequest;
@@ -633,16 +688,35 @@ export function useChat(opts: { model: string }) {
     });
     msgsRef.current = restored;
     setMessages(restored);
-    setChatId(cd.id || id);
+    setChatId(targetChatId);
     setTitle(cd.title || "Conversación");
     titleRef.current = cd.title || "Conversación";
-    created.current = cd.created || Date.now();
+    created.current = createdTs;
     setError(null);
     setFailure(null);
     setLimit(null);
     setTemporary(false);
     temporaryRef.current = false;
-  }, []);
+
+    // Background rehydration for legacy image attachments saved only with workspace `path` (without inline `image` data URL).
+    for (const m of restored) {
+      if (m.role !== "user" || !m.attachments?.length) continue;
+      for (const att of m.attachments) {
+        if (!att.image && att.path && IMAGE_EXT_RE.test(att.name)) {
+          const ext = att.name.split(".").pop()?.toLowerCase() ?? "jpeg";
+          const fallbackMime = IMAGE_MIME_MAP[ext] ?? "image/jpeg";
+          const msgId = m.id;
+          const attPath = att.path;
+          void api.download(attPath).then(async (blob) => {
+            const dataUrl = await blobToDataUrl(blob, fallbackMime);
+            patch(msgId, (cur) => (cur.attachments ? {
+              attachments: cur.attachments.map((x) => (x.path === attPath ? { ...x, image: dataUrl, url: dataUrl } : x)),
+            } : {}));
+          }).catch(() => { /* best-effort rehydration */ });
+        }
+      }
+    }
+  }, [patch]);
 
   /** Rename = re-send chat_data with the new title through sync_chat (agreed contract). */
   const rename = useCallback(async (id: string, newTitle: string) => {

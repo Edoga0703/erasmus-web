@@ -9,9 +9,10 @@ import { setTheme, useTheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 import { ModelSettings } from "./ModelSettings";
 import { clearSession } from "@/lib/session";
+import { logout } from "@/lib/auth";
 
 export const APP_VERSION = "Erasmus Web 1.0 · Beta test";
-const UPDATED_AT = "8 de octubre de 2026";
+const UPDATED_AT: string = String(import.meta.env["VITE_DEPLOYED_AT"] || "8 de octubre de 2026");
 
 type Counts = { chats: number; files: number; workspace: string } | null;
 
@@ -202,6 +203,7 @@ export function SettingsDialog({ onClose, initialTab = "general" }: { onClose: (
                       <div className="mt-4 flex flex-wrap gap-2">
                         <Button variant="outline" size="sm" onClick={() => setDeletionInfo(false)}>Cancelar</Button>
                         <Button variant="destructive" size="sm" onClick={() => {
+                          void logout();
                           clearSession();
                           window.location.assign("/entrar");
                         }}>

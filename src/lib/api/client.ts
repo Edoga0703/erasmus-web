@@ -16,10 +16,33 @@ import type {
 import { clearSession, getSession } from "@/lib/session";
 import type { ImageSize } from "@/lib/images";
 
-/** Server says the session is no longer valid → wipe it locally and go to the login page. */
+/** Normalizes timestamps coming as epoch ms, epoch seconds (< 1e12), or ISO-8601 strings into epoch ms. */
+export function normalizeTs(value: unknown, fallback = 0): number {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+    return value < 1e12 ? Math.round(value * 1000) : value;
+  }
+  if (typeof value === "string" && value.trim()) {
+    const numeric = Number(value);
+    if (Number.isFinite(numeric) && numeric > 0) {
+      return numeric < 1e12 ? Math.round(numeric * 1000) : numeric;
+    }
+    const parsed = Date.parse(value);
+    if (Number.isFinite(parsed) && parsed > 0) return parsed;
+  }
+  return fallback;
+}
+
+let rejectingSession = false;
+
+/** Server says the session is no longer valid → wipe it locally once and go to the login page. */
 function onSessionRejected() {
+  if (rejectingSession) return;
+  rejectingSession = true;
   clearSession();
-  if (typeof window !== "undefined" && window.location.pathname !== "/entrar") window.location.assign("/entrar");
+  queueMicrotask(() => { rejectingSession = false; });
+  if (typeof window !== "undefined" && window.location.pathname !== "/entrar") {
+    window.location.assign("/entrar");
+  }
 }
 
 export class ApiError extends Error {
@@ -60,7 +83,12 @@ async function parseError(res: Response): Promise<ApiError> {
   }
   if (res.status === 403) message = "No tienes permiso para realizar esta acción.";
   if (res.status === 401) message = "Tu sesión ya no es válida. Vuelve a entrar.";
-  if (res.status === 402) message = "Has alcanzado el límite de imágenes de tu plan.";
+  if (res.status === 402) {
+    const lowerCode = code.toLowerCase();
+    message = lowerCode.includes("token") || lowerCode.includes("balance") || lowerCode.includes("plan_expired")
+      ? "Has agotado el saldo de tokens de tu plan."
+      : "Has alcanzado el límite de imágenes de tu plan.";
+  }
   if (res.status === 429) message = "Procesos en cola: esperando a desocuparse un cupo para continuar.";
   if (res.status === 502) message = "El modelo no respondió. Inténtalo de nuevo en unos segundos.";
   if (res.status === 503) {
@@ -72,15 +100,32 @@ async function parseError(res: Response): Promise<ApiError> {
   return new ApiError(res.status, code, message);
 }
 
-export async function apiJson<T>(path: string, body?: unknown, method?: "GET" | "POST" | "DELETE", signal?: AbortSignal): Promise<T> {
+const DEFAULT_JSON_TIMEOUT_MS = 25_000;
+
+export async function apiJson<T>(
+  path: string,
+  body?: unknown,
+  method?: "GET" | "POST" | "DELETE",
+  signal?: AbortSignal,
+  timeoutMs = DEFAULT_JSON_TIMEOUT_MS,
+): Promise<T> {
   let res: Response;
+  const ctrl = new AbortController();
+  let timedOut = false;
+  const onCallerAbort = () => ctrl.abort();
+  signal?.addEventListener("abort", onCallerAbort, { once: true });
+  const timer = timeoutMs > 0 ? setTimeout(() => { timedOut = true; ctrl.abort(); }, timeoutMs) : undefined;
   try {
-    const init: RequestInit = { method: method ?? (body === undefined ? "GET" : "POST"), ...(signal ? { signal } : {}) };
+    const init: RequestInit = { method: method ?? (body === undefined ? "GET" : "POST"), signal: signal ?? ctrl.signal };
     if (body !== undefined) init.body = JSON.stringify(body);
     res = await apiFetch(path, init);
   } catch (e) {
+    if (timedOut) throw new ApiError(408, "request_timeout", "Tiempo de espera agotado.");
     if (signal?.aborted) throw e;
     throw new ApiError(0, "network", "No se pudo conectar con Erasmus.");
+  } finally {
+    if (timer) clearTimeout(timer);
+    signal?.removeEventListener("abort", onCallerAbort);
   }
   if (!res.ok) throw await parseError(res);
   return (await res.json()) as T;
@@ -88,20 +133,25 @@ export async function apiJson<T>(path: string, body?: unknown, method?: "GET" | 
 
 export const api = {
   generateImage: (prompt: string, size: ImageSize = "1024x1024", n = 1, signal?: AbortSignal) =>
-    apiJson<{ created: number; data: { url: string; revised_prompt?: string }[] }>("/v1/images/generations", { prompt, size, n }, "POST", signal),
+    apiJson<{ created: number; data: { url: string; revised_prompt?: string }[] }>("/v1/images/generations", { prompt, size, n }, "POST", signal, 60_000),
   status: () => apiJson<StatusResponse>("/health"),
   session: () => apiJson<SessionProfile>("/api/auth/me"),
   fsList: async (path: string): Promise<FsListResponse> => {
-    const r = await apiJson<{ ok: boolean; entries: { name: string; is_dir: boolean; size?: number }[] }>(`/api/workspace/list?path=${encodeURIComponent(path)}`);
-    const items = (r.entries ?? []).map((entry) => ({ ...entry, size: entry.size ?? 0, modified: 0 }));
+    const r = await apiJson<{ ok: boolean; entries: { name: string; is_dir: boolean; size?: number; modified?: number | string; mtime?: number | string }[] }>(`/api/workspace/list?path=${encodeURIComponent(path)}`);
+    const items = (r.entries ?? []).map((entry) => ({
+      name: entry.name,
+      is_dir: entry.is_dir,
+      size: entry.size ?? 0,
+      modified: normalizeTs(entry.modified ?? entry.mtime, 0),
+    }));
     return { ok: r.ok, path, items, total: items.length, showing: items.length };
   },
   fsRead: async (path: string): Promise<FsReadResponse> => {
     try {
       return await apiJson<FsReadResponse>("/api/fs/read", { path });
     } catch (error) {
-      // v5.4 may reject regular files on /api/fs/read; its authenticated download route remains usable.
-      if (!(error instanceof ApiError) || error.status !== 404) throw error;
+      // v5.4 may reject regular files on /api/fs/read with 400 or 404; its authenticated download route remains usable.
+      if (!(error instanceof ApiError) || (error.status !== 404 && error.status !== 400)) throw error;
       const res = await apiFetch(`/api/fs/download?path=${encodeURIComponent(path)}`, { method: "GET" });
       if (!res.ok) throw await parseError(res);
       const content = await res.text();
@@ -119,34 +169,44 @@ export const api = {
     const r = await apiJson<{ ok: boolean; chats: ChatMeta[] }>("/api/workspace/chats");
     return { ok: r.ok, workspace_name: "Mi espacio", chats: (r.chats ?? []).map((chat) => {
       const normalized: ChatMeta = { ...chat };
-      const created = chat.created_at ?? chat.created;
-      const updated = chat.updated_at ?? chat.updated;
-      if (created !== undefined) normalized.created = created;
-      if (updated !== undefined) normalized.updated = updated;
+      const created = normalizeTs(chat.created_at ?? chat.created, 0);
+      const updated = normalizeTs(chat.updated_at ?? chat.updated, created);
+      if (created > 0) normalized.created = created;
+      if (updated > 0) normalized.updated = updated;
       return normalized;
     }) };
   },
   deleteChat: (id: string) => apiJson<{ ok: boolean; id: string; deleted: boolean }>(`/api/workspace/chat?id=${encodeURIComponent(id)}`, undefined, "DELETE"),
   getChat: async (id: string): Promise<{ ok: boolean; chat_data: ChatData }> => {
-    const r = await apiJson<{ ok: boolean; chat: ChatData & { created_at?: number; updated_at?: number } }>(`/api/workspace/chat?id=${encodeURIComponent(id)}`);
+    const r = await apiJson<{ ok: boolean; chat: ChatData & { created_at?: number | string; updated_at?: number | string } }>(`/api/workspace/chat?id=${encodeURIComponent(id)}`);
     const chat = r.chat;
-    return { ok: r.ok, chat_data: { ...chat, created: chat.created ?? chat.created_at ?? Date.now(), updated: chat.updated ?? chat.updated_at ?? Date.now(), messages: chat.messages ?? [] } };
+    const now = Date.now();
+    const created = normalizeTs(chat.created ?? chat.created_at, now);
+    const updated = normalizeTs(chat.updated ?? chat.updated_at, created);
+    return { ok: r.ok, chat_data: { ...chat, created, updated, messages: chat.messages ?? [] } };
   },
   files: async (): Promise<FilesResponse> => {
     const files: FilesResponse["files"] = [];
+    let truncated = false;
     const walk = async (dir: string, depth: number) => {
-      if (depth > 8 || files.length >= 500) return;
+      if (depth > 8 || files.length >= 500) {
+        if (files.length >= 500) truncated = true;
+        return;
+      }
       let listing: FsListResponse;
       try { listing = await api.fsList(dir); } catch (error) { if (dir) return; throw error; }
       for (const item of listing.items) {
         const relPath = [dir, item.name].filter(Boolean).join("/");
         if (item.is_dir) { if (relPath !== "chats") await walk(relPath, depth + 1); }
-        else files.push({ name: item.name, rel_path: relPath, size: item.size, modified: item.modified });
-        if (files.length >= 500) break;
+        else files.push({ name: item.name, rel_path: relPath, size: item.size, modified: normalizeTs(item.modified, 0) });
+        if (files.length >= 500) {
+          truncated = true;
+          break;
+        }
       }
     };
     await walk("", 0);
-    return { ok: true, workspace_name: "Mi espacio", files };
+    return { ok: true, workspace_name: "Mi espacio", files, ...(truncated ? { truncated: true } : {}) };
   },
   download: async (path: string): Promise<Blob> => {
     let res: Response;
@@ -183,7 +243,16 @@ export async function publicStatus(): Promise<{ available: boolean }> {
   if (!response.ok) return { available: false };
   const data = await response.json().catch(() => null) as Record<string, unknown> | null;
   const state = String(data?.["status"] ?? data?.["state"] ?? "").toLowerCase();
-  return { available: data?.["ok"] === true || state === "up" || state === "ready" };
+  return {
+    available:
+      data?.["ok"] === true ||
+      data?.["healthy"] === true ||
+      state === "ok" ||
+      state === "up" ||
+      state === "ready" ||
+      state === "healthy" ||
+      state === "online",
+  };
 }
 
 export interface StreamOptions {

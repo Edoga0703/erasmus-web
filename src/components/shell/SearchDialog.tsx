@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { MessageCircle, Search, SquarePen, X } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { groupByDate, useChatManifest } from "./ChatList";
-import { api } from "@/lib/api/client";
+import { api, normalizeTs } from "@/lib/api/client";
 
 type Match = { snippet: string; date: number };
 const snippet = (text: string, query: string) => {
@@ -38,7 +38,7 @@ export function SearchDialog({ open, onClose, onOpen, onNew, version }: { open: 
           const { chat_data } = await api.getChat(chat.id);
           const source = (chat_data.messages?.length ? chat_data.messages : chat_data.allMessages ?? []).map((message) => message.text ?? message.c ?? message.content ?? "").join(" ");
           const part = snippet(source, term);
-          if (part) found[chat.id] = { snippet: part, date: chat.updated ?? chat.created ?? 0 };
+          if (part) found[chat.id] = { snippet: part, date: normalizeTs(chat.updated ?? chat.created, 0) };
         } catch { /* Title search remains available. */ }
         if (cancelled) return;
       }
@@ -68,13 +68,16 @@ export function SearchDialog({ open, onClose, onOpen, onNew, version }: { open: 
           {groups.map(([label, list]) => (
             <div key={label} className="mt-2">
               <h3 className="px-3 pb-1 text-[12px] font-medium text-e-dim">{label}</h3>
-              {list.map((c) => (
-                <button key={c.id} className="e-side-item" onClick={() => { onOpen(c.id); onClose(); setQ(""); }}>
-                  <MessageCircle className="size-4 shrink-0 text-e-dim" />
-                  <span className="min-w-0 flex-1"><span className="block truncate">{c.title || "Sin título"}</span>{matches[c.id] && <span className="mt-0.5 block truncate text-[12px] text-e-dim">{matches[c.id]?.snippet}</span>}</span>
-                  {(c.updated || c.created) && <time className="shrink-0 text-[11px] text-e-dim">{new Date((c.updated ?? c.created ?? 0) < 1e12 ? (c.updated ?? c.created ?? 0) * 1000 : (c.updated ?? c.created ?? 0)).toLocaleDateString("es-ES", { day: "numeric", month: "short" })}</time>}
-                </button>
-              ))}
+              {list.map((c) => {
+                const ts = normalizeTs(c.updated ?? c.created, 0);
+                return (
+                  <button key={c.id} className="e-side-item" onClick={() => { onOpen(c.id); onClose(); setQ(""); }}>
+                    <MessageCircle className="size-4 shrink-0 text-e-dim" />
+                    <span className="min-w-0 flex-1"><span className="block truncate">{c.title || "Sin título"}</span>{matches[c.id] && <span className="mt-0.5 block truncate text-[12px] text-e-dim">{matches[c.id]?.snippet}</span>}</span>
+                    {ts > 0 && <time className="shrink-0 text-[11px] text-e-dim">{new Date(ts).toLocaleDateString("es-ES", { day: "numeric", month: "short" })}</time>}
+                  </button>
+                );
+              })}
             </div>
           ))}
         </div>

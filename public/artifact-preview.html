@@ -12,7 +12,9 @@
   <script>
     window.addEventListener("message", function (event) {
       if (event.source !== window.parent || !event.data || event.data.type !== "erasmus:artifact-document" || typeof event.data.document !== "string") return;
-      document.querySelector("iframe").srcdoc = event.data.document;
+      if (event.origin && event.origin !== "null" && !/^https?:\/\//i.test(event.origin)) return;
+      var frame = document.querySelector("iframe");
+      if (frame) frame.srcdoc = event.data.document;
     });
   </script>
 </body>

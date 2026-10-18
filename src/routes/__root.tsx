@@ -15,6 +15,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { THEME_BOOT } from "../lib/theme";
 import { onForeignLogout } from "../lib/session";
+import { API_BASE } from "../lib/api/config";
 
 function NotFoundComponent() {
   return (
@@ -82,7 +83,7 @@ function ErrorComponent({ error, reset }: ErrorComponentProps) {
   );
 }
 
-const API_ORIGIN = (() => { try { return String(import.meta.env["VITE_API_BASE"] ?? "").startsWith("http") ? new URL(String(import.meta.env["VITE_API_BASE"])).origin : ""; } catch { return ""; } })();
+const API_ORIGIN = (() => { try { return API_BASE.startsWith("http") ? new URL(API_BASE).origin : ""; } catch { return ""; } })();
 /** Blocks third-party scripts, plugins, <base> hijacking and form exfiltration; network only to this site and the model server. */
 const CSP = [
   "default-src 'self'",

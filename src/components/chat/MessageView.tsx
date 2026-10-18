@@ -3,6 +3,7 @@ import { memo, useMemo, useState } from "react";
 import { Check, Copy, Ellipsis, GitBranch, RefreshCw, ChevronsDown, Volume2, VolumeX } from "lucide-react";
 import { parseSegments } from "@/lib/blocks";
 import type { UIMessage } from "@/hooks/use-chat";
+import { getLang } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { Markdown } from "./Markdown";
 import { ThinkingChip } from "./Thinking";
@@ -98,6 +99,12 @@ export const MessageView = memo(function MessageView({ m, isLast, busy, onRegene
   );
 });
 
+const TTS_LOCALE: Record<"es" | "en" | "pt", string> = {
+  es: "es-ES",
+  en: "en-US",
+  pt: "pt-BR",
+};
+
 function stripMarkdownForTts(text: string): string {
   return text
     .replace(/```[\s\S]*?```/g, " [código omitido] ")
@@ -119,7 +126,7 @@ function ResponseMenu({ text, disabled = false, onRegenerate, onBranch }: { text
     const cleanText = stripMarkdownForTts(text);
     if (!cleanText) return;
     const utterance = new SpeechSynthesisUtterance(cleanText);
-    utterance.lang = "es";
+    utterance.lang = TTS_LOCALE[getLang()] ?? "es-ES";
     utterance.onend = () => setSpeaking(false);
     utterance.onerror = () => setSpeaking(false);
     setSpeaking(true);

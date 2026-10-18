@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiError, api, apiJson, streamChat } from "@/lib/api/client";
+import { ApiError, api, apiJson, normalizeTs, publicStatus, streamChat } from "@/lib/api/client";
+import { getModelConfig, normalizeReasoningEffort } from "@/lib/api/config";
+import { withAttachments } from "@/hooks/use-chat";
+import { uniqueWorkspacePath } from "@/components/shell/AppShell";
 
 /** Regla: 503 es mantenimiento temporal del motor; se muestra el mensaje del servidor (p. ej. "Ajuste rápido") y nunca expulsa la sesión. */
 describe("manejo de 503", () => {
@@ -22,7 +25,7 @@ describe("manejo de 503", () => {
   });
 });
 
-describe("mensajes públicos de errores", () => {
+describe("mensajes públicos de errores y contratos", () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it.each([
@@ -31,6 +34,11 @@ describe("mensajes públicos de errores", () => {
   ])("simplifica el error %s sin filtrar detalles internos", async (status, message) => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ error: { code: "internal_limit", message: "Internal details" } }), { status })));
     await expect(apiJson("/health")).rejects.toMatchObject({ status, message });
+  });
+
+  it("diferencia 402 por agotamiento de tokens del límite de imágenes", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ error: { code: "token_quota_exceeded", message: "Out of tokens" } }), { status: 402 })));
+    await expect(apiJson("/health")).rejects.toMatchObject({ status: 402, message: "Has agotado el saldo de tokens de tu plan." });
   });
 
   it("explica las herramientas no disponibles sin realizar peticiones", async () => {
@@ -89,5 +97,39 @@ describe("mensajes públicos de errores", () => {
     });
     expect(reasoning).toBe("Pensamiento en thinking y thought");
     expect(content).toBe("Respuesta final");
+  });
+
+  it("normaliza timestamps en ms, segundos e ISO-8601 y valida reasoning_effort", () => {
+    expect(normalizeTs(1760000000)).toBe(1760000000000);
+    expect(normalizeTs(1760000000000)).toBe(1760000000000);
+    expect(normalizeTs("2026-10-16T00:00:00.000Z")).toBe(Date.parse("2026-10-16T00:00:00.000Z"));
+    expect(normalizeTs("invalido", 42)).toBe(42);
+    expect(normalizeReasoningEffort("high")).toBe("high");
+    expect(normalizeReasoningEffort("ultra")).toBe("medium");
+    expect(getModelConfig().reasoning).toBe("medium");
+  });
+
+  it("acepta variantes saludables en publicStatus y deduplica rutas de adjuntos", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ status: "ok" }), { status: 200 })));
+    await expect(publicStatus()).resolves.toEqual({ available: true });
+
+    const taken = new Set<string>();
+    expect(uniqueWorkspacePath("c1", "notas.txt", taken)).toBe("conversations/c1/notas.txt");
+    expect(uniqueWorkspacePath("c1", "notas.txt", taken)).toBe("conversations/c1/notas-2.txt");
+    expect(uniqueWorkspacePath("c1", "notas.txt", taken)).toBe("conversations/c1/notas-3.txt");
+  });
+
+  it("recorta adjuntos para el modelo según FILE_MAX_FRACTION sin mutar el mensaje original", () => {
+    const bigText = "A".repeat(10_000);
+    const msg = {
+      id: "m1",
+      role: "user" as const,
+      content: "Analiza esto",
+      ts: Date.now(),
+      attachments: [{ name: "informe.pdf", size: 10000, path: "conversations/c1/informe.pdf", text: bigText }],
+    };
+    const modelPrompt = withAttachments(msg, 2_000); // 2000 tokens * 0.5 * 4 = 4000 chars max
+    expect(modelPrompt).toContain("recortado para el modelo; el archivo completo sigue en conversations/c1/informe.pdf");
+    expect(msg.attachments[0]?.text).toHaveLength(10_000);
   });
 });

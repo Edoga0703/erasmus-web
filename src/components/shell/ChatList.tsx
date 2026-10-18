@@ -3,20 +3,18 @@ import { MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { userKey } from "@/lib/session";
 import { toast } from "sonner";
-import { api, ApiError } from "@/lib/api/client";
+import { api, ApiError, normalizeTs } from "@/lib/api/client";
 import type { ChatMeta } from "@/lib/api/types";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 
-const ms = (t?: number) => (!t ? 0 : t < 1e12 ? t * 1000 : t);
-
 /** Groups like ChatGPT: Hoy / Ayer / 7 días anteriores / 30 días anteriores / Más antiguos. */
-export function groupByDate<T extends { updated?: number }>(items: T[]): [string, T[]][] {
+export function groupByDate<T extends { updated?: number | string }>(items: T[]): [string, T[]][] {
   const start = new Date(); start.setHours(0, 0, 0, 0);
   const day = 86_400_000, t0 = start.getTime();
   const buckets: [string, T[]][] = [["Hoy", []], ["Ayer", []], ["7 días anteriores", []], ["30 días anteriores", []], ["Más antiguos", []]];
   for (const it of items) {
-    const t = ms(it.updated);
+    const t = normalizeTs(it.updated, 0);
     const i = t >= t0 ? 0 : t >= t0 - day ? 1 : t >= t0 - 7 * day ? 2 : t >= t0 - 30 * day ? 3 : 4;
     buckets[i]![1].push(it);
   }
@@ -29,7 +27,7 @@ export function useChatManifest(version: number) {
   const load = useCallback(async () => {
     try {
       const r = await api.chats();
-      setChats([...r.chats].sort((a, b) => (b.updated ?? 0) - (a.updated ?? 0)));
+      setChats([...r.chats].sort((a, b) => normalizeTs(b.updated, 0) - normalizeTs(a.updated, 0)));
       setErr(null);
     } catch (e) {
       setErr(e instanceof ApiError ? e.message : "No se pudo cargar el historial.");

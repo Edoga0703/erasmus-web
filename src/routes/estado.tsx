@@ -20,14 +20,15 @@ export const Route = createFileRoute("/estado")({
 });
 
 type Probe = { state: "checking" } | { state: "ok"; ms: number; at: Date } | { state: "down"; at: Date };
+const REPROBE_INTERVAL_MS = 30_000;
 
 function StatusPage() {
   const t = useT();
   const [probe, setProbe] = useState<Probe>({ state: "checking" });
   const [operations, setOperations] = useState(247);
 
-  const check = useCallback(async () => {
-    setProbe({ state: "checking" });
+  const check = useCallback(async (initial = false) => {
+    if (initial) setProbe({ state: "checking" });
     const t0 = performance.now();
     try {
       const result = await publicStatus();
@@ -38,9 +39,28 @@ function StatusPage() {
     }
   }, []);
 
-  useEffect(() => { void check(); }, [check]);
+  useEffect(() => {
+    void check(true);
+    const interval = window.setInterval(() => {
+      if (typeof document === "undefined" || document.visibilityState !== "hidden") {
+        void check(false);
+      }
+    }, REPROBE_INTERVAL_MS);
+    const onVisible = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        void check(false);
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [check]);
+
   useEffect(() => {
     const timer = window.setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
       setOperations((current) => Math.min(300, Math.max(200, current + Math.floor(Math.random() * 15) - 7)));
     }, 2200);
     return () => window.clearInterval(timer);

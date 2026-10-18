@@ -28,6 +28,29 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
   }
   return window.btoa(binary);
 }
+
+/** Deduplicates a workspace file path within a conversation so repeated names (e.g. pasted image.png) never overwrite previous uploads. */
+export function uniqueWorkspacePath(convId: string, fileName: string, taken: Set<string>): string {
+  const dir = conversationDir(convId);
+  const baseCandidate = `${dir}/${fileName}`;
+  if (!taken.has(baseCandidate)) {
+    taken.add(baseCandidate);
+    return baseCandidate;
+  }
+  const dot = fileName.lastIndexOf(".");
+  const stem = dot > 0 ? fileName.slice(0, dot) : fileName;
+  const ext = dot > 0 ? fileName.slice(dot) : "";
+  let n = 2;
+  for (;;) {
+    const candidate = `${dir}/${stem}-${n}${ext}`;
+    if (!taken.has(candidate)) {
+      taken.add(candidate);
+      return candidate;
+    }
+    n++;
+  }
+}
+
 import { SearchDialog } from "./SearchDialog";
 import { FilesPanel } from "@/components/files/FilesPanel";
 import { SettingsDialog } from "./SettingsDialog";
@@ -42,6 +65,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 
 const LS = { side: "erasmus.side.w", collapsed: "erasmus.side.collapsed", panel: "erasmus.panel.w" };
+export const HERO_DRAFT_KEY = "erasmus.hero.draft";
+const MAX_UPLOAD_BYTES = 30 * 1024 * 1024;
 const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
 function readNum(k: string, d: number) { try { const v = Number(localStorage.getItem(k)); return v > 0 ? v : d; } catch { return d; } }
 
@@ -81,7 +106,7 @@ export function AppShell() {
   const [imagesOpen, setImagesOpen] = useState(false);
   const [viewImg, setViewImg] = useState<ChatImage | null>(null);
   const [atBottom, setAtBottom] = useState(true);
-  const [draft] = useState<{ text: string; n: number }>();
+  const [draft, setDraft] = useState<{ text: string; n: number }>();
   const [openingChat, setOpeningChat] = useState(false);
   const scroller = useRef<HTMLElement>(null);
   const queryClient = useQueryClient();
@@ -98,6 +123,13 @@ export function AppShell() {
   useEffect(() => {
     setSideW(readNum(LS.side, 260)); setPanelW(readNum(LS.panel, 460));
     try { setCollapsed(localStorage.getItem(LS.collapsed) === "1"); } catch { /* */ }
+    try {
+      const heroText = sessionStorage.getItem(HERO_DRAFT_KEY)?.trim();
+      if (heroText) {
+        sessionStorage.removeItem(HERO_DRAFT_KEY);
+        setDraft({ text: heroText, n: Date.now() });
+      }
+    } catch { /* */ }
   }, []);
   const persist = (k: string, v: string) => { try { localStorage.setItem(k, v); } catch { /* */ } };
   useEffect(() => persist(LS.side, String(sideW)), [sideW]);
@@ -176,44 +208,63 @@ export function AppShell() {
     return c.toDataURL(f.type === "image/png" ? "image/png" : "image/jpeg", 0.85);
   };
 
-  /** Saves attachments in this conversation's workspace and sends their extracted text/images to the model. */
+  /** Saves attachments in this conversation's workspace (deduplicating names) and sends their extracted text/images to the model. */
   const sendWithFiles = async (text: string, files: File[]) => {
     if (chat.busy || preparingFiles) return;
     setPreparingFiles(true);
     const atts: Attachment[] = [];
+    const usedPaths = new Set<string>(
+      chat.messages.flatMap((m) => m.attachments?.map((a) => a.path).filter((p): p is string => Boolean(p)) ?? []),
+    );
     try {
       for (const f of files) {
         const isImg = f.type.startsWith("image/");
         const att: Attachment = { name: f.name, size: f.size, url: isImg ? URL.createObjectURL(f) : undefined };
+        const path = uniqueWorkspacePath(chat.chatId, f.name, usedPaths);
         if (isImg) {
           try {
             att.image = await imageToDataUrl(f);
-            if (f.size <= 30 * 1024 * 1024) {
-              const path = `${conversationDir(chat.chatId)}/${f.name}`;
+          } catch {
+            toast.error(`No se pudo procesar la imagen ${f.name}.`);
+          }
+          if (f.size <= MAX_UPLOAD_BYTES) {
+            try {
               await api.fsWrite(path, arrayBufferToBase64(await f.arrayBuffer()), false, "base64");
               att.path = path;
+            } catch (e) {
+              toast.error(e instanceof ApiError ? e.message : `No se pudo guardar ${f.name} en tu espacio.`);
             }
-          } catch {
-            toast.error(`No se pudo leer ${f.name}.`);
+          } else {
+            toast.error(`${f.name} supera el límite de 30 MB y no se guardó en el espacio.`);
           }
-        }
-        const isPdf = f.type === "application/pdf" || /\.pdf$/i.test(f.name);
-        const isSheet = /\.xlsx?$/i.test(f.name) || f.type.includes("spreadsheet") || f.type === "application/vnd.ms-excel";
-        const isZip = /\.zip$/i.test(f.name) || f.type === "application/zip" || f.type === "application/x-zip-compressed";
-        const isText = !isPdf && !isSheet && !isZip && (f.type.startsWith("text/") || /\.(txt|md|markdown|json|csv|tsv|html|htm|css|scss|sass|less|js|jsx|ts|tsx|mjs|cjs|py|java|c|cpp|h|hpp|cs|go|rs|php|rb|sh|bash|zsh|bat|cmd|ps1|sql|yaml|yml|xml|env|ini|toml|cfg|conf|properties|log|tex|svg|vue|svelte|astro|graphql|gql|prisma|proto)$/i.test(f.name));
-        if (!isImg) {
+        } else {
+          const isPdf = f.type === "application/pdf" || /\.pdf$/i.test(f.name);
+          const isSheet = /\.xlsx?$/i.test(f.name) || f.type.includes("spreadsheet") || f.type === "application/vnd.ms-excel";
+          const isZip = /\.zip$/i.test(f.name) || f.type === "application/zip" || f.type === "application/x-zip-compressed";
+          const isText = !isPdf && !isSheet && !isZip && (f.type.startsWith("text/") || /\.(txt|md|markdown|json|csv|tsv|html|htm|css|scss|sass|less|js|jsx|ts|tsx|mjs|cjs|py|java|c|cpp|h|hpp|cs|go|rs|php|rb|sh|bash|zsh|bat|cmd|ps1|sql|yaml|yml|xml|env|ini|toml|cfg|conf|properties|log|tex|svg|vue|svelte|astro|graphql|gql|prisma|proto)$/i.test(f.name));
           try {
             // Never read unrecognized binaries as text: it injects corrupt characters into the prompt.
             att.text = isPdf ? await extractPdf(f) : isSheet ? await extractSheet(f) : isZip ? await extractZip(f) : isText ? capText(await f.text()) : undefined;
-            const path = `${conversationDir(chat.chatId)}/${f.name}`;
-            if (isText && att.text !== undefined) {
+          } catch {
+            toast.error(`No se pudo leer el contenido de ${f.name}.`);
+          }
+          if (isText && att.text !== undefined) {
+            try {
               await api.fsWrite(path, att.text);
               att.path = path;
-            } else if (f.size <= 30 * 1024 * 1024) {
+            } catch (e) {
+              toast.error(e instanceof ApiError ? e.message : `No se pudo guardar ${f.name} en tu espacio.`);
+            }
+          } else if (f.size <= MAX_UPLOAD_BYTES) {
+            try {
               await api.fsWrite(path, arrayBufferToBase64(await f.arrayBuffer()), false, "base64");
               att.path = path;
+            } catch (e) {
+              toast.error(e instanceof ApiError ? e.message : `No se pudo guardar ${f.name} en tu espacio.`);
             }
-          } catch (e) { toast.error(e instanceof ApiError ? e.message : `No se pudo subir ${f.name}.`); }
+          } else {
+            toast.error(`${f.name} supera el límite de 30 MB y no se guardó en el espacio.`);
+          }
         }
         atts.push(att);
       }

@@ -17,7 +17,7 @@ export function collectImages(messages: UIMessage[]): ChatImage[] {
   const add = (src: string, alt: string, fromUser: boolean) => { if (src && !seen.has(src)) { seen.add(src); out.push({ src, alt, fromUser }); } };
   for (const m of messages) {
     if (m.hidden) continue;
-    if (m.role === "user") m.attachments?.forEach((a) => a.url && add(a.url, a.name, true));
+    if (m.role === "user") m.attachments?.forEach((a) => (a.url || a.image) && add((a.url || a.image)!, a.name, true));
     else {
       for (const r of m.content.matchAll(/!\[([^\]]*)\]\(([^)\s]+)[^)]*\)/g)) { const src = r[2] ? abs(r[2]) : null; if (src) add(src, r[1] || "Imagen", false); }
       for (const r of m.content.matchAll(/<img[^>]+src=["']([^"']+)["'][^>]*>/gi)) { const src = r[1] ? abs(r[1]) : null; if (src) add(src, "Imagen", false); }
@@ -29,7 +29,11 @@ export function collectImages(messages: UIMessage[]): ChatImage[] {
 export async function downloadImage(src: string, name: string) {
   try {
     const imagePrefix = `${API_BASE}/api/images/`;
-    const res = src.startsWith(imagePrefix) ? await apiFetch(src.slice(API_BASE.length)) : await fetch(src, { credentials: "omit" });
+    const res = src.startsWith(imagePrefix)
+      ? await apiFetch(src.slice(API_BASE.length))
+      : src.startsWith("/api/images/")
+        ? await apiFetch(src)
+        : await fetch(src, { credentials: "omit" });
     if (!res.ok) throw new Error();
     const blob = await res.blob();
     const ext = blob.type === "image/svg+xml" ? "svg" : (blob.type.split("/")[1] || "png").replace("jpeg", "jpg");

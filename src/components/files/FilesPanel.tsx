@@ -72,6 +72,7 @@ function FileCard({ file, onPreview }: { file: GalleryFile; onPreview: (file: Ga
 
 export function FilesPanel({ convId, refreshKey, messages, initialTab = "files", onClose }: { convId: string; refreshKey: unknown; messages: UIMessage[]; initialTab?: "files" | "artifacts"; onClose: () => void }) {
   const [files, setFiles] = useState<WorkspaceFile[]>([]);
+  const [truncated, setTruncated] = useState(false);
   const [tab, setTab] = useState(initialTab);
   const [sel, setSel] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -83,7 +84,12 @@ export function FilesPanel({ convId, refreshKey, messages, initialTab = "files",
   const mine = conversationDir(convId);
   const load = useCallback(async () => {
     setLoading(true);
-    try { setFiles((await api.files()).files); setErr(null); } catch (e) { setErr(e instanceof ApiError ? e.message : "No se pudieron cargar los archivos."); }
+    try {
+      const res = await api.files();
+      setFiles(res.files);
+      setTruncated(Boolean(res.truncated));
+      setErr(null);
+    } catch (e) { setErr(e instanceof ApiError ? e.message : "No se pudieron cargar los archivos."); }
     finally { setLoading(false); }
   }, []);
   useEffect(() => { void load(); }, [load, refreshKey]);
@@ -92,11 +98,17 @@ export function FilesPanel({ convId, refreshKey, messages, initialTab = "files",
   useEffect(() => { setTab(initialTab); setSel(null); }, [initialTab]);
   const gallery = useMemo(() => {
     const attachments = messages.filter((m) => m.role === "user" && !m.hidden).flatMap((m) => m.attachments ?? []);
+    const asstContent = messages.filter((m) => m.role === "assistant" && !m.hidden).map((m) => m.content).join("\n");
     const content = messages.filter((m) => !m.hidden).map((m) => m.content).join("\n");
-    const rows: GalleryFile[] = files.filter((f) => !/^(?:chats|history)\//.test(f.rel_path)).map((f) => ({ ...f,
-      uploaded: f.rel_path.startsWith("conversations/"),
-      current: f.rel_path.startsWith(`${mine}/`) || attachments.some((a) => a.path === f.rel_path) || content.includes(f.rel_path),
-    }));
+    const rows: GalleryFile[] = files.filter((f) => !/^(?:chats|history)\//.test(f.rel_path)).map((f) => {
+      const matchedAtt = attachments.some((a) => a.path === f.rel_path || f.rel_path === `${mine}/${a.name}`);
+      const writtenByAgent = asstContent.includes(`file:write ${f.rel_path}`) || asstContent.includes(`file:append ${f.rel_path}`);
+      return {
+        ...f,
+        uploaded: matchedAtt || (f.rel_path.startsWith("conversations/") && !writtenByAgent),
+        current: f.rel_path.startsWith(`${mine}/`) || matchedAtt || content.includes(f.rel_path),
+      };
+    });
     for (const a of attachments) {
       const localSrc = a.image || a.url;
       const existing = rows.find((f) => f.rel_path === a.path || f.rel_path === `${mine}/${a.name}`);
@@ -149,6 +161,7 @@ export function FilesPanel({ convId, refreshKey, messages, initialTab = "files",
           {([["all", "Todos"], ["documents", "Documentos"], ["tables", "Tablas"], ["images", "Imágenes"], ["code", "Código"]] as const).map(([f, label]) => <Button key={f} variant="ghost" size="sm" aria-pressed={filter === f} className={cn("h-7 rounded-full px-2 text-[11px]", filter === f ? "bg-e-acc text-e-bg2 hover:bg-e-acc hover:text-e-bg2" : "text-e-dim")} onClick={() => setFilter(f)}>{label}</Button>)}
         </div>
       </div>
+      {truncated && <p role="status" className="border-b border-e-line bg-e-bg3/50 px-3 py-1.5 text-[11.5px] text-e-dim">Vista parcial: mostrando los primeros 500 archivos del espacio.</p>}
       {opening && <p role="status" className="flex items-center gap-2 px-3 py-2 text-[12px] text-e-dim"><Loader2 className="size-3 animate-spin" /> Abriendo vista previa…</p>}
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
         {loading && !gallery.length ? <p role="status" className="py-8 text-center text-[13px] text-e-dim">Cargando archivos…</p> : rows.length ? <div className="grid grid-cols-2 gap-2.5">{rows.map((file) => <FileCard key={file.rel_path || file.name} file={file} onPreview={(f, src) => void preview(f, src)} />)}</div> : <p className="py-10 text-center text-[13px] text-e-dim">No hay archivos en esta selección.</p>}
