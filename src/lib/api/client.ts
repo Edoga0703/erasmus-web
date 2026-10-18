@@ -342,6 +342,8 @@ export async function streamChat(opts: StreamOptions): Promise<void> {
     return;
   }
   const reader = res.body.getReader();
+  let finished = false;
+  const sseOpts: typeof opts = { ...opts, onMeta: (m) => { if (m.finishReason) finished = true; opts.onMeta?.(m); } };
   const dec = new TextDecoder();
   let buf = "";
   const INACTIVITY_TIMEOUT_MS = 35000;
@@ -387,4 +389,6 @@ export async function streamChat(opts: StreamOptions): Promise<void> {
     try { reader.releaseLock(); } catch { /* ignore */ }
   }
   if (timedOut) throw new ApiError(408, "stream_timeout", "La conexión con Erasmus se interrumpió por inactividad. Puedes reintentar.");
+  // Clean EOF without [DONE] or a finish_reason means the answer was cut off.
+  if (!finished) throw new ApiError(408, "stream_incomplete", "La respuesta se interrumpió antes de terminar. Puedes reintentar.");
 }
