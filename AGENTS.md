@@ -22,3 +22,4 @@
 - Native image generation uses the existing Fastify contract through the private API client and useChat's activity/persistence lifecycle, so image retries never invoke text completions or cross conversations.
 - GFM alerts are transformed from sanitized DOM and sanitized again; image-view events and returned image URLs are validated before rendering to keep generated content untrusted.
 - Keep the existing Markdown and composer adapters for Erasmus: the installed AI Elements response renderer does not expose the sanitized DOM hooks needed by code decoration, artifact portals and CSS Highlight search; avoid replacing those adapters during scoped presentation changes.
+- useChat bumps a generation counter on every conversation switch; async turns and chat loads only touch state while their generation is current, so stale work never writes into another conversation.
